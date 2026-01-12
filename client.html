@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Einfacher Chat mit Farben</title>
+</head>
+<body>
+
+<h2>Chat mit Farben</h2>
+
+<input id="msg" placeholder="Nachricht">
+<button onclick="send()">Senden</button>
+
+<ul id="chat"></ul>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const socket = io("http://localhost:3000");
+
+// Farbe für diesen Client zufällig wählen
+const myColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+
+function send() {
+  const text = document.getElementById("msg").value;
+  if(text.trim() === "") return;
+
+  // Nachricht + Farbe an Server senden
+  socket.emit("message", { text, color: myColor });
+  document.getElementById("msg").value = "";
+}
+
+// Nachricht vom Server empfangen
+socket.on("message", (data) => {
+  const li = document.createElement("li");
+  li.textContent = data.text;
+  li.style.color = data.color; // Farbe des Senders anzeigen
+  document.getElementById("chat").appendChild(li);
+});
+</script>
+
+</body>
+</html>
