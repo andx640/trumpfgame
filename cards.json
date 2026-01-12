@@ -1,0 +1,68 @@
+[
+  {
+    "name": "Supersportwagen A",
+    "leistung": 700,
+    "hubraum": 4000,
+    "hoechstgeschwindigkeit": 350,
+    "preis": 250000,
+    "beschleunigung": 3.2,
+    "gewicht": 1600,
+    "drehmoment": 900,
+    "bild": "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=500&q=60"
+  },
+  {
+    "name": "Sportwagen B",
+    "leistung": 550,
+    "hubraum": 3500,
+    "hoechstgeschwindigkeit": 320,
+    "preis": 180000,
+    "beschleunigung": 3.8,
+    "gewicht": 1500,
+    "drehmoment": 750,
+    "bild": "https://images.unsplash.com/photo-1511910849309-8f0c8f2446d7?auto=format&fit=crop&w=500&q=60"
+  },
+  {
+    "name": "Muscle Car C",
+    "leistung": 480,
+    "hubraum": 6000,
+    "hoechstgeschwindigkeit": 280,
+    "preis": 120000,
+    "beschleunigung": 4.2,
+    "gewicht": 1700,
+    "drehmoment": 650,
+    "bild": "https://images.unsplash.com/photo-1598032893501-c5b803c1a0b3?auto=format&fit=crop&w=500&q=60"
+  },
+  {
+    "name": "Superbike D",
+    "leistung": 200,
+    "hubraum": 1000,
+    "hoechstgeschwindigkeit": 320,
+    "preis": 25000,
+    "beschleunigung": 2.9,
+    "gewicht": 200,
+    "drehmoment": 120,
+    "bild": "https://images.unsplash.com/photo-1598327109601-4df5572cf25b?auto=format&fit=crop&w=500&q=60"
+  },
+  {
+    "name": "Elektro-Sportwagen E",
+    "leistung": 600,
+    "hubraum": 0,
+    "hoechstgeschwindigkeit": 340,
+    "preis": 220000,
+    "beschleunigung": 3.0,
+    "gewicht": 1800,
+    "drehmoment": 1000,
+    "bild": "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=500&q=60"
+  },
+  {
+    "name": "SUV F",
+    "leistung": 350,
+    "hubraum": 3000,
+    "hoechstgeschwindigkeit": 240,
+    "preis": 80000,
+    "beschleunigung": 6.5,
+    "gewicht": 2200,
+    "drehmoment": 500,
+    "bild": "https://images.unsplash.com/photo-1563720222384-09c9a0d78c9f?auto=format&fit=crop&w=500&q=60"
+  }
+]
