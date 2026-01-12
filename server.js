@@ -14,7 +14,7 @@ const io = new Server(server, {
 });
 
 // Karten laden
-const karten = JSON.parse(fs.readFileSync("karten.json"));
+const karten = JSON.parse(fs.readFileSync("cards.json"));
 
 // Farben für Clients
 const colors = ["red","blue","green","yellow"];
