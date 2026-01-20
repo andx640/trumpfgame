@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Trumpf-Kartenspiel Lobby</title>
+</head>
+<body>
+
+<h2>Trumpf-Kartenspiel Lobby</h2>
+
+<div id="lobby">
+  <input id="nameInput" placeholder="Name">
+  <button onclick="joinLobby()">Beitreten</button>
+  <ul id="playerList"></ul>
+  <button id="startBtn" onclick="startGame()" style="display:none;">Start Spiel</button>
+</div>
+
+<div id="gameArea" style="display:none;">
+  <h3>Deine Karten:</h3>
+  <div id="playerCards"></div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const socket = io("http://localhost:3000");
+
+function joinLobby() {
+  const name = document.getElementById("nameInput").value;
+  if (!name) return alert("Bitte Namen eingeben!");
+  socket.emit("joinLobby", name);
+}
+
+function startGame() {
+  socket.emit("startGame");
+}
+
+// Lobby-Update
+socket.on("lobbyUpdate", (players) => {
+  const list = document.getElementById("playerList");
+  list.innerHTML = "";
+  players.forEach(p => {
+    const li = document.createElement("li");
+    li.textContent = p.name + (p.isHost ? " (Host)" : "");
+    list.appendChild(li);
+  });
+
+  // Start-Button nur für Host sichtbar
+  const isHost = players.some(p => p.isHost && p.id === socket.id);
+  document.getElementById("startBtn").style.display = isHost ? "block" : "none";
+});
+
+// Spielstart
+socket.on("gameStarted", (hand) => {
+  document.getElementById("lobby").style.display = "none";
+  document.getElementById("gameArea").style.display = "block";
+
+  const cardsDiv = document.getElementById("playerCards");
+  cardsDiv.innerHTML = "";
+  hand.forEach(card => {
+    const btn = document.createElement("button");
+    btn.textContent = card.name + " (" + card.leistung + " PS)";
+    cardsDiv.appendChild(btn);
+  });
+});
+</script>
+
+</body>
+</html>
+
+
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+
+app.use(express.static("public")); // HTML, JS, CSS im public-Ordner
+
+// Lobby & Spielstatus
+let lobby = {
+  players: [],       // { id, name, isHost, hand }
+  hostId: null,
+  gameStarted: false
+};
+
+// Auto-Deck (64 Karten)
+const deck = [
+  {
+    "c_id": "0001",
+    "name": "Bugatti Chiron",
+    "leistung": 1500,
+    "hubraum": 8000,
+    "hoechstgeschwindigkeit": 420,
+    "preis": 3000000,
+    "beschleunigung": 2.4,
+    "gewicht": 1995,
+    "drehmoment": 1600
+  },
+  {
+    "c_id": "0002",
+    "name": "Bugatti Veyron",
+    "leistung": 1001,
+    "hubraum": 8000,
+    "hoechstgeschwindigkeit": 407,
+    "preis": 1800000,
+    "beschleunigung": 2.5,
+    "gewicht": 1888,
+    "drehmoment": 1250
+  },
+  {
+    "c_id": "0003",
+    "name": "Koenigsegg Jesko",
+    "leistung": 1600,
+    "hubraum": 5000,
+    "hoechstgeschwindigkeit": 480,
+    "preis": 3000000,
+    "beschleunigung": 2.5,
+    "gewicht": 1420,
+    "drehmoment": 1500
+  },
+  {
+    "c_id": "0004",
+    "name": "Koenigsegg Agera RS",
+    "leistung": 1360,
+    "hubraum": 5000,
+    "hoechstgeschwindigkeit": 447,
+    "preis": 2500000,
+    "beschleunigung": 2.8,
+    "gewicht": 1395,
+    "drehmoment": 1370
+  },
+  {
+    "c_id": "0005",
+    "name": "Hennessey Venom F5",
+    "leistung": 1842,
+    "hubraum": 6500,
+    "hoechstgeschwindigkeit": 484,
+    "preis": 2800000,
+    "beschleunigung": 2.6,
+    "gewicht": 1385,
+    "drehmoment": 1617
+  },
+  {
+    "c_id": "0006",
+    "name": "Rimac Nevera",
+    "leistung": 1914,
+    "hubraum": 0,
+    "hoechstgeschwindigkeit": 412,
+    "preis": 2200000,
+    "beschleunigung": 1.9,
+    "gewicht": 2150,
+    "drehmoment": 2360
+  },
+  {
+    "c_id": "0007",
+    "name": "Tesla Model S Plaid",
+    "leistung": 1020,
+    "hubraum": 0,
+    "hoechstgeschwindigkeit": 322,
+    "preis": 110000,
+    "beschleunigung": 2.1,
+    "gewicht": 2160,
+    "drehmoment": 1420
+  },
+  {
+    "c_id": "0008",
+    "name": "Porsche 911 Turbo S",
+    "leistung": 650,
+    "hubraum": 3800,
+    "hoechstgeschwindigkeit": 330,
+    "preis": 220000,
+    "beschleunigung": 2.7,
+    "gewicht": 1640,
+    "drehmoment": 800
+  },
+  {
+    "c_id": "0009",
+    "name": "Porsche 918 Spyder",
+    "leistung": 887,
+    "hubraum": 4600,
+    "hoechstgeschwindigkeit": 345,
+    "preis": 1400000,
+    "beschleunigung": 2.6,
+    "gewicht": 1675,
+    "drehmoment": 1280
+  },
+  {
+    "c_id": "0010",
+    "name": "Ferrari SF90 Stradale",
+    "leistung": 1000,
+    "hubraum": 4000,
+    "hoechstgeschwindigkeit": 340,
+    "preis": 430000,
+    "beschleunigung": 2.5,
+    "gewicht": 1570,
+    "drehmoment": 800
+  },
+  {
+    "c_id": "0011",
+    "name": "Ferrari LaFerrari",
+    "leistung": 963,
+    "hubraum": 6300,
+    "hoechstgeschwindigkeit": 352,
+    "preis": 1500000,
+    "beschleunigung": 2.6,
+    "gewicht": 1585,
+    "drehmoment": 900
+  },
+  {
+    "c_id": "0012",
+    "name": "Ferrari F8 Tributo",
+    "leistung": 720,
+    "hubraum": 3900,
+    "hoechstgeschwindigkeit": 340,
+    "preis": 280000,
+    "beschleunigung": 2.9,
+    "gewicht": 1435,
+    "drehmoment": 770
+  },
+  {
+    "c_id": "0013",
+    "name": "Lamborghini Aventador SVJ",
+    "leistung": 770,
+    "hubraum": 6500,
+    "hoechstgeschwindigkeit": 350,
+    "preis": 520000,
+    "beschleunigung": 2.8,
+    "gewicht": 1525,
+    "drehmoment": 720
+  },
+  {
+    "c_id": "0014",
+    "name": "Lamborghini Huracán EVO",
+    "leistung": 640,
+    "hubraum": 5200,
+    "hoechstgeschwindigkeit": 325,
+    "preis": 260000,
+    "beschleunigung": 2.9,
+    "gewicht": 1422,
+    "drehmoment": 600
+  },
+  {
+    "c_id": "0015",
+    "name": "McLaren P1",
+    "leistung": 916,
+    "hubraum": 3800,
+    "hoechstgeschwindigkeit": 350,
+    "preis": 1200000,
+    "beschleunigung": 2.8,
+    "gewicht": 1490,
+    "drehmoment": 900
+  },
+  {
+    "c_id": "0016",
+    "name": "McLaren 720S",
+    "leistung": 720,
+    "hubraum": 4000,
+    "hoechstgeschwindigkeit": 341,
+    "preis": 300000,
+    "beschleunigung": 2.9,
+    "gewicht": 1419,
+    "drehmoment": 770
+  },
+  {
+    "c_id": "0017",
+    "name": "McLaren Senna",
+    "leistung": 800,
+    "hubraum": 4000,
+    "hoechstgeschwindigkeit": 335,
+    "preis": 1000000,
+    "beschleunigung": 2.8,
+    "gewicht": 1198,
+    "drehmoment": 800
+  },
+  {
+    "c_id": "0018",
+    "name": "Aston Martin Valkyrie",
+    "leistung": 1160,
+    "hubraum": 6500,
+    "hoechstgeschwindigkeit": 402,
+    "preis": 3000000,
+    "beschleunigung": 2.5,
+    "gewicht": 1030,
+    "drehmoment": 900
+  },
+  {
+    "c_id": "0019",
+    "name": "Aston Martin DBS Superleggera",
+    "leistung": 725,
+    "hubraum": 5200,
+    "hoechstgeschwindigkeit": 340,
+    "preis": 300000,
+    "beschleunigung": 3.4,
+    "gewicht": 1693,
+    "drehmoment": 900
+  },
+  {
+    "c_id": "0020",
+    "name": "Mercedes-AMG GT Black Series",
+    "leistung": 730,
+    "hubraum": 4000,
+    "hoechstgeschwindigkeit": 325,
+    "preis": 335000,
+    "beschleunigung": 3.2,
+    "gewicht": 1520,
+    "drehmoment": 800
+  },
+  {
+    "c_id": "0021",
+    "name": "BMW M5 CS",
+    "leistung": 635,
+    "hubraum": 4400,
+    "hoechstgeschwindigkeit": 305,
+    "preis": 180000,
+    "beschleunigung": 3.0,
+    "gewicht": 1825,
+    "drehmoment": 750
+  },
+  {
+    "c_id": "0022",
+    "name": "Audi R8 V10 Performance",
+    "leistung": 620,
+    "hubraum": 5200,
+    "hoechstgeschwindigkeit": 331,
+    "preis": 215000,
+    "beschleunigung": 3.1,
+    "gewicht": 1595,
+    "drehmoment": 580
+  },
+  {
+    "c_id": "0023",
+    "name": "Nissan GT-R Nismo",
+    "leistung": 600,
+    "hubraum": 3800,
+    "hoechstgeschwindigkeit": 330,
+    "preis": 210000,
+    "beschleunigung": 2.7,
+    "gewicht": 1720,
+    "drehmoment": 652
+  },
+  {
+    "c_id": "0024",
+    "name": "Chevrolet Corvette Z06",
+    "leistung": 670,
+    "hubraum": 5500,
+    "hoechstgeschwindigkeit": 312,
+    "preis": 130000,
+    "beschleunigung": 2.6,
+    "gewicht": 1560,
+    "drehmoment": 623
+  },
+  {
+    "c_id": "0025",
+    "name": "Chevrolet Camaro ZL1",
+    "leistung": 650,
+    "hubraum": 6200,
+    "hoechstgeschwindigkeit": 318,
+    "preis": 75000,
+    "beschleunigung": 3.5,
+    "gewicht": 1760,
+    "drehmoment": 881
+  },
+  {
+    "c_id": "0026",
+    "name": "Ford Mustang Shelby GT500",
+    "leistung": 760,
+    "hubraum": 5200,
+    "hoechstgeschwindigkeit": 290,
+    "preis": 85000,
+    "beschleunigung": 3.5,
+    "gewicht": 1916,
+    "drehmoment": 847
+  },
+  {
+    "c_id": "0027",
+    "name": "Dodge Challenger Hellcat Redeye",
+    "leistung": 808,
+    "hubraum": 6200,
+    "hoechstgeschwindigkeit": 327,
+    "preis": 90000,
+    "beschleunigung": 3.4,
+    "gewicht": 2010,
+    "drehmoment": 958
+  },
+  {
+    "c_id": "0028",
+    "name": "Pagani Huayra",
+    "leistung": 720,
+    "hubraum": 6000,
+    "hoechstgeschwindigkeit": 370,
+    "preis": 2600000,
+    "beschleunigung": 3.0,
+    "gewicht": 1350,
+    "drehmoment": 1000
+  },
+  {
+    "c_id": "0029",
+    "name": "Pagani Zonda F",
+    "leistung": 602,
+    "hubraum": 7300,
+    "hoechstgeschwindigkeit": 345,
+    "preis": 2000000,
+    "beschleunigung": 3.6,
+    "gewicht": 1230,
+    "drehmoment": 760
+  },
+  {
+    "c_id": "0030",
+    "name": "Alfa Romeo Giulia Quadrifoglio",
+    "leistung": 510,
+    "hubraum": 2900,
+    "hoechstgeschwindigkeit": 307,
+    "preis": 85000,
+    "beschleunigung": 3.9,
+    "gewicht": 1580,
+    "drehmoment": 600
+  },
+  {
+    "c_id": "0031",
+    "name": "Maserati MC20",
+    "leistung": 630,
+    "hubraum": 3000,
+    "hoechstgeschwindigkeit": 325,
+    "preis": 240000,
+    "beschleunigung": 2.9,
+    "gewicht": 1475,
+    "drehmoment": 730
+  },
+  {
+    "c_id": "0032",
+    "name": "Lotus Evija",
+    "leistung": 2000,
+    "hubraum": 0,
+    "hoechstgeschwindigkeit": 320,
+    "preis": 2100000,
+    "beschleunigung": 2.9,
+    "gewicht": 1680,
+    "drehmoment": 1700
+  },
+  {
+    "c_id": "0033",
+    "name": "Lotus Emira V6",
+    "leistung": 405,
+    "hubraum": 3500,
+    "hoechstgeschwindigkeit": 290,
+    "preis": 100000,
+    "beschleunigung": 4.3,
+    "gewicht": 1405,
+    "drehmoment": 420
+  },
+  {
+    "c_id": "0034",
+    "name": "Toyota Supra GR",
+    "leistung": 387,
+    "hubraum": 3000,
+    "hoechstgeschwindigkeit": 250,
+    "preis": 65000,
+    "beschleunigung": 4.1,
+    "gewicht": 1540,
+    "drehmoment": 500
+  },
+  {
+    "c_id": "0035",
+    "name": "BMW M4 CSL",
+    "leistung": 550,
+    "hubraum": 3000,
+    "hoechstgeschwindigkeit": 307,
+    "preis": 165000,
+    "beschleunigung": 3.7,
+    "gewicht": 1625,
+    "drehmoment": 650
+  },
+  {
+    "c_id": "0036",
+    "name": "Mercedes-AMG One",
+    "leistung": 1063,
+    "hubraum": 1600,
+    "hoechstgeschwindigkeit": 352,
+    "preis": 2700000,
+    "beschleunigung": 2.9,
+    "gewicht": 1695,
+    "drehmoment": 1400
+  },
+  {
+    "c_id": "0037",
+    "name": "Volkswagen Golf R",
+    "leistung": 320,
+    "hubraum": 2000,
+    "hoechstgeschwindigkeit": 250,
+    "preis": 55000,
+    "beschleunigung": 4.7,
+    "gewicht": 1550,
+    "drehmoment": 420
+  },
+  {
+    "c_id": "0038",
+    "name": "Audi RS6 Avant",
+    "leistung": 600,
+    "hubraum": 4000,
+    "hoechstgeschwindigkeit": 305,
+    "preis": 140000,
+    "beschleunigung": 3.6,
+    "gewicht": 2075,
+    "drehmoment": 800
+  },
+  {
+    "c_id": "0039",
+    "name": "Porsche Taycan Turbo S",
+    "leistung": 761,
+    "hubraum": 0,
+    "hoechstgeschwindigkeit": 260,
+    "preis": 195000,
+    "beschleunigung": 2.8,
+    "gewicht": 2295,
+    "drehmoment": 1050
+  },
+  {
+    "c_id": "0040",
+    "name": "Tesla Roadster",
+    "leistung": 1000,
+    "hubraum": 0,
+    "hoechstgeschwindigkeit": 400,
+    "preis": 200000,
+    "beschleunigung": 1.9,
+    "gewicht": 2000,
+    "drehmoment": 1200
+  },
+  {
+    "c_id": "0041",
+    "name": "Ford GT",
+    "leistung": 660,
+    "hubraum": 3500,
+    "hoechstgeschwindigkeit": 347,
+    "preis": 500000,
+    "beschleunigung": 2.8,
+    "gewicht": 1385,
+    "drehmoment": 746
+  },
+  {
+    "c_id": "0042",
+    "name": "Jaguar F-Type R",
+    "leistung": 575,
+    "hubraum": 5000,
+    "hoechstgeschwindigkeit": 300,
+    "preis": 120000,
+    "beschleunigung": 3.5,
+    "gewicht": 1720,
+    "drehmoment": 700
+  },
+  {
+    "c_id": "0043",
+    "name": "Lexus LFA",
+    "leistung": 560,
+    "hubraum": 4800,
+    "hoechstgeschwindigkeit": 325,
+    "preis": 600000,
+    "beschleunigung": 3.7,
+    "gewicht": 1480,
+    "drehmoment": 480
+  },
+  {
+    "c_id": "0044",
+    "name": "Subaru WRX STI",
+    "leistung": 300,
+    "hubraum": 2500,
+    "hoechstgeschwindigkeit": 255,
+    "preis": 45000,
+    "beschleunigung": 5.2,
+    "gewicht": 1560,
+    "drehmoment": 407
+  },
+  {
+    "c_id": "0045",
+    "name": "Mitsubishi Lancer Evo X",
+    "leistung": 295,
+    "hubraum": 2000,
+    "hoechstgeschwindigkeit": 250,
+    "preis": 42000,
+    "beschleunigung": 5.4,
+    "gewicht": 1580,
+    "drehmoment": 366
+  },
+  {
+    "c_id": "0046",
+    "name": "Peugeot 508 PSE",
+    "leistung": 360,
+    "hubraum": 1600,
+    "hoechstgeschwindigkeit": 250,
+    "preis": 68000,
+    "beschleunigung": 5.2,
+    "gewicht": 1850,
+    "drehmoment": 520
+  },
+  {
+    "c_id": "0047",
+    "name": "Cupra Formentor VZ5",
+    "leistung": 390,
+    "hubraum": 2500,
+    "hoechstgeschwindigkeit": 250,
+    "preis": 70000,
+    "beschleunigung": 4.2,
+    "gewicht": 1680,
+    "drehmoment": 480
+  },
+  {
+    "c_id": "0048",
+    "name": "Hyundai i30 N Performance",
+    "leistung": 280,
+    "hubraum": 2000,
+    "hoechstgeschwindigkeit": 250,
+    "preis": 45000,
+    "beschleunigung": 5.9,
+    "gewicht": 1429,
+    "drehmoment": 392
+  },
+  {
+    "c_id": "0049",
+    "name": "Kia EV6 GT",
+    "leistung": 585,
+    "hubraum": 0,
+    "hoechstgeschwindigkeit": 260,
+    "preis": 72000,
+    "beschleunigung": 3.5,
+    "gewicht": 2200,
+    "drehmoment": 740
+  },
+  {
+    "c_id": "0050",
+    "name": "Polestar 2 Performance",
+    "leistung": 476,
+    "hubraum": 0,
+    "hoechstgeschwindigkeit": 205,
+    "preis": 65000,
+    "beschleunigung": 4.4,
+    "gewicht": 2100,
+    "drehmoment": 680
+  },
+  {
+    "c_id": "0051",
+    "name": "BMW i4 M50",
+    "leistung": 544,
+    "hubraum": 0,
+    "hoechstgeschwindigkeit": 225,
+    "preis": 72000,
+    "beschleunigung": 3.9,
+    "gewicht": 2215,
+    "drehmoment": 795
+  },
+  {
+    "c_id": "0052",
+    "name": "Lucid Air Dream Edition",
+    "leistung": 1111,
+    "hubraum": 0,
+    "hoechstgeschwindigkeit": 270,
+    "preis": 170000,
+    "beschleunigung": 2.5,
+    "gewicht": 2360,
+    "drehmoment": 1390
+  },
+  {
+    "c_id": "0053",
+    "name": "Volkswagen ID.R",
+    "leistung": 680,
+    "hubraum": 0,
+    "hoechstgeschwindigkeit": 270,
+    "preis": 0,
+    "beschleunigung": 2.2,
+    "gewicht": 1100,
+    "drehmoment": 650
+  }
+];
+
+// Shuffle-Funktion
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+// Karten austeilen
+function dealCards(players) {
+  const shuffledDeck = shuffle([...deck]); // Klon mischen
+  players.forEach(player => {
+    player.hand = shuffledDeck.splice(0, 16); // 16 Karten pro Spieler
+  });
+}
+
+// Socket.io Events
+io.on("connection", (socket) => {
+  console.log("Client verbunden:", socket.id);
+
+  socket.on("joinLobby", (name) => {
+    const isHost = lobby.players.length === 0;
+    if (isHost) lobby.hostId = socket.id;
+
+    lobby.players.push({ id: socket.id, name, isHost, hand: [] });
+    io.emit("lobbyUpdate", lobby.players);
+  });
+
+  socket.on("startGame", () => {
+    if (socket.id !== lobby.hostId) return;
+
+    lobby.gameStarted = true;
+    dealCards(lobby.players);
+
+    lobby.players.forEach(player => {
+      io.to(player.id).emit("gameStarted", player.hand);
+    });
+  });
+
+  socket.on("disconnect", () => {
+    lobby.players = lobby.players.filter(p => p.id !== socket.id);
+
+    if (socket.id === lobby.hostId && lobby.players.length > 0) {
+      lobby.hostId = lobby.players[0].id;
+      lobby.players[0].isHost = true;
+    }
+
+    io.emit("lobbyUpdate", lobby.players);
+  });
+});
+
+server.listen(3000, () => {
+  console.log("Server läuft auf Port 3000");
+});

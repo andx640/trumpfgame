@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Socket.io Chat</title>
+</head>
+<body>
+
+<h2>Chat</h2>
+
+<input id="msg" placeholder="Nachricht eingeben">
+<button onclick="send()">Senden</button>
+
+<ul id="chat"></ul>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+  const socket = io("https://trumpfgame.onrender.com");
+
+  function send() {
+    const input = document.getElementById("msg");
+    const text = input.value.trim();
+    if (!text) return;
+
+    socket.emit("message", text);
+    input.value = "";
+  }
+
+  socket.on("message", (data) => {
+    const li = document.createElement("li");
+    li.textContent = data.text;
+    li.style.color = data.color;
+    document.getElementById("chat").appendChild(li);
+  });
+</script>
+
+</body>
+</html>

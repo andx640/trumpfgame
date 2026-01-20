@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cover Flow Karussell</title>
+<style>
+body {
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: linear-gradient(135deg, #a18cd1, #fbc2eb);
+  overflow: hidden;
+  font-family: sans-serif;
+}
+
+.carousel-container {
+  position: relative;
+  width: 90%;
+  max-width: 800px;
+  height: 400px;
+  perspective: 1000px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.carousel img {
+  position: absolute;
+  width: 250px;
+  height: 350px;
+  object-fit: cover;
+  border-radius: 15px;
+  box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+  transition: transform 0.5s, z-index 0.5s;
+  cursor: pointer;
+}
+
+/* kleiner Touch-Feedback Effekt */
+.carousel img:active {
+  transform: scale(1.05);
+}
+</style>
+</head>
+<body>
+
+<div class="carousel-container" id="carousel">
+  <img src="/mnt/data/a283c05c-e50d-4028-93c5-bdd103eaf9c1.png" alt="1">
+  <img src="/mnt/data/a283c05c-e50d-4028-93c5-bdd103eaf9c1.png" alt="2">
+  <img src="/mnt/data/a283c05c-e50d-4028-93c5-bdd103eaf9c1.png" alt="3">
+  <img src="/mnt/data/a283c05c-e50d-4028-93c5-bdd103eaf9c1.png" alt="4">
+  <img src="/mnt/data/a283c05c-e50d-4028-93c5-bdd103eaf9c1.png" alt="5">
+</div>
+
+<script>
+const carousel = document.getElementById('carousel');
+const imgs = carousel.querySelectorAll('img');
+let currentIndex = Math.floor(imgs.length / 2);
+
+function updateCarousel() {
+  imgs.forEach((img, i) => {
+    const offset = i - currentIndex;
+    img.style.zIndex = 100 - Math.abs(offset);
+    img.style.transform = `
+      translateX(${offset * 150}px)
+      rotateY(${offset * -30}deg)
+      scale(${offset === 0 ? 1 : 0.8})
+    `;
+  });
+}
+
+// Swipe für Touch
+let startX = 0;
+carousel.addEventListener('touchstart', e => startX = e.touches[0].clientX);
+carousel.addEventListener('touchend', e => {
+  const diff = e.changedTouches[0].clientX - startX;
+  if (diff < -50 && currentIndex < imgs.length - 1) currentIndex++;
+  if (diff > 50 && currentIndex > 0) currentIndex--;
+  updateCarousel();
+});
+
+// initial render
+updateCarousel();
+</script>
+
+</body>
+</html>

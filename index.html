@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Trumpf-Kartenspiel Lobby</title>
+  <link rel="stylesheet" href="swiper.css">
+  <style>
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body, html { width: 100%; height: 100%; font-family: "Roboto", sans-serif; }
+
+    section {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: radial-gradient(circle farthest-corner at 10% 20%, #ab66ff 0%, #74b6f7 90%);
+    }
+
+    .swiper {
+      width: 100%;
+      padding: 50px 0;
+      overflow: hidden; /* verhindert, dass links vorbeigescrollte Slides sichtbar bleiben */
+    }
+
+    .swiper-slide {
+      width: 80%;
+    }
+
+
+    .swiper-pagination-bullet,
+    .swiper-pagination-bullet-active { background: #fff; }
+.background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: url('images/carbon_background.jpg') no-repeat center center;
+  background-size: cover;
+  pointer-events: none; /* verhindert Klicks/Markierung */
+}
+</style>
+</head>
+<body>
+
+<h2>Trumpf-Kartenspiel Lobby</h2>
+<div class="background"></div>
+<div id="lobby">
+  <input id="nameInput" placeholder="Name">
+  <button onclick="joinLobby()">Beitreten</button>
+  <ul id="playerList"></ul>
+  <button id="startBtn" onclick="startGame()" style="display:none;">Start Spiel</button>
+</div>
+<section>
+<div id="gameArea" style="display:none;">
+  <h3>Deine Karten:</h3>
+  <div class="swiper">
+    <div class="swiper-wrapper" id="swiper-wrapper"></div>
+    <div class="swiper-pagination"></div>
+  </div>
+</div>
+</section>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const socket = io("http://localhost:3000");
+
+function joinLobby() {
+  const name = document.getElementById("nameInput").value;
+  if (!name) return alert("Bitte Namen eingeben!");
+  socket.emit("joinLobby", name);
+}
+
+function startGame() {
+  socket.emit("startGame");
+}
+
+// Lobby-Update
+socket.on("lobbyUpdate", (players) => {
+  const list = document.getElementById("playerList");
+  list.innerHTML = "";
+  players.forEach(p => {
+    const li = document.createElement("li");
+    li.textContent = p.name + (p.isHost ? " (Host)" : "");
+    list.appendChild(li);
+  });
+
+  // Start-Button nur für Host sichtbar
+  const isHost = players.some(p => p.isHost && p.id === socket.id);
+  document.getElementById("startBtn").style.display = isHost ? "block" : "none";
+});
+
+// Spielstart
+socket.on("gameStarted", (hand) => {
+  document.getElementById("lobby").style.display = "none";
+  document.getElementById("gameArea").style.display = "block";
+
+  const swiperwrapper = document.getElementById("swiper-wrapper");
+  swiperwrapper.innerHTML = "";
+hand.forEach(card => {
+
+  const picture = document.createElement("img");
+  picture.src = card.picsrc;
+  picture.classList.add("swiper-slide");
+  swiperwrapper.appendChild(picture);
+});
+
+
+
+});
+</script>
+<script src="swiper.js"></script>
+<script>
+  const swiper = new Swiper(".swiper", {
+    slidesPerView: "auto",
+    centeredSlides: true,
+    spaceBetween: 10, // kleine Lücke rechts
+    loop: false,
+    grabCursor: true,
+    coverflowEffect: {
+      rotate: 0,
+      stretch: -0, // Slides rechts näher zusammen
+      depth: 280,
+      modifier: 1,
+      slideShadows: false
+    },
+    effect: "coverflow",
+    pagination: { el: ".swiper-pagination", clickable: true }
+  });
+</script>
+</body>
+</html>
