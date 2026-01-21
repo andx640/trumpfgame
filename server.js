@@ -30,7 +30,8 @@ const deck = [
     "drehzahl":8000,
     "picsrc":"cardimages/audi_r8_performance.png"
   },
-  {"c_id":"0002",
+  {
+    "c_id":"0002",
     "name":"Audi RS6 Performance",
     "leistung":630,
     "hubraum":4000,
@@ -42,7 +43,8 @@ const deck = [
     "drehzahl":6000,
     "picsrc":"cardimages/audi_rs6_performance.png"
   },
-  {"c_id":"0003",
+  {
+    "c_id":"0003",
     "name":"Lamborghini Huracán EVO",
     "leistung":640,
     "hubraum":5200,
@@ -53,6 +55,32 @@ const deck = [
     "drehmoment":600,
     "drehzahl":8000,
     "picsrc":"cardimages/lamborghini_huracan_evo.png"
+  },
+  {
+    "c_id":"0004",
+    "name":"Lamborghini Huracán STO Underground Racing",
+    "leistung":2000,
+    "hubraum":5200,
+    "hoechstgeschwindigkeit":350,
+    "preis":1296000,
+    "beschleunigung":2.0,
+    "gewicht":1390,
+    "drehmoment":2200,
+    "drehzahl":8000,
+    "picsrc":"cardimages/lamborghini_huracan_sto_ur.png"
+  },
+  {
+    "c_id":"0005",
+    "name":"Porsche 911 GT3 RS 992",
+    "leistung":525,
+    "hubraum":4000,
+    "hoechstgeschwindigkeit":296,
+    "preis":230000,
+    "beschleunigung":3.3,
+    "gewicht":1525,
+    "drehmoment":465,
+    "drehzahl":9000,
+    "picsrc":"cardimages/porsche_911_gt3rs_992.png"
   },
 ];
 
