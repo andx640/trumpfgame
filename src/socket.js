@@ -1,6 +1,9 @@
 import { io } from "socket.io-client";
 
-export const socket = io({
+// Ohne VITE_SOCKET_URL verbindet sich der Client mit dem Server, der die Seite ausliefert.
+const serverUrl = import.meta.env.VITE_SOCKET_URL || undefined;
+
+export const socket = io(serverUrl, {
   autoConnect: true,
   reconnection: true,
   reconnectionDelay: 500,
