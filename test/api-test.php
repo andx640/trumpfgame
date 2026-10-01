@@ -62,6 +62,26 @@ if ($deck['0001']['beschleunigung'] !== $deck['0002']['beschleunigung']) {
     check($result['winnerIds'] === [$expect], 'niedriger Wert gewinnt bei Beschleunigung');
 }
 
+// Offline-Spieler setzen aus und behalten ihre Karten.
+$players = [
+    ['id' => 'a', 'hand' => ['0001', '0003']],
+    ['id' => 'b', 'hand' => ['0002', '0004']],
+    ['id' => 'c', 'hand' => ['0005', '0006'], 'away' => true],
+];
+$game = ['phase' => 'choosing', 'round' => 1, 'activePlayerId' => 'a', 'category' => null, 'tableCards' => [],
+    'pot' => [], 'result' => null, 'winnerId' => null, 'turnEndsAt' => null, 'revealEndsAt' => null, 'pausedUntil' => null, 'cardsPerPlayer' => 8];
+trumpf_choose_category($game, $players, 'a', 'leistung');
+check(count($game['tableCards']) === 2 && count($players[2]['hand']) === 2, 'Abwesender legt keine Karte');
+$players[1]['away'] = true;
+$game['phase'] = 'choosing'; $game['activePlayerId'] = 'a';
+$threw = false;
+try {
+    trumpf_choose_category($game, $players, 'a', 'leistung');
+} catch (TrumpfError $e) {
+    $threw = true;
+}
+check($threw, 'mit nur einem Spieler online wird nicht gespielt');
+
 // Ganze Partien simulieren: es muss immer einen Sieger geben und keine Karte darf verloren gehen.
 $allFinished = true;
 $cardsKept = true;
@@ -187,6 +207,73 @@ try {
     check($benOffline, 'Ben wird offline angezeigt');
     $back = call($port, ['action' => 'join', 'token' => $b['token'], 'name' => 'Ben']);
     check($back['ok'] && $back['reconnected'] === true && $back['state']['game'] !== null, 'Ben verbindet sich wieder und behält seine Karten');
+
+    // --- Mitspieler verlassen das Spiel -----------------------------------------------------
+    $setSeen = function (array $tokens, int $offsetMs) use ($file) {
+        $room = json_decode((string) file_get_contents($file), true);
+        foreach ($room['players'] as $i => $p) {
+            if (in_array($p['token'], $tokens, true)) {
+                $room['players'][$i]['lastSeen'] = (int) (microtime(true) * 1000) + $offsetMs;
+            }
+        }
+        file_put_contents($file, json_encode($room));
+    };
+    $setField = function (callable $change) use ($file) {
+        $room = json_decode((string) file_get_contents($file), true);
+        $change($room);
+        file_put_contents($file, json_encode($room));
+    };
+
+    // Zu zweit: geht einer, pausiert das Spiel; kommt er zurück, läuft es weiter.
+    $setSeen([$b['token']], -60000);
+    $paused = call($port, ['action' => 'state', 'token' => $a['token']])['state'];
+    check($paused['game']['pausedUntil'] > (int) (microtime(true) * 1000), 'allein: Spiel pausiert mit Countdown');
+    check($paused['game']['turnEndsAt'] === null, 'allein: Zugzeit läuft nicht weiter');
+    $activeA = call($port, ['action' => 'choose', 'token' => $a['token'], 'category' => 'leistung']);
+    check($activeA['ok'] === false, 'allein: es wird nicht automatisch weitergespielt');
+    call($port, ['action' => 'join', 'token' => $b['token'], 'name' => 'Ben']);
+    $resumed = call($port, ['action' => 'state', 'token' => $a['token']])['state'];
+    check($resumed['game']['pausedUntil'] === null, 'Mitspieler zurück: Pause endet');
+    check($resumed['game']['phase'] === 'choosing' ? $resumed['game']['turnEndsAt'] !== null : $resumed['game']['revealEndsAt'] !== null, 'Mitspieler zurück: Zeit läuft wieder');
+
+    // Nach einer Minute ohne Rückkehr endet die Partie, der verbliebene Spieler gewinnt.
+    $setSeen([$b['token']], -60000);
+    call($port, ['action' => 'state', 'token' => $a['token']]);
+    $setField(function (&$room) { $room['game']['pausedUntil'] = (int) (microtime(true) * 1000) - 1; });
+    $over = call($port, ['action' => 'state', 'token' => $a['token']])['state'];
+    check($over['status'] === 'finished' && $over['game']['phase'] === 'finished', 'nach 1 Minute ohne Rückkehr endet die Partie');
+    check($over['game']['winnerId'] === $over['selfId'] && ($over['game']['result']['reason'] ?? '') === 'abandoned', 'der verbliebene Spieler gewinnt');
+
+    // Zu dritt: einer geht, die anderen spielen zu zweit weiter.
+    unlink($file);
+    $ada = call($port, ['action' => 'join', 'name' => 'Ada']);
+    $ben = call($port, ['action' => 'join', 'name' => 'Ben']);
+    $cleo = call($port, ['action' => 'join', 'name' => 'Cleo']);
+    call($port, ['action' => 'setCards', 'token' => $ada['token'], 'count' => 8]);
+    call($port, ['action' => 'start', 'token' => $ada['token']]);
+    $setSeen([$cleo['token']], -60000);
+    $three = call($port, ['action' => 'state', 'token' => $ada['token']])['state'];
+    $cleoRow = array_values(array_filter($three['players'], fn($p) => $p['name'] === 'Cleo'))[0];
+    check($three['game']['pausedUntil'] === null && $three['game']['phase'] === 'choosing', 'zu dritt: einer geht, zu zweit geht es weiter');
+    check($cleoRow['connected'] === false && $three['game']['activePlayerId'] !== $cleoRow['id'], 'der Abwesende ist nicht am Zug');
+    $mover = $three['game']['activePlayerId'] === $three['selfId'] ? $ada : $ben;
+    $trick = call($port, ['action' => 'choose', 'token' => $mover['token'], 'category' => 'leistung']);
+    check($trick['ok'] && count($trick['state']['game']['tableCards']) === 2, 'zu zweit: nur zwei Karten auf dem Tisch');
+    $cleoAfter = array_values(array_filter($trick['state']['players'], fn($p) => $p['name'] === 'Cleo'))[0];
+    check($cleoAfter['cardCount'] === 8, 'Karten des Abwesenden bleiben unangetastet');
+
+    // Der Abwesende kommt zurück und ist in der nächsten Runde wieder dabei.
+    call($port, ['action' => 'join', 'token' => $cleo['token'], 'name' => 'Cleo']);
+    $setField(function (&$room) { $room['game']['revealEndsAt'] = (int) (microtime(true) * 1000) - 1; });
+    $round2 = call($port, ['action' => 'state', 'token' => $ada['token']])['state'];
+    $mover2 = $round2['game']['activePlayerId'];
+    $tokenById = [$round2['selfId'] => $ada['token']];
+    foreach ([$ben, $cleo] as $pl) {
+        $st = call($port, ['action' => 'state', 'token' => $pl['token']])['state'];
+        $tokenById[$st['selfId']] = $pl['token'];
+    }
+    $second = call($port, ['action' => 'choose', 'token' => $tokenById[$mover2], 'category' => 'leistung']);
+    check($second['ok'] && count($second['state']['game']['tableCards']) === 3, 'nach der Rückkehr spielen wieder alle drei');
 
     check(call($port, ['action' => 'state', 'token' => 'falsch'])['code'] === 'not_joined', 'unbekannter Token');
     check(call($port, ['action' => 'unsinn', 'token' => $a['token']])['ok'] === false, 'unbekannte Aktion');
