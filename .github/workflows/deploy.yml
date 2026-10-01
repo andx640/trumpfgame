@@ -30,4 +30,4 @@ jobs:
           FTP_DIR: ${{ secrets.FTP_DIR }}
         run: |
           sudo apt-get install -y lftp > /dev/null
-          lftp -u "$FTP_USER,$FTP_PASSWORD" "$FTP_HOST" -e "set ssl:verify-certificate no; set net:max-retries 3; set net:reconnect-interval-base 5; cd \"$FTP_DIR\"; lcd ./dist; mirror -R --verbose . .; echo \"--- Zielordner:\"; pwd; cls -l; bye"
+          lftp -u "$FTP_USER,$FTP_PASSWORD" "$FTP_HOST" -e "set ssl:verify-certificate no; set net:max-retries 3; set net:reconnect-interval-base 5; cd \"$FTP_DIR\"; lcd ./dist; mirror -R --verbose . .; bye"
