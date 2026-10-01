@@ -74,6 +74,8 @@ input:focus-visible {
 
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: clip; /* Leuchtkreise ragen sonst über den Rand und machen die Seite auf dem Handy breiter */
 }
 
 .page-width {
@@ -2765,5 +2767,111 @@ input:focus-visible {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Handy: Startseite und Lobby */
+@media (max-width: 900px) {
+  /* Die rechte Spalte löst sich auf, damit der Start-Button am unteren Rand haften kann. */
+  .lobby-grid {
+    gap: 14px;
+  }
+
+  .rules-panel {
+    display: contents;
+  }
+
+  .deal-settings {
+    margin-right: 0;
+  }
+
+  .start-button,
+  .lobby .host-wait {
+    position: sticky;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    z-index: 5;
+    margin-top: 6px;
+    box-shadow: 0 -14px 22px 6px rgba(7, 9, 10, 0.92);
+  }
+
+  .lobby .host-wait {
+    background: #0b0e0f;
+  }
+}
+
+@media (max-width: 650px) {
+  /* iPhone-Safari zoomt in Felder unter 16 px hinein. */
+  .join-card input {
+    font-size: 16px;
+  }
+
+  .welcome {
+    min-height: 0;
+    gap: 26px;
+    padding-block: 26px 36px;
+  }
+
+  /* Formular zuerst, Text darunter: Der Name ist sofort sichtbar. */
+  .join-card {
+    order: -1;
+    padding: 24px 20px;
+  }
+
+  .join-card h2 {
+    font-size: clamp(24px, 7.5vw, 32px);
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(32px, 10.5vw, 46px);
+  }
+
+  .hero-copy > p {
+    margin-top: 18px;
+  }
+
+  .hero-stats {
+    margin-top: 26px;
+  }
+
+  .lobby {
+    padding-block: 28px 24px;
+  }
+
+  .lobby-heading {
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .lobby-heading h1 {
+    font-size: clamp(19px, 6.1vw, 30px);
+    letter-spacing: -0.03em;
+    overflow-wrap: anywhere;
+  }
+
+  .lobby-heading .muted {
+    margin-top: 10px;
+    font-size: 14px;
+  }
+
+  .text-button {
+    min-height: 44px;
+    padding-block: 13px;
+  }
+
+  .seat {
+    min-height: 68px;
+    padding: 10px 13px;
+  }
+
+  .seat-copy strong {
+    overflow-wrap: anywhere;
+  }
+
+  .card-count-options button {
+    min-height: 54px;
+  }
+
+  .rule-line {
+    padding-block: 12px;
   }
 }
