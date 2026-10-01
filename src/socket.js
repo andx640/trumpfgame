@@ -1,11 +1,122 @@
-import { io } from "socket.io-client";
+// Ersatz für Socket.IO: gleiche Schnittstelle (on/off/emit/connected), aber per HTTP-Polling gegen api/index.php.
+const API_URL = import.meta.env.VITE_API_URL || "api/index.php";
+const POLL_MS = 1_000;
+const POLL_HIDDEN_MS = 4_000;
+const RETRY_MS = 2_000;
 
-// Ohne VITE_SOCKET_URL verbindet sich der Client mit dem Server, der die Seite ausliefert.
-const serverUrl = import.meta.env.VITE_SOCKET_URL || undefined;
+// Ereignisname der Oberfläche -> Aktion der API
+const ACTIONS = {
+  joinGame: "join",
+  leaveLobby: "leave",
+  startGame: "start",
+  chooseCategory: "choose",
+  setCardsPerPlayer: "setCards",
+  playAgain: "again",
+  requestState: "state"
+};
 
-export const socket = io(serverUrl, {
-  autoConnect: true,
-  reconnection: true,
-  reconnectionDelay: 500,
-  reconnectionDelayMax: 4_000
-});
+class PollingSocket {
+  constructor() {
+    this.connected = false;
+    this.listeners = new Map();
+    this.token = null;
+    this.version = 0;
+    this.timer = null;
+    this.poll();
+  }
+
+  on(event, listener) {
+    if (!this.listeners.has(event)) this.listeners.set(event, new Set());
+    this.listeners.get(event).add(listener);
+    return this;
+  }
+
+  off(event, listener) {
+    this.listeners.get(event)?.delete(listener);
+    return this;
+  }
+
+  dispatch(event, payload) {
+    this.listeners.get(event)?.forEach((listener) => listener(payload));
+  }
+
+  setConnected(value) {
+    if (this.connected === value) return;
+    this.connected = value;
+    this.dispatch(value ? "connect" : "disconnect");
+  }
+
+  async request(action, body = {}) {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ action, token: this.token, ...body })
+    });
+    const result = await response.json();
+    this.setConnected(true);
+    return result;
+  }
+
+  applyResult(result) {
+    if (result.code === "not_joined") {
+      this.token = null;
+      this.version = 0;
+      this.dispatch("state", null);
+      return;
+    }
+    if (result.unchanged || result.version < this.version) return; // veraltete Antwort einer früheren Abfrage
+    if (result.state !== undefined) {
+      this.version = result.version;
+      this.dispatch("state", result.state);
+    }
+  }
+
+  emit(event, payload, callback) {
+    const action = ACTIONS[event];
+    if (!action) return this;
+
+    let body = {};
+    if (event === "joinGame") body = { name: payload?.name, token: payload?.token ?? this.token };
+    if (event === "chooseCategory") body = { category: payload };
+    if (event === "setCardsPerPlayer") body = { count: payload };
+
+    this.request(action, body)
+      .then((result) => {
+        if (event === "joinGame") {
+          this.token = result.ok ? result.token : null;
+          this.version = 0;
+        }
+        if (event === "leaveLobby") {
+          this.token = null;
+          this.version = 0;
+        }
+        this.applyResult(result);
+        if (!result.ok && event !== "joinGame" && event !== "requestState" && result.message) {
+          this.dispatch("gameError", { message: result.message });
+        }
+        callback?.(result);
+      })
+      .catch(() => {
+        this.setConnected(false);
+        callback?.({ ok: false, message: "Keine Verbindung zum Server." });
+      });
+    return this;
+  }
+
+  async poll() {
+    let delay = document.hidden ? POLL_HIDDEN_MS : POLL_MS;
+    try {
+      const result = this.token
+        ? await this.request("state", { since: this.version })
+        : await this.request("ping");
+      if (this.token || result.code === "not_joined") this.applyResult(result);
+    } catch {
+      this.setConnected(false);
+      delay = RETRY_MS;
+    }
+    this.timer = window.setTimeout(() => this.poll(), delay);
+  }
+}
+
+export const socket = new PollingSocket();
