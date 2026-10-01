@@ -20,7 +20,7 @@ jobs:
       - run: npm test
       - run: npm run build
         env:
-          VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL }}
+          VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL || secrets.VITE_SOCKET_URL }}
 
       - name: Upload via FTPS
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
@@ -28,7 +28,7 @@ jobs:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USER }}
           password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
+          protocol: ftp
           local-dir: ./dist/
           server-dir: ${{ secrets.FTP_DIR }}
           log-level: verbose
