@@ -22,13 +22,12 @@ jobs:
         env:
           VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL || secrets.VITE_SOCKET_URL }}
 
-      - name: Upload via FTPS
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftp
-          local-dir: ./dist/
-          server-dir: ${{ secrets.FTP_DIR }}
-          log-level: verbose
+      - name: Upload via lftp
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_DIR: ${{ secrets.FTP_DIR }}
+        run: |
+          sudo apt-get install -y lftp > /dev/null
+          lftp -u "$FTP_USER,$FTP_PASSWORD" "$FTP_HOST" -e "set ssl:verify-certificate no; set net:max-retries 3; set net:reconnect-interval-base 5; mirror -R --verbose ./dist \"$FTP_DIR\"; bye"
