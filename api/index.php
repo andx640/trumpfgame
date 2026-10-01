@@ -454,6 +454,19 @@ try {
                 $reply += ['token' => $room->data['players'][$selfIndex]['token'], 'reconnected' => true];
                 break;
             }
+            if ($room->data['status'] !== 'lobby' && $selfIndex === null) {
+                // Spielt niemand mehr mit (alle offline), ist der alte Stand verwaist: neue Lobby statt Sperre.
+                $anyoneOnline = false;
+                foreach ($room->data['players'] as $entry) {
+                    $anyoneOnline = $anyoneOnline || $entry['connected'];
+                }
+                if (!$anyoneOnline) {
+                    $version = $room->data['version'];
+                    $room->data = TrumpfRoom::fresh();
+                    $room->data['version'] = $version;
+                    $room->touch();
+                }
+            }
             if ($room->data['status'] !== 'lobby') {
                 $reply = $fail('Das Spiel läuft bereits. Warte auf die nächste Partie.');
             } elseif ($name === '') {
