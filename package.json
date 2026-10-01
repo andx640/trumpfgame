@@ -1,13 +1,28 @@
 {
   "name": "trumpfgame",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Serverautoritäres Mehrspieler-Autoquartett mit React und Socket.IO",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "dev": "concurrently -k -n server,web -c yellow,cyan \"node --watch server.js\" \"vite\"",
+    "build": "vite build",
+    "images:metadata": "node scripts/fetch-card-images.js",
+    "images:update": "node scripts/fetch-card-images.js && node scripts/download-card-images.js",
+    "start": "node server.js",
+    "test": "node --test"
   },
   "dependencies": {
     "express": "^4.22.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "swiper": "14.1.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.1",
+    "vite": "^7.1.3"
   }
 }

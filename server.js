@@ -1,141 +1,327 @@
 const express = require("express");
 const http = require("http");
+const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
 const { Server } = require("socket.io");
+const cards = require("./cards.json");
+const {
+  CATEGORIES,
+  chooseCategory,
+  nextRound,
+  selectAutomaticCategory,
+  startGame
+} = require("./game-engine");
+
+const PORT = process.env.PORT === undefined ? 3000 : Number(process.env.PORT);
+const TURN_DURATION_MS = 30_000;
+const REVEAL_DURATION_MS = 6_000;
+const MAX_PLAYERS = 4;
+const CARD_COUNT_OPTIONS = Object.freeze([8, 16, 32]);
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const httpServer = http.createServer(app);
+const io = new Server(httpServer, {
+  cors: { origin: "*" },
+  maxHttpBufferSize: 100_000
+});
+const rootDirectory = __dirname;
+const distDirectory = path.join(rootDirectory, "dist");
 
-app.use(express.static("public")); // HTML, JS, CSS im public-Ordner
-
-// Lobby & Spielstatus
-let lobby = {
-  players: [],       // { id, name, isHost, hand }
-  hostId: null,
-  gameStarted: false
-};
-
-// Auto-Deck (53 Karten) - sortiert nach Marke und Name
-const deck = [
-  // Audi
-  {
-    "c_id":"0001","name":"Audi R8 Performance",
-    "leistung":620,
-    "hubraum":5200,
-    "hoechstgeschwindigkeit":331,
-    "preis":149000,
-    "beschleunigung":3.1,
-    "gewicht":1670,
-    "drehmoment":580,
-    "drehzahl":8000,
-    "picsrc":"cardimages/audi_r8_performance.png"
-  },
-  {
-    "c_id":"0002",
-    "name":"Audi RS6 Performance",
-    "leistung":630,
-    "hubraum":4000,
-    "hoechstgeschwindigkeit":280,
-    "preis":138500,
-    "beschleunigung":3.4,
-    "gewicht":2165,
-    "drehmoment":850,
-    "drehzahl":6000,
-    "picsrc":"cardimages/audi_rs6_performance.png"
-  },
-  {
-    "c_id":"0003",
-    "name":"Lamborghini Huracán EVO",
-    "leistung":640,
-    "hubraum":5200,
-    "hoechstgeschwindigkeit":325,
-    "preis":260000,
-    "beschleunigung":2.9,
-    "gewicht":1422,
-    "drehmoment":600,
-    "drehzahl":8000,
-    "picsrc":"cardimages/lamborghini_huracan_evo.png"
-  },
-  {
-    "c_id":"0004",
-    "name":"Lamborghini Huracán STO Underground Racing",
-    "leistung":2000,
-    "hubraum":5200,
-    "hoechstgeschwindigkeit":350,
-    "preis":1296000,
-    "beschleunigung":2.0,
-    "gewicht":1390,
-    "drehmoment":2200,
-    "drehzahl":8000,
-    "picsrc":"cardimages/lamborghini_huracan_sto_ur.png"
-  },
-  {
-    "c_id":"0005",
-    "name":"Porsche 911 GT3 RS 992",
-    "leistung":525,
-    "hubraum":4000,
-    "hoechstgeschwindigkeit":296,
-    "preis":230000,
-    "beschleunigung":3.3,
-    "gewicht":1525,
-    "drehmoment":465,
-    "drehzahl":9000,
-    "picsrc":"cardimages/porsche_911_gt3rs_992.png"
-  },
-];
-
-// Shuffle-Funktion
-function shuffle(array) {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-  return array;
-}
-
-// Karten austeilen
-function dealCards(players) {
-  const shuffledDeck = shuffle([...deck]); // Klon mischen
-  players.forEach(player => {
-    player.hand = shuffledDeck.splice(0, 16); // 16 Karten pro Spieler
+app.use("/cardimages", express.static(path.join(rootDirectory, "cardimages")));
+app.use("/images", express.static(path.join(rootDirectory, "images")));
+app.use("/works", express.static(path.join(rootDirectory, "works")));
+if (fs.existsSync(distDirectory)) {
+  app.use(express.static(distDirectory));
+  app.get("*", (_request, response) => response.sendFile(path.join(distDirectory, "index.html")));
+} else {
+  app.get("/", (_request, response) => {
+    response
+      .status(503)
+      .send("Frontend noch nicht gebaut. Nutze `npm run dev` oder führe zuerst `npm run build` aus.");
   });
 }
 
-// Socket.io Events
+const room = {
+  status: "lobby",
+  players: [],
+  hostId: null,
+  cardsPerPlayer: 32,
+  game: null
+};
+
+let phaseTimer = null;
+
+function cleanName(value) {
+  return String(value || "").slice(0, 100).trim().replace(/\s+/g, " ").slice(0, 20);
+}
+
+function playerBySocket(socketId) {
+  return room.players.find((player) => player.socketId === socketId);
+}
+
+function publicStateFor(player) {
+  const game = room.game;
+  return {
+    selfId: player.id,
+    status: room.status,
+    hostId: room.hostId,
+    maxPlayers: MAX_PLAYERS,
+    cardsPerPlayer: room.cardsPerPlayer,
+    cardCountOptions: CARD_COUNT_OPTIONS,
+    categories: CATEGORIES,
+    players: room.players.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      isHost: entry.id === room.hostId,
+      connected: entry.connected,
+      cardCount: entry.hand?.length || 0,
+      eliminated: room.status !== "lobby" && (entry.hand?.length || 0) === 0
+    })),
+    game: game
+      ? {
+          phase: game.phase,
+          round: game.round,
+          cardsPerPlayer: game.cardsPerPlayer,
+          activePlayerId: game.activePlayerId,
+          category: game.category,
+          tableCards: game.phase === "choosing" ? [] : game.tableCards,
+          result: game.result,
+          potCount: game.pot.length,
+          winnerId: game.winnerId,
+          turnEndsAt: game.turnEndsAt,
+          revealEndsAt: game.revealEndsAt,
+          ownCard: player.hand?.[0] || null,
+          ownHand: player.hand || []
+        }
+      : null
+  };
+}
+
+function sendState() {
+  room.players.forEach((player) => {
+    if (player.connected && player.socketId) {
+      io.to(player.socketId).emit("state", publicStateFor(player));
+    }
+  });
+}
+
+function sendError(socket, message) {
+  socket.emit("gameError", { message });
+}
+
+function clearPhaseTimer() {
+  if (phaseTimer) {
+    clearTimeout(phaseTimer);
+    phaseTimer = null;
+  }
+}
+
+function armTurnTimer() {
+  clearPhaseTimer();
+  if (!room.game || room.game.phase !== "choosing") return;
+
+  room.game.turnEndsAt = Date.now() + TURN_DURATION_MS;
+  phaseTimer = setTimeout(() => {
+    const chooser = room.players.find((player) => player.id === room.game?.activePlayerId);
+    if (!chooser?.hand?.[0] || room.game?.phase !== "choosing") return;
+    revealCards(chooser.id, selectAutomaticCategory(chooser.hand[0]));
+  }, TURN_DURATION_MS);
+}
+
+function armRevealTimer() {
+  clearPhaseTimer();
+  if (!room.game || room.game.phase !== "revealed") return;
+
+  room.game.revealEndsAt = Date.now() + REVEAL_DURATION_MS;
+  phaseTimer = setTimeout(() => {
+    if (!room.game || !nextRound(room.game, room.players)) return;
+    armTurnTimer();
+    sendState();
+  }, REVEAL_DURATION_MS);
+}
+
+function revealCards(playerId, category) {
+  if (!room.game) return;
+  try {
+    chooseCategory(room.game, room.players, playerId, category);
+  } catch (error) {
+    const player = room.players.find((entry) => entry.id === playerId);
+    const socket = player?.socketId ? io.sockets.sockets.get(player.socketId) : null;
+    if (socket) sendError(socket, error.message);
+    return;
+  }
+
+  clearPhaseTimer();
+  if (room.game.phase === "finished") {
+    room.status = "finished";
+  } else {
+    armRevealTimer();
+  }
+  sendState();
+}
+
+function beginGame() {
+  clearPhaseTimer();
+  room.game = startGame(room.players, cards, { cardsPerPlayer: room.cardsPerPlayer });
+  room.status = "playing";
+  armTurnTimer();
+  sendState();
+}
+
+function transferHost() {
+  const currentHost = room.players.find((player) => player.id === room.hostId);
+  if (currentHost?.connected) return;
+  room.hostId = room.players.find((player) => player.connected)?.id || room.players[0]?.id || null;
+}
+
 io.on("connection", (socket) => {
-  console.log("Client verbunden:", socket.id);
+  socket.on("joinGame", ({ name, token } = {}, callback = () => {}) => {
+    const requestedName = cleanName(name);
+    let player = token ? room.players.find((entry) => entry.token === token) : null;
 
-  socket.on("joinLobby", (name) => {
-    const isHost = lobby.players.length === 0;
-    if (isHost) lobby.hostId = socket.id;
+    if (player) {
+      player.socketId = socket.id;
+      player.connected = true;
+      if (requestedName && room.status === "lobby") player.name = requestedName;
+      callback({ ok: true, token: player.token, reconnected: true });
+      transferHost();
+      sendState();
+      return;
+    }
 
-    lobby.players.push({ id: socket.id, name, isHost, hand: [] });
-    io.emit("lobbyUpdate", lobby.players);
+    if (room.status !== "lobby") {
+      callback({ ok: false, message: "Das Spiel läuft bereits. Warte auf die nächste Partie." });
+      return;
+    }
+    if (!requestedName) {
+      callback({ ok: false, message: "Bitte gib einen Spielernamen ein." });
+      return;
+    }
+    if (room.players.length >= MAX_PLAYERS) {
+      callback({ ok: false, message: "Die Lobby ist bereits voll." });
+      return;
+    }
+    if (room.players.some((entry) => entry.name.toLowerCase() === requestedName.toLowerCase())) {
+      callback({ ok: false, message: "Dieser Name ist bereits vergeben." });
+      return;
+    }
+
+    player = {
+      id: crypto.randomUUID(),
+      token: crypto.randomBytes(24).toString("hex"),
+      socketId: socket.id,
+      name: requestedName,
+      connected: true,
+      hand: []
+    };
+    room.players.push(player);
+    if (!room.hostId) room.hostId = player.id;
+    callback({ ok: true, token: player.token, reconnected: false });
+    sendState();
   });
 
   socket.on("startGame", () => {
-    if (socket.id !== lobby.hostId) return;
+    const player = playerBySocket(socket.id);
+    if (!player || player.id !== room.hostId) {
+      sendError(socket, "Nur der Host kann das Spiel starten.");
+      return;
+    }
+    if (room.status !== "lobby") {
+      sendError(socket, "Das Spiel wurde bereits gestartet.");
+      return;
+    }
+    if (room.players.length < 2) {
+      sendError(socket, "Zum Starten werden mindestens zwei Spieler benötigt.");
+      return;
+    }
+    beginGame();
+  });
 
-    lobby.gameStarted = true;
-    dealCards(lobby.players);
+  socket.on("chooseCategory", (category) => {
+    const player = playerBySocket(socket.id);
+    if (!player || room.status !== "playing") {
+      sendError(socket, "Du bist aktuell in keinem laufenden Spiel.");
+      return;
+    }
+    revealCards(player.id, category);
+  });
 
-    lobby.players.forEach(player => {
-      io.to(player.id).emit("gameStarted", player.hand);
-    });
+  socket.on("setCardsPerPlayer", (value) => {
+    const player = playerBySocket(socket.id);
+    const cardsPerPlayer = Number(value);
+    if (!player || player.id !== room.hostId) {
+      sendError(socket, "Nur der Host kann die Kartenzahl festlegen.");
+      return;
+    }
+    if (room.status !== "lobby") {
+      sendError(socket, "Die Kartenzahl kann nur in der Lobby geändert werden.");
+      return;
+    }
+    if (!CARD_COUNT_OPTIONS.includes(cardsPerPlayer)) {
+      sendError(socket, "Wähle 8, 16 oder 32 Karten pro Spieler.");
+      return;
+    }
+    room.cardsPerPlayer = cardsPerPlayer;
+    sendState();
+  });
+
+  socket.on("playAgain", () => {
+    const player = playerBySocket(socket.id);
+    if (!player || player.id !== room.hostId) {
+      sendError(socket, "Nur der Host kann die nächste Partie starten.");
+      return;
+    }
+    if (room.status !== "finished") {
+      sendError(socket, "Die aktuelle Partie ist noch nicht beendet.");
+      return;
+    }
+    const connectedPlayers = room.players.filter((entry) => entry.connected);
+    if (connectedPlayers.length < 2) {
+      sendError(socket, "Für eine neue Partie müssen mindestens zwei Spieler verbunden sein.");
+      return;
+    }
+    room.players = connectedPlayers;
+    beginGame();
+  });
+
+  socket.on("leaveLobby", () => {
+    if (room.status !== "lobby") return;
+    const player = playerBySocket(socket.id);
+    if (!player) return;
+    room.players = room.players.filter((entry) => entry.id !== player.id);
+    transferHost();
+    sendState();
+  });
+
+  socket.on("requestState", () => {
+    const player = playerBySocket(socket.id);
+    if (player) socket.emit("state", publicStateFor(player));
   });
 
   socket.on("disconnect", () => {
-    lobby.players = lobby.players.filter(p => p.id !== socket.id);
+    const player = playerBySocket(socket.id);
+    if (!player) return;
 
-    if (socket.id === lobby.hostId && lobby.players.length > 0) {
-      lobby.hostId = lobby.players[0].id;
-      lobby.players[0].isHost = true;
+    if (room.status === "lobby") {
+      room.players = room.players.filter((entry) => entry.id !== player.id);
+    } else {
+      player.connected = false;
+      player.socketId = null;
     }
-
-    io.emit("lobbyUpdate", lobby.players);
+    transferHost();
+    sendState();
   });
 });
 
-server.listen(3000, () => {
-  console.log("Server läuft auf Port 3000");
+httpServer.listen(PORT, () => {
+  const address = httpServer.address();
+  console.log(`Pitlane Trumpf läuft auf http://localhost:${address.port}`);
 });
+
+function shutdown() {
+  clearPhaseTimer();
+  return new Promise((resolve) => io.close(resolve));
+}
+
+module.exports = { app, httpServer, room, shutdown };
