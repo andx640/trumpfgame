@@ -18,9 +18,14 @@ jobs:
 
       - run: npm ci
       - run: npm test
+      - run: npm run test:php
       - run: npm run build
-        env:
-          VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL || secrets.VITE_SOCKET_URL }}
+
+      - name: Spiel-API und Kartenbilder zur Seite legen
+        run: |
+          mkdir -p dist/api
+          cp api/index.php api/engine.php api/.htaccess cards.json card-images.json dist/api/
+          cp -r cardimages dist/cardimages
 
       - name: Upload via lftp
         env:
@@ -30,4 +35,5 @@ jobs:
           FTP_DIR: ${{ secrets.FTP_DIR }}
         run: |
           sudo apt-get install -y lftp > /dev/null
-          lftp -u "$FTP_USER,$FTP_PASSWORD" "$FTP_HOST" -e "set ssl:verify-certificate no; set net:max-retries 3; set net:reconnect-interval-base 5; cd \"$FTP_DIR\"; lcd ./dist; mirror -R --verbose . .; bye"
+          # Erst alles ausser den grossen Kartenbildern, dann die Bilder nur bei geaenderter Dateigroesse.
+          lftp -u "$FTP_USER,$FTP_PASSWORD" "$FTP_HOST" -e "set ssl:verify-certificate no; set net:max-retries 3; set net:reconnect-interval-base 5; cd \"$FTP_DIR\"; lcd ./dist; mirror -R --verbose --exclude-glob cardimages/ . .; mirror -R --verbose --ignore-time cardimages cardimages; bye"
