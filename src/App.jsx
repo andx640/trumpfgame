@@ -160,7 +160,7 @@ function Welcome({ onJoin, joining, connected }) {
             onChange={(event) => setName(event.target.value.slice(0, 20))}
             placeholder="z. B. Niki"
             autoComplete="nickname"
-            autoFocus
+            autoFocus={typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches}
           />
           <button className="primary-button" disabled={!connected || joining || !name.trim()}>
             <span>{joining ? "Beitritt läuft …" : "Lobby beitreten"}</span>
