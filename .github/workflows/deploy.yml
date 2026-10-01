@@ -31,3 +31,4 @@ jobs:
           protocol: ftps
           local-dir: ./dist/
           server-dir: ${{ secrets.FTP_DIR }}
+          log-level: verbose
