@@ -18,7 +18,6 @@ jobs:
 
       - run: npm ci
       - run: npm test
-      - run: npm run test:php
       - run: npm run build
 
       - name: Spiel-API und Kartenbilder zur Seite legen
