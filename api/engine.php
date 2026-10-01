@@ -131,6 +131,23 @@ function trumpf_with_cards(array $players): array
     return $indexes;
 }
 
+/** Spieler mit Karten, der gerade online ist (nur diese nehmen an einer Runde teil). */
+function trumpf_can_play(array $player): bool
+{
+    return count($player['hand']) > 0 && empty($player['away']);
+}
+
+function trumpf_playable(array $players): array
+{
+    $indexes = [];
+    foreach ($players as $index => $player) {
+        if (trumpf_can_play($player)) {
+            $indexes[] = $index;
+        }
+    }
+    return $indexes;
+}
+
 /** Teilt die Karten aus und liefert den Anfangszustand der Partie. */
 function trumpf_start_game(array &$players, int $cardsPerPlayer): array
 {
@@ -167,6 +184,7 @@ function trumpf_start_game(array &$players, int $cardsPerPlayer): array
         'winnerId' => null,
         'turnEndsAt' => null,
         'revealEndsAt' => null,
+        'pausedUntil' => null,
     ];
 }
 
@@ -198,10 +216,15 @@ function trumpf_choose_category(array &$game, array &$players, string $playerId,
     }
 
     $deck = trumpf_load_deck();
-    $contenders = trumpf_with_cards($players);
-    if (count($contenders) < 2) {
-        trumpf_finish($game, $contenders ? $players[$contenders[0]]['id'] : null);
+    $withCards = trumpf_with_cards($players);
+    if (count($withCards) < 2) {
+        trumpf_finish($game, $withCards ? $players[$withCards[0]]['id'] : null);
         return $game['result'];
+    }
+    // Wer offline ist, setzt diese Runde aus; seine Karten bleiben ihm erhalten.
+    $contenders = trumpf_playable($players);
+    if (count($contenders) < 2) {
+        throw new TrumpfError('Es sind nicht genug Spieler online.');
     }
 
     $tableCards = [];
@@ -247,18 +270,18 @@ function trumpf_choose_category(array &$game, array &$players, string $playerId,
         $game['pot'] = array_merge($game['pot'], $tableCardIds);
         $currentIndex = trumpf_player_index($players, $game['activePlayerId']);
         $nextIndex = null;
-        if ($currentIndex !== null && count($players[$currentIndex]['hand']) > 0) {
+        if ($currentIndex !== null && trumpf_can_play($players[$currentIndex])) {
             $nextIndex = $currentIndex;
         } else {
             foreach ($players as $index => $player) {
-                if (in_array($player['id'], $winnerIds, true) && count($player['hand']) > 0) {
+                if (in_array($player['id'], $winnerIds, true) && trumpf_can_play($player)) {
                     $nextIndex = $index;
                     break;
                 }
             }
             if ($nextIndex === null) {
-                $withCards = trumpf_with_cards($players);
-                $nextIndex = $withCards ? $withCards[0] : null;
+                $playable = trumpf_playable($players);
+                $nextIndex = $playable ? $playable[0] : null;
             }
         }
         $game['activePlayerId'] = $nextIndex === null ? $winnerIds[0] : $players[$nextIndex]['id'];
@@ -292,17 +315,23 @@ function trumpf_next_round(array &$game, array &$players): bool
         return false;
     }
 
-    $activeIndex = trumpf_player_index($players, $game['activePlayerId']);
-    $active = $activeIndex !== null && count($players[$activeIndex]['hand']) > 0 ? $activeIndex : null;
-    $withCards = trumpf_with_cards($players);
-    if ($active === null && !$withCards) {
+    if (!trumpf_with_cards($players)) {
         trumpf_finish($game, null);
         return false;
+    }
+    $activeIndex = trumpf_player_index($players, $game['activePlayerId']);
+    $playable = trumpf_playable($players);
+    if ($activeIndex !== null && trumpf_can_play($players[$activeIndex])) {
+        $chooser = $activeIndex;
+    } elseif ($playable) {
+        $chooser = $playable[0];
+    } else {
+        return false; // alle offline: die Runde wartet
     }
 
     $game['phase'] = 'choosing';
     $game['round']++;
-    $game['activePlayerId'] = $players[$active !== null ? $active : $withCards[0]]['id'];
+    $game['activePlayerId'] = $players[$chooser]['id'];
     $game['category'] = null;
     $game['tableCards'] = [];
     $game['result'] = null;

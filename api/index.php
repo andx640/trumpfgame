@@ -12,6 +12,7 @@ const ONLINE_TIMEOUT_MS = 15000;   // danach gilt ein Spieler als offline
 const LOBBY_TIMEOUT_MS = 20000;    // in der Lobby fliegen inaktive Spieler raus
 const IDLE_RESET_MS = 300000;      // laufende Partie ohne jeden Spieler wird nach 5 Minuten zurückgesetzt
 const LAST_SEEN_REFRESH_MS = 3000;
+const PAUSE_END_MS = 60000;        // weniger als 2 Spieler online: nach 1 Minute endet die Partie
 
 function cleanName($value): string
 {
@@ -138,8 +139,9 @@ class TrumpfRoom
         }
         $this->transferHost();
         $this->checkIdle();
+        $paused = $this->updatePresence();
 
-        for ($step = 0; $step < 6 && $this->data['game'] !== null; $step++) {
+        for ($step = 0; !$paused && $step < 6 && $this->data['game'] !== null; $step++) {
             $game = $this->data['game'];
             if ($game['phase'] === 'choosing' && $game['turnEndsAt'] !== null && $this->now >= $game['turnEndsAt']) {
                 $chooserIndex = trumpf_player_index($this->data['players'], $game['activePlayerId']);
@@ -157,12 +159,106 @@ class TrumpfRoom
             if ($game['phase'] === 'revealed' && $game['revealEndsAt'] !== null && $this->now >= $game['revealEndsAt']) {
                 if (trumpf_next_round($this->data['game'], $this->data['players'])) {
                     $this->armTurn();
+                    $this->touch();
+                    continue;
                 }
-                $this->touch();
-                continue;
+                break;
             }
             break;
         }
+    }
+
+    /**
+     * Offline-Spieler setzen aus. Bleiben weniger als 2 Spieler online, pausiert die Partie und
+     * endet nach PAUSE_END_MS, falls niemand zurückkommt. Gibt true zurück, solange pausiert wird.
+     */
+    private function updatePresence(): bool
+    {
+        if ($this->data['status'] !== 'playing' || $this->data['game'] === null) {
+            return false;
+        }
+        foreach ($this->data['players'] as $index => $player) {
+            $away = !$player['connected'];
+            if (($player['away'] ?? false) !== $away) {
+                $this->data['players'][$index]['away'] = $away;
+                $this->touch();
+            }
+        }
+
+        $game = $this->data['game'];
+        if (count(trumpf_playable($this->data['players'])) >= 2) {
+            if ($game['pausedUntil'] !== null) {
+                // Mitspieler sind zurück: weiter geht es mit frischer Zeit.
+                $this->data['game']['pausedUntil'] = null;
+                if ($game['phase'] === 'revealed') {
+                    $this->data['game']['revealEndsAt'] = $this->now + REVEAL_DURATION_MS;
+                }
+                $this->armTurn();
+                $this->touch();
+            } elseif ($game['phase'] === 'choosing') {
+                $this->passTurnIfAway();
+            }
+            return false;
+        }
+
+        if ($game['phase'] === 'finished') {
+            return false;
+        }
+        if ($game['pausedUntil'] === null) {
+            $this->data['game']['pausedUntil'] = $this->now + PAUSE_END_MS;
+            $this->data['game']['turnEndsAt'] = null;
+            $this->data['game']['revealEndsAt'] = null;
+            $this->touch();
+            return true;
+        }
+        if ($this->now >= $game['pausedUntil']) {
+            $this->endAbandoned();
+            return false;
+        }
+        return true;
+    }
+
+    /** Ist der aktive Spieler offline, rückt der nächste Online-Spieler sofort nach. */
+    private function passTurnIfAway(): void
+    {
+        $players = $this->data['players'];
+        $current = trumpf_player_index($players, $this->data['game']['activePlayerId']);
+        if ($current !== null && trumpf_can_play($players[$current])) {
+            return;
+        }
+        $count = count($players);
+        for ($step = 1; $step <= $count; $step++) {
+            $candidate = (($current ?? -1) + $step) % $count;
+            if (trumpf_can_play($players[$candidate])) {
+                $this->data['game']['activePlayerId'] = $players[$candidate]['id'];
+                $this->armTurn();
+                $this->touch();
+                return;
+            }
+        }
+    }
+
+    /** Niemand ist zurückgekommen: die Partie endet, vorn liegt der, der noch da ist (sonst wer die meisten Karten hat). */
+    private function endAbandoned(): void
+    {
+        $winner = null;
+        $online = trumpf_playable($this->data['players']);
+        if (count($online) === 1) {
+            $winner = $this->data['players'][$online[0]]['id'];
+        } else {
+            $most = -1;
+            foreach ($this->data['players'] as $player) {
+                if (count($player['hand']) > $most) {
+                    $most = count($player['hand']);
+                    $winner = $player['id'];
+                }
+            }
+        }
+        trumpf_finish($this->data['game'], $winner);
+        $this->data['game']['result']['reason'] = 'abandoned';
+        $this->data['game']['pausedUntil'] = null;
+        $this->data['status'] = 'finished';
+        $this->touch();
     }
 
     private function checkIdle(): void
@@ -210,6 +306,9 @@ class TrumpfRoom
 
     public function beginGame(): void
     {
+        foreach ($this->data['players'] as $index => $player) {
+            $this->data['players'][$index]['away'] = false;
+        }
         $this->data['game'] = trumpf_start_game($this->data['players'], (int) $this->data['cardsPerPlayer']);
         $this->data['status'] = 'playing';
         $this->armTurn();
@@ -264,6 +363,7 @@ class TrumpfRoom
                 'winnerId' => $game['winnerId'],
                 'turnEndsAt' => $game['turnEndsAt'],
                 'revealEndsAt' => $game['revealEndsAt'],
+                'pausedUntil' => $game['pausedUntil'] ?? null,
                 'ownCard' => $hand[0] ?? null,
                 'ownHand' => $hand,
             ];

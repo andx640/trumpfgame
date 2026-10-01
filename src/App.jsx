@@ -270,13 +270,15 @@ function Game({ state }) {
   const activePlayer = players.find((player) => player.id === game.activePlayerId);
   const isChoosing = game.phase === "choosing";
   const isMyTurn = isChoosing && game.activePlayerId === selfId;
-  const timerTarget = isChoosing ? game.turnEndsAt : game.revealEndsAt;
+  const isPaused = Boolean(game.pausedUntil) && game.phase !== "finished";
+  const timerTarget = isPaused ? game.pausedUntil : isChoosing ? game.turnEndsAt : game.revealEndsAt;
   const seconds = timerTarget ? Math.max(0, Math.ceil((timerTarget - now) / 1000)) : 0;
 
   useEffect(() => setSelectedCardId(topCardId), [topCardId]);
 
   const statusText = useMemo(() => {
     if (game.phase === "finished") return "Partie beendet";
+    if (isPaused) return "Mitspieler fehlen – Spiel endet bald, wenn niemand zurückkommt";
     if (isChoosing) {
       return isMyTurn
         ? "Du bist dran – wähle eine Kategorie auf Karte 1"
@@ -285,14 +287,14 @@ function Game({ state }) {
     if (game.result?.type === "tie") return "Gleichstand – die Karten kommen in den Pot";
     const winner = players.find((player) => player.id === game.result?.winnerIds?.[0]);
     return `${winner?.name || "Der Gewinner"} gewinnt diesen Stich`;
-  }, [activePlayer?.name, game.phase, game.result, isChoosing, isMyTurn, players]);
+  }, [activePlayer?.name, game.phase, game.result, isChoosing, isMyTurn, isPaused, players]);
 
   return (
     <section className="game-table-screen">
       <div className="arena-topbar">
         <div className="arena-brand"><LogoMark /><span>PITLANE <b>TRUMPF</b></span></div>
         <div className={`turn-message ${isMyTurn ? "is-own-turn" : ""}`}>
-          {isChoosing && !isMyTurn && <SpinnerIcon />}
+          {((isChoosing && !isMyTurn) || isPaused) && <SpinnerIcon />}
           <strong>{statusText}</strong>
         </div>
         <div className="arena-round">
@@ -513,7 +515,11 @@ function FinishPanel({ state }) {
         <div className="trophy">🏁</div>
         <p className="eyebrow">PARTIE BEENDET</p>
         <h2>{winner?.name || "Unbekannt"} gewinnt!</h2>
-        <p className="muted">Alle Fahrzeugkarten sind im Siegerstapel gelandet.</p>
+        <p className="muted">
+          {state.game.result?.reason === "abandoned"
+            ? "Die Partie wurde beendet, weil zu viele Mitspieler gegangen sind."
+            : "Alle Fahrzeugkarten sind im Siegerstapel gelandet."}
+        </p>
         {isHost ? (
           <button className="primary-button" onClick={() => socket.emit("playAgain")}><span>Noch eine Partie</span><FlagIcon /></button>
         ) : (
