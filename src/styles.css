@@ -2244,9 +2244,11 @@ input:focus-visible {
   bottom: 0;
   left: 0;
   z-index: 20;
-  height: var(--dock-height);
+  height: calc(100dvh - 8px);
   overflow: hidden;
-  transition: height 380ms cubic-bezier(0.3, 0.8, 0.3, 1);
+  transform: translateY(calc(100% - var(--dock-height)));
+  transition: transform 650ms cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
   border-top: 1px solid rgba(255,255,255,.15);
   background: linear-gradient(180deg, rgba(12, 18, 28, 0.86), rgba(8, 12, 20, 0.92) 32%);
   box-shadow: 0 -25px 60px rgba(0,0,0,.35);
@@ -3604,8 +3606,13 @@ body:has(.app-shell.is-playing) {
 
 /* Wer dran ist: Der Kartenstapel fährt hoch, danach zurück; die gewählte Karte wird auf den Tisch gelegt */
 .game-table-screen.is-my-turn .stack-dock {
-  height: calc(100dvh - 8px);
+  transform: none;
   background: linear-gradient(180deg, #0c121c, #080c14 32%);
+}
+
+/* Vor der Auflösung fährt der Stapel ganz nach unten, nur die Leiste bleibt sichtbar */
+.game-table-screen.is-revealing .stack-dock {
+  transform: translateY(calc(100% - var(--heading-h, 53px)));
 }
 
 .game-table-screen.is-my-turn .deck-stage {
@@ -3654,11 +3661,12 @@ body:has(.app-shell.is-playing) {
 
 .flip-inner {
   transform-style: preserve-3d;
-  transition: transform 700ms cubic-bezier(0.3, 0.7, 0.3, 1);
+  transition: transform 1100ms cubic-bezier(0.45, 0.05, 0.25, 1);
 }
 
 .flip.is-face-up .flip-inner {
   transform: rotateY(180deg);
+  transition-delay: 700ms;
 }
 
 .flip.is-instant .flip-inner {
@@ -3683,7 +3691,7 @@ body:has(.app-shell.is-playing) {
 .arena-card-place.is-flying-in {
   position: relative;
   z-index: 6;
-  animation: lay-on-table 700ms 160ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
+  animation: lay-on-table 900ms 350ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
 }
 
 @keyframes lay-on-table {
@@ -3697,4 +3705,17 @@ body:has(.app-shell.is-playing) {
 
 .game-table-screen.is-my-turn .deck-card {
   top: max(26px, calc((100dvh - 8px - var(--heading-h, 53px) - 14px - var(--deck-w) * 1.551) / 2));
+}
+
+/* Beim Ergebnis nutzt der Tisch den frei gewordenen Platz */
+.game-table-screen.is-revealing {
+  --dock-height: calc(var(--heading-h, 53px) + 12px);
+}
+
+.arena-card-place {
+  transition: width 650ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.game-table-screen.is-revealing[data-seats="2"] .arena-seat {
+  --table-card-width: min(44vw, 330px, calc((var(--table-h) - 84px) / 1.551));
 }

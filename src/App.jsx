@@ -384,7 +384,7 @@ function Game({ state }) {
   useEffect(() => setSelectedCardId(topCardId), [topCardId, isMyTurn]);
 
   return (
-    <section className={`game-table-screen ${isMyTurn && !isPaused && hand.length ? "is-my-turn" : ""}`} data-seats={seatCount}>
+    <section className={`game-table-screen ${isMyTurn && !isPaused && hand.length ? "is-my-turn" : ""} ${game.phase === "revealed" ? "is-revealing" : ""}`} data-seats={seatCount}>
       <div className="arena-table">
         <div className="arena-inlay" />
         {isPaused && (
@@ -407,6 +407,7 @@ function Game({ state }) {
           choosing={isChoosing}
           self={self}
           turnTarget={isMyTurn && !isPaused ? game.turnEndsAt : null}
+          revealTarget={game.phase === "revealed" && !isPaused ? game.revealEndsAt : null}
         />
       )}
 
@@ -477,7 +478,7 @@ function FlipCard({ card, categories, highlight, instant, layers }) {
   );
 }
 
-const HandStack = memo(function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, choosing, self, turnTarget }) {
+const HandStack = memo(function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, choosing, self, turnTarget, revealTarget }) {
   const selectedIndex = Math.max(0, hand.findIndex((card) => card.c_id === selectedCardId));
   const step = (direction) => {
     if (hand.length > 1) onSelectCard(hand[(selectedIndex + direction + hand.length) % hand.length].c_id);
@@ -497,7 +498,9 @@ const HandStack = memo(function HandStack({ hand, categories, selectedCardId, on
         <div>
           {turnTarget
             ? <span className="turn-banner">DU BIST DRAN · <Seconds target={turnTarget} />s</span>
-            : <span>DEIN KARTENSTAPEL</span>}
+            : revealTarget
+              ? <span className="turn-banner">ERGEBNIS · weiter in <Seconds target={revealTarget} />s</span>
+              : <span>DEIN KARTENSTAPEL</span>}
           <strong>Karte {selectedIndex + 1} von {hand.length}</strong>
         </div>
         <div className="stack-help">
@@ -676,11 +679,13 @@ const CARD_DESIGN_WIDTH = 906;
 
 function ScaledCard({ children }) {
   const ref = useRef(null);
-  const [scale, setScale] = useState(1);
+  const innerRef = useRef(null);
+  // Die Skalierung wird direkt am Element gesetzt, damit Größenänderungen (z. B. beim Hochfahren des Stapels) kein React-Rendering auslösen.
   useLayoutEffect(() => {
     const element = ref.current;
-    if (!element) return undefined;
-    const update = () => setScale(element.offsetWidth / CARD_DESIGN_WIDTH);
+    const inner = innerRef.current;
+    if (!element || !inner) return undefined;
+    const update = () => { inner.style.transform = `scale(${element.offsetWidth / CARD_DESIGN_WIDTH})`; };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(element);
@@ -688,7 +693,7 @@ function ScaledCard({ children }) {
   }, []);
   return (
     <div className="scaled-card" ref={ref}>
-      <div className="scaled-card-inner" style={{ transform: `scale(${scale})` }}>{children}</div>
+      <div className="scaled-card-inner" ref={innerRef}>{children}</div>
     </div>
   );
 }
