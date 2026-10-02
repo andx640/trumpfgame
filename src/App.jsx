@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
+import { playFlip, playLose, playTurn, playWin, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
 const SESSION_NAME = "pitlane-trumpf-name";
@@ -76,6 +77,11 @@ function App() {
   const [joining, setJoining] = useState(false);
   const [notice, setNotice] = useState("");
   const [view, setView] = useState("home"); // home | new | join | collection
+
+  useEffect(() => {
+    window.addEventListener("pointerdown", unlockAudio, { once: true });
+    return () => window.removeEventListener("pointerdown", unlockAudio);
+  }, []);
 
   useEffect(() => {
     let noticeTimer;
@@ -244,6 +250,19 @@ function Collection({ onBack }) {
           </ScaledCard>
         ))}
       </div>
+      {data && (
+        <details className="photo-credits">
+          <summary>Bildnachweise</summary>
+          <ul>
+            {data.cards.filter((card) => card.imageMeta?.pageUrl).map((card) => (
+              <li key={card.c_id}>
+                {card.name}: <a href={card.imageMeta.pageUrl} target="_blank" rel="noreferrer">{card.imageMeta.author || "Wikimedia Commons"}</a>
+                {card.imageMeta.license ? `, ${card.imageMeta.license}` : ""}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </section>
   );
 }
@@ -414,8 +433,7 @@ function Lobby({ state, onLeave }) {
 function Game({ state }) {
   const { game, players, selfId, categories } = state;
   const hand = game.ownHand || [];
-  const topCardId = hand[0]?.c_id || null;
-  const [selectedCardId, setSelectedCardId] = useState(topCardId);
+  const [soundOn, setSoundOn] = useState(soundEnabled);
   const self = players.find((player) => player.id === selfId);
   const seatCount = Math.min(4, Math.max(2, players.filter((player) => !player.eliminated || game.tableCards.some((entry) => entry.playerId === player.id)).length));
   const isChoosing = game.phase === "choosing";
@@ -423,10 +441,38 @@ function Game({ state }) {
   const isPaused = Boolean(game.pausedUntil) && game.phase !== "finished";
   const timerTarget = isPaused ? game.pausedUntil : isChoosing ? game.turnEndsAt : game.revealEndsAt;
 
-  useEffect(() => setSelectedCardId(topCardId), [topCardId, isMyTurn]);
   useEffect(() => {
-    if (isMyTurn && !isPaused) vibrate([70, 50, 70]);
+    if (!isMyTurn || isPaused) return;
+    vibrate([70, 50, 70]);
+    playTurn();
   }, [isMyTurn, isPaused, game.turnEndsAt]);
+
+  // Geräusche beim Aufdecken: Umdrehen, danach Stich gewonnen oder verloren
+  useEffect(() => {
+    if (game.phase !== "revealed") return undefined;
+    const played = game.tableCards.some((entry) => entry.playerId === selfId);
+    const won = game.result?.type === "winner" && game.result.winnerIds?.[0] === selfId;
+    const flip = window.setTimeout(playFlip, 650);
+    const outcome = window.setTimeout(() => {
+      if (won) {
+        playWin();
+        vibrate([40, 30, 90]);
+      } else if (played && game.result?.type === "winner") {
+        playLose();
+      }
+    }, 1800);
+    return () => {
+      window.clearTimeout(flip);
+      window.clearTimeout(outcome);
+    };
+  }, [game.phase, game.round]);
+
+  const toggleSound = useCallback(() => {
+    setSoundOn((value) => {
+      setSoundEnabled(!value);
+      return !value;
+    });
+  }, []);
 
   const isRevealed = game.phase === "revealed";
   const activePlayer = players.find((player) => player.id === game.activePlayerId);
@@ -465,8 +511,6 @@ function Game({ state }) {
         <HandStack
           hand={hand}
           categories={categories}
-          selectedCardId={selectedCardId}
-          onSelectCard={setSelectedCardId}
           canChoose={isMyTurn}
           choosing={isChoosing}
           self={self}
@@ -476,6 +520,8 @@ function Game({ state }) {
           isReady={readyIds.includes(selfId)}
           readyCount={readyCount}
           readyTotal={readyNeeded.length}
+          soundOn={soundOn}
+          onToggleSound={toggleSound}
         />
       )}
 
@@ -589,11 +635,10 @@ function FlipCard({ card, categories, highlight, instant, layers }) {
   );
 }
 
-const HandStack = memo(function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, choosing, self, turnTarget, turnDuration, revealTarget, isReady, readyCount, readyTotal }) {
-  const selectedIndex = Math.max(0, hand.findIndex((card) => card.c_id === selectedCardId));
-  const step = (direction) => {
-    if (hand.length > 1) onSelectCard(hand[(selectedIndex + direction + hand.length) % hand.length].c_id);
-  };
+// Eigener Stapel: wie beim echten Quartett sieht man nur die oberste Karte, darunter liegen die übrigen verdeckt.
+const PILE_LAYERS = 6;
+
+const HandStack = memo(function HandStack({ hand, categories, canChoose, choosing, self, turnTarget, turnDuration, revealTarget, isReady, readyCount, readyTotal, soundOn, onToggleSound }) {
   if (!hand.length) {
     return (
       <div className="empty-stack">
@@ -602,6 +647,8 @@ const HandStack = memo(function HandStack({ hand, categories, selectedCardId, on
       </div>
     );
   }
+  const top = hand[0];
+  const layers = Math.min(hand.length - 1, PILE_LAYERS);
 
   return (
     <aside className="stack-dock">
@@ -612,186 +659,62 @@ const HandStack = memo(function HandStack({ hand, categories, selectedCardId, on
             : revealTarget
               ? <span className="turn-banner">ERGEBNIS · weiter in <Seconds target={revealTarget} />s</span>
               : <span>DEIN KARTENSTAPEL</span>}
-          <strong>Karte {selectedIndex + 1} von {hand.length}</strong>
+          <strong>{hand.length} {hand.length === 1 ? "Karte" : "Karten"}</strong>
         </div>
-        {revealTarget ? (
+        <div className="stack-actions">
           <button
             type="button"
-            className={`ready-button ${isReady ? "is-ready" : ""}`}
-            disabled={isReady}
-            onClick={() => socket.emit("readyForNext")}
+            className="sound-toggle"
+            onClick={onToggleSound}
+            aria-label={soundOn ? "Ton ausschalten" : "Ton einschalten"}
+            aria-pressed={soundOn}
           >
-            {isReady ? `Bereit ${readyCount}/${readyTotal}` : "Weiter"}
+            <SoundIcon on={soundOn} />
           </button>
-        ) : (
-          <div className="stack-help">
-            <button type="button" className="swipe-symbol" onClick={() => step(-1)} aria-label="Vorherige Karte">←</button>
-            Wischen
-            <button type="button" className="swipe-symbol" onClick={() => step(1)} aria-label="Nächste Karte">→</button>
-          </div>
-        )}
+          {revealTarget && (
+            <button
+              type="button"
+              className={`ready-button ${isReady ? "is-ready" : ""}`}
+              disabled={isReady}
+              onClick={() => socket.emit("readyForNext")}
+            >
+              {isReady ? `Bereit ${readyCount}/${readyTotal}` : "Weiter"}
+            </button>
+          )}
+        </div>
       </div>
       <div className="stack-carousel">
-        <DeckCarousel
-          count={hand.length}
-          selectedIndex={selectedIndex}
-          onSelectIndex={(index) => onSelectCard(hand[index].c_id)}
-          label={`Kartenstapel, Karte ${selectedIndex + 1} von ${hand.length}`}
-        >
-          {(index, isActive) => {
-            const card = hand[index];
-            const isTop = index === 0;
-            return (
-              <>
-                {isActive && (
-                  <div className="stack-card-label">
-                    {isTop ? <b>SPIELKARTE</b> : <span>#{index + 1}</span>}
-                  </div>
-                )}
-                <ScaledCard>
-                  <VehicleCard
-                    card={card}
-                    categories={categories}
-                    selectable={isActive && isTop && canChoose && choosing}
-                    highlight={null}
-                  />
-                  {isActive && !isTop && <div className="not-playable"><LockIcon /> Nur Karte 1 ist spielbar</div>}
-                  {isActive && isTop && choosing && !canChoose && self?.eliminated && (
-                    <div className="not-playable"><SpinnerIcon /> Du schaust zu</div>
-                  )}
-                </ScaledCard>
-              </>
-            );
-          }}
-        </DeckCarousel>
+        <div className="deck-stage" aria-label={`Dein Stapel, ${hand.length} Karten`}>
+          {Array.from({ length: layers }, (_, index) => (
+            <div className="deck-card deck-pile" style={{ "--pile": layers - index }} key={index}>
+              <div className="deck-blank" />
+            </div>
+          ))}
+          <div className="deck-card is-active" key={top.c_id}>
+            <div className="stack-card-label"><b>SPIELKARTE</b></div>
+            <ScaledCard>
+              <VehicleCard card={top} categories={categories} selectable={canChoose && choosing} highlight={null} />
+              {choosing && !canChoose && self?.eliminated && (
+                <div className="not-playable"><SpinnerIcon /> Du schaust zu</div>
+              )}
+            </ScaledCard>
+          </div>
+        </div>
       </div>
     </aside>
   );
 });
 
-// Kartenstapel als 3D-Karussell (Animation nach der Vorlage index.html): Die Karten liegen gefächert hintereinander,
-// beim Wischen folgen alle dem Finger und rücken nach vorn. Beim Ziehen werden die Stile direkt am DOM gesetzt,
-// React rendert erst wieder, wenn eine andere Karte vorn liegt.
-const DECK_NEAR = 5; // so viele Karten pro Seite gibt es im Fächer
-const DECK_FULL = 2; // nur so viele davon mit vollem Inhalt, die übrigen sind schlichte Kartenrahmen
-const DECK_DRAG_START = 6;
-
-function deckSpacing() {
-  return Math.min(window.innerWidth * 0.075, 28);
-}
-
-function circularOffset(index, current, count) {
-  let offset = index - current;
-  if (offset > count / 2) offset -= count;
-  if (offset < -count / 2) offset += count;
-  return offset;
-}
-
-function placeDeckCard(element, offset, dragging) {
-  const distance = Math.abs(offset);
-  element.style.transform = `translate3d(${offset * deckSpacing()}px, 0, ${-distance * 42}px) rotateY(${offset * -7}deg) scale(${Math.max(0.82, 1 - distance * 0.035)})`;
-  element.style.opacity = dragging
-    ? String(Math.max(0, 1 - Math.max(0, distance - 3) * 0.12))
-    : String(distance > 4 ? 0 : 1 - distance * 0.08);
-  element.style.zIndex = String(Math.round(100 - distance * 10));
-}
-
-function DeckCarousel({ count, selectedIndex, onSelectIndex, label, children }) {
-  const stageRef = useRef(null);
-  const cardRefs = useRef(new Map());
-  const drag = useRef({ active: false, started: false, pointerId: null, startX: 0, dx: 0 });
-  const justDragged = useRef(false);
-
-  const layout = (progress = 0, dragging = false) => {
-    cardRefs.current.forEach((element, index) => {
-      if (element) placeDeckCard(element, circularOffset(index, selectedIndex, count) + progress, dragging);
-    });
-  };
-
-  useLayoutEffect(() => {
-    layout();
-  }, [selectedIndex, count]);
-
-  useEffect(() => {
-    const onResize = () => layout();
-    window.addEventListener("resize", onResize);
-    const onKey = (event) => {
-      if (event.key === "ArrowRight") onSelectIndex((selectedIndex + 1) % count);
-      if (event.key === "ArrowLeft") onSelectIndex((selectedIndex - 1 + count) % count);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [count, selectedIndex, onSelectIndex]);
-
-  const onPointerDown = (event) => {
-    if (event.button !== undefined && event.button !== 0) return;
-    drag.current = { active: true, started: false, pointerId: event.pointerId, startX: event.clientX, dx: 0 };
-  };
-
-  const onPointerMove = (event) => {
-    const d = drag.current;
-    if (!d.active || event.pointerId !== d.pointerId) return;
-    const dx = event.clientX - d.startX;
-    if (!d.started) {
-      // Erst ab ein paar Pixeln gilt es als Ziehen, damit ein Antippen der Werte weiter funktioniert.
-      if (Math.abs(dx) < DECK_DRAG_START) return;
-      d.started = true;
-      stageRef.current?.classList.add("is-dragging");
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    }
-    d.dx = dx;
-    layout(dx / deckSpacing(), true);
-  };
-
-  const onPointerEnd = (event) => {
-    const d = drag.current;
-    if (!d.active || event.pointerId !== d.pointerId) return;
-    drag.current = { active: false, started: false, pointerId: null, startX: 0, dx: 0 };
-    if (!d.started) return;
-    justDragged.current = true;
-    window.setTimeout(() => { justDragged.current = false; }, 60);
-    stageRef.current?.classList.remove("is-dragging");
-    const threshold = Math.max(45, window.innerWidth * 0.15);
-    if (event.type !== "pointercancel" && count > 1 && d.dx < -threshold) onSelectIndex((selectedIndex + 1) % count);
-    else if (event.type !== "pointercancel" && count > 1 && d.dx > threshold) onSelectIndex((selectedIndex - 1 + count) % count);
-    else layout();
-  };
-
-  const cards = [];
-  for (let index = 0; index < count; index += 1) {
-    if (Math.abs(circularOffset(index, selectedIndex, count)) > DECK_NEAR) continue;
-    const isActive = index === selectedIndex;
-    cards.push(
-      <div
-        className={`deck-card ${isActive ? "is-active" : ""}`}
-        key={index}
-        ref={(element) => {
-          if (element) cardRefs.current.set(index, element);
-          else cardRefs.current.delete(index);
-        }}
-        onClick={isActive ? undefined : () => { if (!justDragged.current) onSelectIndex(index); }}
-      >
-        {Math.abs(circularOffset(index, selectedIndex, count)) <= DECK_FULL ? children(index, isActive) : <div className="deck-blank" />}
-      </div>
-    );
-  }
-
+function SoundIcon({ on }) {
   return (
-    <div
-      className="deck-stage"
-      role="group"
-      aria-label={label}
-      ref={stageRef}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerEnd}
-      onPointerCancel={onPointerEnd}
-    >
-      {cards}
-    </div>
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
+      {on ? (
+        <path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      ) : (
+        <path d="m16 9 5 6m0-6-5 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      )}
+    </svg>
   );
 }
 
@@ -852,18 +775,6 @@ const VehicleCard = memo(function VehicleCard({ card, categories, selectable = f
           <img src={card.image} alt={card.name} loading="lazy" decoding="async" onError={() => setImageFailed(true)} />
         ) : (
           <VehicleFallback card={card} />
-        )}
-        {card.imageMeta?.pageUrl && (
-          <a
-            className="photo-source"
-            href={card.imageMeta.pageUrl}
-            target="_blank"
-            rel="noreferrer"
-            title={`Foto: ${card.imageMeta.author} · ${card.imageMeta.license}`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            FOTO ↗
-          </a>
         )}
         {selectable && <div className="choose-hint">WERT ANKLICKEN</div>}
       </div>
@@ -989,24 +900,59 @@ function GtIcon({ type }) {
 }
 
 function FinishPanel({ state }) {
-  const winner = state.players.find((player) => player.id === state.game.winnerId);
-  const isHost = state.selfId === state.hostId;
+  const { players, game, selfId } = state;
+  const stats = state.stats || {};
+  const winner = players.find((player) => player.id === game.winnerId);
+  const statOf = (player) => stats[player.id] || { tricks: 0, best: 0, outRound: null };
+  // Rangliste: Sieger zuerst, dann wer am längsten durchgehalten hat (bzw. die meisten Karten hat)
+  const ranked = [...players].sort((a, b) => {
+    if (a.id === game.winnerId) return -1;
+    if (b.id === game.winnerId) return 1;
+    const outA = statOf(a).outRound ?? Infinity;
+    const outB = statOf(b).outRound ?? Infinity;
+    if (outA !== outB) return outB - outA;
+    return b.cardCount - a.cardCount;
+  });
+  const streakLeader = [...players].sort((a, b) => statOf(b).best - statOf(a).best)[0];
+  const votes = state.rematchIds || [];
+  const voters = players.filter((player) => player.connected && !player.isBot);
+  const voted = votes.includes(selfId);
+
   return (
     <div className="finish-overlay">
       <div className="finish-panel panel">
         <div className="trophy">🏁</div>
         <p className="eyebrow">PARTIE BEENDET</p>
         <h2>{winner?.name || "Unbekannt"} gewinnt!</h2>
-        <p className="muted">
-          {state.game.result?.reason === "abandoned"
-            ? "Die Partie wurde beendet, weil zu viele Mitspieler gegangen sind."
-            : "Alle Fahrzeugkarten sind im Siegerstapel gelandet."}
-        </p>
-        {isHost ? (
-          <button className="primary-button" onClick={() => socket.emit("playAgain")}><span>Noch eine Partie</span><FlagIcon /></button>
-        ) : (
-          <div className="host-wait"><SpinnerIcon /><span>Warten auf den Host …</span></div>
+        {game.result?.reason === "abandoned" && (
+          <p className="muted">Die Partie wurde beendet, weil zu viele Mitspieler gegangen sind.</p>
         )}
+        <ol className="finish-ranking">
+          {ranked.map((player, index) => {
+            const entry = statOf(player);
+            return (
+              <li key={player.id} className={player.id === selfId ? "is-self" : ""}>
+                <span className="finish-rank">{index + 1}.</span>
+                <b>{player.name}</b>
+                <small>
+                  {entry.tricks} {entry.tricks === 1 ? "Stich" : "Stiche"}
+                  {entry.outRound ? ` · raus in Runde ${entry.outRound}` : ` · ${player.cardCount} Karten`}
+                </small>
+              </li>
+            );
+          })}
+        </ol>
+        <div className="finish-facts">
+          {streakLeader && statOf(streakLeader).best > 1 && (
+            <div><span>Längste Siegesserie</span><b>{streakLeader.name} · {statOf(streakLeader).best} Stiche am Stück</b></div>
+          )}
+          {state.topCard && (
+            <div><span>Stärkste Karte</span><b>{state.topCard.name} · {state.topCard.wins} {state.topCard.wins === 1 ? "Stich" : "Stiche"}</b></div>
+          )}
+        </div>
+        <button className="primary-button" disabled={voted} onClick={() => socket.emit("playAgain")}>
+          <span>{voted ? `Warte auf die anderen (${votes.length}/${voters.length})` : "Revanche"}</span><FlagIcon />
+        </button>
       </div>
     </div>
   );
