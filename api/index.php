@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 require __DIR__ . '/engine.php';
 
-const TURN_DURATION_MS = 30000;
-const REVEAL_DURATION_MS = 6000;
+const TURN_DURATION_MS = 90000;
+const REVEAL_DURATION_MS = 10000;
 const MAX_PLAYERS = 4;
 const CARD_COUNT_OPTIONS = [8, 16, 32];
 const ONLINE_TIMEOUT_MS = 15000;   // danach gilt ein Spieler als offline
