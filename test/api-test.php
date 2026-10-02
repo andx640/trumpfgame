@@ -129,8 +129,13 @@ for ($i = 0; $i < 50; $i++) {
     usleep(100000);
 }
 
+$currentRoom = null;
 function call(int $port, array $body): array
 {
+    global $currentRoom;
+    if ($currentRoom !== null && !array_key_exists('room', $body)) {
+        $body['room'] = $currentRoom;
+    }
     $context = stream_context_create(['http' => [
         'method' => 'POST',
         'header' => "Content-Type: application/json\r\n",
@@ -147,7 +152,12 @@ try {
     check($all['ok'] && count($all['cards']) === 128 && isset($all['categories']['leistung']), 'Sammlung: alle 128 Karten abrufbar');
     check(isset($all['cards'][0]['name'], $all['cards'][0]['image'], $all['cards'][0]['leistung']), 'Sammlung: Karten haben Name, Bild und Werte');
 
-    $a = call($port, ['action' => 'join', 'name' => '  Ada  ']);
+    $a = call($port, ['action' => 'join', 'name' => '  Ada  ', 'create' => true]);
+    $currentRoom = $a['room'];
+    check(preg_match('/^[A-Z0-9]{5}$/', (string) $currentRoom) === 1 && $a['state']['sessionId'] === $currentRoom, 'neue Session bekommt eine ID');
+    check(call($port, ['action' => 'join', 'name' => 'Zed', 'room' => 'NOPE1'])['ok'] === false, 'unbekannte Session-ID wird abgelehnt');
+    $other = call($port, ['action' => 'join', 'name' => 'Ada', 'create' => true, 'room' => null]);
+    check($other['ok'] && $other['room'] !== $currentRoom && count($other['state']['players']) === 1, 'zweite Session ist unabhängig (gleicher Name erlaubt)');
     check($a['ok'] && !empty($a['token']), 'Ada tritt bei');
     check(call($port, ['action' => 'join', 'name' => 'ada'])['ok'] === false, 'doppelter Name wird abgelehnt');
     $b = call($port, ['action' => 'join', 'name' => 'Ben']);
@@ -183,7 +193,7 @@ try {
     check(count($played['state']['game']['tableCards']) === 2, 'zwei Karten auf dem Tisch');
 
     // Aufdeck-Zeit abgelaufen -> nächste Runde
-    $file = "$dataDir/room.json";
+    $file = "$dataDir/room_$currentRoom.json";
     $room = json_decode((string) file_get_contents($file), true);
     $room['game']['revealEndsAt'] = (int) (microtime(true) * 1000) - 1;
     file_put_contents($file, json_encode($room));
@@ -212,7 +222,7 @@ try {
     check($back['ok'] && $back['reconnected'] === true && $back['state']['game'] !== null, 'Ben verbindet sich wieder und behält seine Karten');
 
     // --- Mitspieler verlassen das Spiel -----------------------------------------------------
-    $setSeen = function (array $tokens, int $offsetMs) use ($file) {
+    $setSeen = function (array $tokens, int $offsetMs) use (&$file) {
         $room = json_decode((string) file_get_contents($file), true);
         foreach ($room['players'] as $i => $p) {
             if (in_array($p['token'], $tokens, true)) {
@@ -221,7 +231,7 @@ try {
         }
         file_put_contents($file, json_encode($room));
     };
-    $setField = function (callable $change) use ($file) {
+    $setField = function (callable $change) use (&$file) {
         $room = json_decode((string) file_get_contents($file), true);
         $change($room);
         file_put_contents($file, json_encode($room));
@@ -249,7 +259,9 @@ try {
 
     // Zu dritt: einer geht, die anderen spielen zu zweit weiter.
     unlink($file);
-    $ada = call($port, ['action' => 'join', 'name' => 'Ada']);
+    $ada = call($port, ['action' => 'join', 'name' => 'Ada', 'create' => true, 'room' => null]);
+    $currentRoom = $ada['room'];
+    $file = "$dataDir/room_$currentRoom.json";
     $ben = call($port, ['action' => 'join', 'name' => 'Ben']);
     $cleo = call($port, ['action' => 'join', 'name' => 'Cleo']);
     call($port, ['action' => 'setCards', 'token' => $ada['token'], 'count' => 8]);

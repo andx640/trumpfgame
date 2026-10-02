@@ -8,6 +8,7 @@ import { socket } from "./socket";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
 const SESSION_NAME = "pitlane-trumpf-name";
+const SESSION_ROOM = "pitlane-trumpf-room";
 
 function useClock() {
   const [now, setNow] = useState(Date.now());
@@ -36,10 +37,12 @@ function App() {
       setConnected(true);
       const token = sessionStorage.getItem(SESSION_TOKEN);
       const name = sessionStorage.getItem(SESSION_NAME);
-      if (token) {
-        socket.emit("joinGame", { token, name }, (response) => {
+      const room = sessionStorage.getItem(SESSION_ROOM);
+      if (token && room) {
+        socket.emit("joinGame", { token, name, room }, (response) => {
           if (!response?.ok) {
             sessionStorage.removeItem(SESSION_TOKEN);
+            sessionStorage.removeItem(SESSION_ROOM);
             setState(null);
             showError(response || { message: "Die Sitzung konnte nicht wiederhergestellt werden." });
           } else if (response.token) {
@@ -65,15 +68,16 @@ function App() {
     };
   }, []);
 
-  const join = (name) => {
+  const join = (name, room) => {
     setJoining(true);
-    socket.emit("joinGame", { name }, (response) => {
+    socket.emit("joinGame", { name, room, create: view === "new" }, (response) => {
       setJoining(false);
       if (!response?.ok) {
         setNotice(response?.message || "Beitritt fehlgeschlagen.");
         return;
       }
       sessionStorage.setItem(SESSION_TOKEN, response.token);
+      sessionStorage.setItem(SESSION_ROOM, response.room);
       sessionStorage.setItem(SESSION_NAME, name.trim());
     });
   };
@@ -81,6 +85,7 @@ function App() {
   const leave = () => {
     socket.emit("leaveLobby");
     sessionStorage.removeItem(SESSION_TOKEN);
+    sessionStorage.removeItem(SESSION_ROOM);
     sessionStorage.removeItem(SESSION_NAME);
     setState(null);
     setView("home");
@@ -218,7 +223,7 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected }) {
   const [sessionId, setSessionId] = useState("");
   const submit = (event) => {
     event.preventDefault();
-    if (name.trim()) onJoin(name.trim());
+    if (name.trim() && (mode !== "join" || sessionId)) onJoin(name.trim(), sessionId);
   };
 
   return (
@@ -249,13 +254,13 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected }) {
               <input
                 id="session-id"
                 value={sessionId}
-                onChange={(event) => setSessionId(event.target.value.trim().slice(0, 32))}
+                onChange={(event) => setSessionId(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
                 placeholder="Session-ID eingeben"
                 autoComplete="off"
               />
             </>
           )}
-          <button className="primary-button" disabled={!connected || joining || !name.trim()}>
+          <button className="primary-button" disabled={!connected || joining || !name.trim() || (mode === "join" && sessionId.length < 4)}>
             <span>{joining ? "Beitritt läuft …" : "Lobby beitreten"}</span>
             <ArrowIcon />
           </button>
@@ -283,6 +288,7 @@ function Lobby({ state, onLeave }) {
         </div>
         <button className="text-button" onClick={onLeave}>Lobby verlassen</button>
       </div>
+      <p className="muted session-code">Session-ID zum Beitreten: <b>{state.sessionId}</b></p>
 
       <div className="lobby-grid">
         <div className="players-panel panel">
