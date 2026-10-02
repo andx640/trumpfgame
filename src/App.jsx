@@ -183,7 +183,9 @@ function Collection({ onBack }) {
       {data && cards.length === 0 && <p className="collection-empty">Kein Auto gefunden.</p>}
       <div className="collection-grid">
         {cards.map((card) => (
-          <VehicleCard key={card.c_id} card={card} categories={data.categories} />
+          <ScaledCard key={card.c_id}>
+            <VehicleCard card={card} categories={data.categories} />
+          </ScaledCard>
         ))}
       </div>
     </section>
@@ -426,7 +428,6 @@ function TableCards({ state, seconds = 0, showTimer = false }) {
                     categories={categories}
                     selectable={game.phase === "choosing" && player.id === selfId && game.activePlayerId === selfId}
                     highlight={game.category}
-                    tableCard
                   />
                 ) : (
                   <CardBack layers={Math.min(player.cardCount, 3)} />
@@ -623,9 +624,9 @@ function FlyingStack({ count, selectedIndex, onSelectIndex, label, children }) {
   );
 }
 
-// Spielkarten werden immer in der Entwurfsgröße 200 × 300 gezeichnet und gleichmäßig auf die verfügbare
+// Spielkarten werden immer in der Entwurfsgröße 906 × 1405 gezeichnet und gleichmäßig auf die verfügbare
 // Breite skaliert. So bleibt der Text auf jeder Kartengröße gleich gut lesbar.
-const CARD_DESIGN_WIDTH = 200;
+const CARD_DESIGN_WIDTH = 906;
 
 function ScaledCard({ children }) {
   const ref = useRef(null);
@@ -646,21 +647,38 @@ function ScaledCard({ children }) {
   );
 }
 
-function VehicleCard({ card, categories, selectable = false, highlight = null, tableCard = false }) {
+// Die acht Felder der Karte, in der Reihenfolge von oben links nach unten rechts.
+// Nur Werte, die auch Spielkategorien sind, lassen sich anklicken; Drehzahl wird nur angezeigt.
+const CARD_FIELDS = [
+  { key: "leistung", label: "Leistung", unit: "PS", icon: "engine" },
+  { key: "hubraum", label: "Hubraum", unit: "L", icon: "piston" },
+  { key: "drehmoment", label: "Drehmoment", unit: "Nm", icon: "torque" },
+  { key: "drehzahl", label: "Drehzahl", unit: "U/min", icon: "rpm" },
+  { key: "beschleunigung", label: "Beschleunigung", unit: "s", icon: "timer" },
+  { key: "hoechstgeschwindigkeit", label: "Geschwindigkeit", unit: "km/h", icon: "speed" },
+  { key: "gewicht", label: "Gewicht", unit: "kg", icon: "weight" },
+  { key: "preis", label: "Preis", unit: "€", icon: "price" }
+];
+
+function cardValue(card, key) {
+  const value = Number(card[key]);
+  if (card[key] == null || !Number.isFinite(value) || value <= 0) return null;
+  if (key === "hubraum") return new Intl.NumberFormat("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value / 1000);
+  if (key === "preis" && value >= 1_000_000) return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(value / 1_000_000)} Mio`;
+  return formatValue(value, key);
+}
+
+function VehicleCard({ card, categories, selectable = false, highlight = null }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const nameSize = Math.min(58, 700 / (card.name.length * 0.43));
   return (
-    <article className={`portrait-card ${tableCard ? "is-table-card" : ""}`}>
-      <div className="portrait-card-head">
-        <span>GT <b>TRUMPF</b></span>
-        <small>#{card.c_id}</small>
-      </div>
-      <div className="portrait-photo">
+    <article className="portrait-card">
+      <div className="gt-photo">
         {card.image && !imageFailed ? (
           <img src={card.image} alt={card.name} loading="lazy" onError={() => setImageFailed(true)} />
         ) : (
           <VehicleFallback card={card} />
         )}
-        <div className="photo-gradient" />
         {card.imageMeta?.pageUrl && (
           <a
             className="photo-source"
@@ -673,33 +691,127 @@ function VehicleCard({ card, categories, selectable = false, highlight = null, t
             FOTO ↗
           </a>
         )}
-        <h2>{card.name}</h2>
+        {selectable && <div className="choose-hint">WERT ANKLICKEN</div>}
       </div>
-      <div className="portrait-stats">
-        {Object.entries(categories).map(([key, rule]) => {
-          const Tag = selectable ? "button" : "div";
+      <div className="gt-plate"><h2 style={{ fontSize: `${nameSize}px` }}>{card.name}</h2></div>
+      <div className="gt-stats">
+        {CARD_FIELDS.map((field) => {
+          const rule = categories[field.key];
+          const canPick = selectable && Boolean(rule);
+          const Tag = canPick ? "button" : "div";
+          const value = cardValue(card, field.key);
           return (
             <Tag
-              className={`portrait-stat ${selectable ? "is-selectable" : ""} ${highlight === key ? "is-highlighted" : ""}`}
-              type={selectable ? "button" : undefined}
-              onClick={selectable ? (event) => {
+              className={`portrait-stat ${canPick ? "is-selectable" : ""} ${highlight === field.key ? "is-highlighted" : ""}`}
+              type={canPick ? "button" : undefined}
+              onClick={canPick ? (event) => {
                 event.stopPropagation();
-                socket.emit("chooseCategory", key);
+                socket.emit("chooseCategory", field.key);
               } : undefined}
-              key={key}
-              title={selectable ? `${rule.label} wählen` : undefined}
+              key={field.key}
+              title={canPick ? `${rule.label} wählen` : undefined}
             >
-              <CategoryIcon type={rule.icon} />
-              <span>{shortCategoryLabel(key, rule.label)}</span>
-              <strong>{formatValue(card[key], key)} <small>{rule.unit}</small></strong>
-              <i>{rule.direction === "low" ? "↓" : "↑"}</i>
+              <span className="stat-label">{field.label}</span>
+              <GtIcon type={field.icon} />
+              <strong>{value ?? "–"}{value && <small>{field.unit}</small>}</strong>
+              {rule && <i>{rule.direction === "low" ? "▼" : "▲"}</i>}
             </Tag>
           );
         })}
       </div>
-      {selectable && <div className="choose-hint">WERT ANKLICKEN</div>}
     </article>
   );
+}
+
+// Bronze-Symbole der Kartenfelder, flach gezeichnet in vier Tönen.
+function GtIcon({ type }) {
+  const B = "#b9885c", L = "#e8c397", D = "#5b3a28", K = "#1d1511";
+  const icons = {
+    engine: (
+      <>
+        <rect x="14" y="26" width="38" height="24" rx="4" fill={B} stroke={D} strokeWidth="2" />
+        {[17, 25, 33, 41].map((x) => <rect key={x} x={x} y="14" width="7" height="14" rx="1.5" fill={L} stroke={D} strokeWidth="1.5" />)}
+        <rect x="8" y="32" width="8" height="12" rx="2" fill={D} />
+        <circle cx="52" cy="38" r="7" fill={K} stroke={L} strokeWidth="2" />
+        <path d="M20 40h24M20 45h24" stroke={D} strokeWidth="2" />
+      </>
+    ),
+    piston: (
+      <>
+        <rect x="21" y="8" width="22" height="22" rx="3" fill={B} stroke={D} strokeWidth="2" />
+        <path d="M21 14h22M21 19h22M21 24h22" stroke={D} strokeWidth="2" />
+        <path d="M28 30h8l3 20h-14z" fill={L} stroke={D} strokeWidth="2" />
+        <circle cx="32" cy="52" r="8" fill={B} stroke={D} strokeWidth="2.5" />
+        <circle cx="32" cy="52" r="3" fill={K} />
+      </>
+    ),
+    torque: (
+      <>
+        <path d="M32 18l11 6.3v12.7L32 43.3 21 37V24.300z" fill={B} stroke={D} strokeWidth="2.5" />
+        <circle cx="32" cy="30.500" r="5" fill={K} stroke={L} strokeWidth="1.500" />
+        <path d="M10 34a23 23 0 0 0 40 12" fill="none" stroke={L} strokeWidth="5" strokeLinecap="round" />
+        <path d="M54 36l-4.500 12-9-7z" fill={L} stroke={D} strokeWidth="1.500" strokeLinejoin="round" />
+      </>
+    ),
+    rpm: (
+      <>
+        <circle cx="32" cy="32" r="25" fill={K} stroke={B} strokeWidth="5" />
+        <circle cx="32" cy="32" r="19" fill="none" stroke={D} strokeWidth="1.500" />
+        {Array.from({ length: 9 }, (_, i) => {
+          const a = (Math.PI * (0.75 + i * 0.1875));
+          return <path key={i} d={`M${32 + Math.cos(a) * 15} ${32 + Math.sin(a) * 15}L${32 + Math.cos(a) * 19} ${32 + Math.sin(a) * 19}`} stroke={i > 6 ? "#d6533a" : L} strokeWidth="2" />;
+        })}
+        <path d="M32 34l11-12" stroke="#f08a2a" strokeWidth="3" strokeLinecap="round" />
+        <circle cx="32" cy="34" r="3.500" fill={B} />
+      </>
+    ),
+    timer: (
+      <>
+        <rect x="26" y="5" width="12" height="6" rx="2" fill={L} stroke={D} strokeWidth="1.500" />
+        <rect x="29.500" y="10" width="5" height="7" fill={B} />
+        <circle cx="32" cy="37" r="22" fill={K} stroke={B} strokeWidth="5" />
+        <circle cx="32" cy="37" r="16" fill="none" stroke={D} strokeWidth="1.500" />
+        <path d="M32 37V24" stroke={L} strokeWidth="3" strokeLinecap="round" />
+        <path d="M32 37l8 5" stroke="#f08a2a" strokeWidth="2.500" strokeLinecap="round" />
+        <circle cx="32" cy="37" r="3" fill={B} />
+        <path d="M50 14l4 4" stroke={B} strokeWidth="4" strokeLinecap="round" />
+      </>
+    ),
+    speed: (
+      <>
+        <path d="M6 46a26 26 0 0 1 52 0z" fill={K} stroke={B} strokeWidth="5" strokeLinejoin="round" />
+        {Array.from({ length: 7 }, (_, i) => {
+          const a = Math.PI * (1 + i / 6);
+          return <path key={i} d={`M${32 + Math.cos(a) * 17} ${46 + Math.sin(a) * 17}L${32 + Math.cos(a) * 21} ${46 + Math.sin(a) * 21}`} stroke={i > 4 ? "#d6533a" : L} strokeWidth="2" />;
+        })}
+        <path d="M32 44l11-12" stroke="#f08a2a" strokeWidth="3" strokeLinecap="round" />
+        <circle cx="32" cy="44" r="3" fill={B} />
+        <text x="32" y="55" textAnchor="middle" fontSize="8" fontWeight="800" fill={L} fontFamily="Barlow, sans-serif">KM/H</text>
+      </>
+    ),
+    weight: (
+      <>
+        <path d="M22 22a10 10 0 0 1 20 0" fill="none" stroke={B} strokeWidth="6" />
+        <path d="M18 24h28l7 30H11z" fill="#7d7a78" stroke="#2c2a29" strokeWidth="2.500" strokeLinejoin="round" />
+        <path d="M21 28h6l-4 22h-6z" fill="#a8a5a2" opacity=".55" />
+        <text x="32" y="46" textAnchor="middle" fontSize="15" fontWeight="800" fill="#2c2a29" fontFamily="Barlow, sans-serif">kg</text>
+      </>
+    ),
+    price: (
+      <>
+        <ellipse cx="32" cy="52" rx="24" ry="8" fill={D} />
+        <path d="M8 46v6c0 4.400 10.700 8 24 8s24-3.600 24-8v-6z" fill={B} stroke={D} strokeWidth="1.500" />
+        <ellipse cx="32" cy="46" rx="24" ry="8" fill={L} stroke={D} strokeWidth="1.500" />
+        <path d="M10 36v6c0 4.400 9.700 7 22 7s22-2.600 22-7v-6z" fill={B} stroke={D} strokeWidth="1.500" />
+        <ellipse cx="32" cy="36" rx="22" ry="7" fill={L} stroke={D} strokeWidth="1.500" />
+        <path d="M12 26v6c0 3.900 9 6 20 6s20-2.100 20-6v-6z" fill={B} stroke={D} strokeWidth="1.500" />
+        <ellipse cx="32" cy="26" rx="20" ry="6.500" fill={L} stroke={D} strokeWidth="1.500" />
+        <circle cx="32" cy="16" r="11" fill={L} stroke={D} strokeWidth="2" />
+        <text x="32" y="21.500" textAnchor="middle" fontSize="15" fontWeight="800" fill={D} fontFamily="Barlow, sans-serif">€</text>
+      </>
+    )
+  };
+  return <svg className="gt-icon" viewBox="0 0 64 64" aria-hidden="true">{icons[type]}</svg>;
 }
 
 function FinishPanel({ state }) {
@@ -746,25 +858,6 @@ function VehicleFallback({ card }) {
       <CarSilhouette />
     </div>
   );
-}
-
-function CategoryIcon({ type }) {
-  const paths = {
-    bolt: <path d="m13 2-8 11h6l-1 9 9-12h-6V2Z" />,
-    engine: <><path d="M7 7h9l3 3v7H7z" /><path d="M9 7V4h5v3M4 10H2v5h2m15-3h3v4h-3" /></>,
-    speed: <><path d="M4 17a8 8 0 1 1 16 0" /><path d="m12 14 5-5" /></>,
-    timer: <><circle cx="12" cy="13" r="8" /><path d="M9 2h6m-3 3v8l4 2" /></>,
-    torque: <><path d="M6 7a7 7 0 1 1-1 9" /><path d="M3 10V5h5" /></>,
-    weight: <><path d="M8 8a4 4 0 1 1 8 0" /><path d="M5 8h14l2 13H3L5 8Z" /></>,
-    price: <><circle cx="12" cy="12" r="9" /><path d="M15 8.5c-.8-.8-4-.9-4.8.2-1.5 2 5.5 1.7 4 4.6-.7 1.4-4 1.2-5 .2M12 6v12" /></>
-  };
-  return <svg className="category-icon" viewBox="0 0 24 24" aria-hidden="true">{paths[type] || paths.speed}</svg>;
-}
-
-function shortCategoryLabel(key, label) {
-  if (key === "hoechstgeschwindigkeit") return "V-Max";
-  if (key === "beschleunigung") return "0–100";
-  return label;
 }
 
 function formatValue(value, key) {
