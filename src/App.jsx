@@ -215,7 +215,7 @@ function Header({ connected, state }) {
 
 function Welcome({ mode = "new", onBack, onJoin, joining, connected }) {
   const [name, setName] = useState(sessionStorage.getItem(SESSION_NAME) || "");
-  const [sessionId, setSessionId] = useState(import.meta.env.DEV ? "123456" : ""); // Entwicklung: feste Test-Session (siehe api/index.php)
+  const [sessionId, setSessionId] = useState("");
   const submit = (event) => {
     event.preventDefault();
     if (name.trim() && (mode !== "join" || sessionId)) onJoin(name.trim(), sessionId);
