@@ -3609,8 +3609,32 @@ body:has(.app-shell.is-playing) {
 }
 
 .game-table-screen.is-my-turn .deck-stage {
-  transform: translateY(var(--deck-shift, 0px)) scale(var(--deck-scale, 1));
+  --deck-w: min(94vw, 460px, calc((100dvh - 8px - var(--heading-h, 53px) - 60px) / 1.551));
+  animation-name: deck-in-up;
 }
+
+.deck-stage {
+  animation: deck-in 320ms ease both;
+}
+
+@keyframes deck-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes deck-in-up {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.deck-blank {
+  width: 100%;
+  height: 100%;
+  border-radius: 40px;
+  background: linear-gradient(160deg, #6f5d54, #2b1f20 45%, #4b3a36);
+  box-shadow: 0 0 0 3px #0d090a;
+}
+
 
 .stack-heading .turn-banner {
   color: var(--acid);
@@ -3669,4 +3693,8 @@ body:has(.app-shell.is-playing) {
   to {
     transform: none;
   }
+}
+
+.game-table-screen.is-my-turn .deck-card {
+  top: max(26px, calc((100dvh - 8px - var(--heading-h, 53px) - 14px - var(--deck-w) * 1.551) / 2));
 }
