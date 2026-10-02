@@ -1,6 +1,7 @@
 // Ersatz für Socket.IO: gleiche Schnittstelle (on/off/emit/connected), aber per HTTP-Polling gegen api/index.php.
 const API_URL = import.meta.env.VITE_API_URL || "api/index.php";
 const POLL_MS = 1_000;
+const POLL_PLAYING_MS = 450; // während einer Partie öfter fragen, damit alle gleichzeitig aufdecken
 const POLL_HIDDEN_MS = 4_000;
 const RETRY_MS = 2_000;
 
@@ -24,7 +25,8 @@ class PollingSocket {
     this.room = null;
     this.version = 0;
     this.timer = null;
-    this.clockOffset = 0; // Serverzeit minus Gerätezeit, damit alle Timer gleich laufen
+    this.clockOffset = 0;
+    this.playing = false; // Serverzeit minus Gerätezeit, damit alle Timer gleich laufen
     this.poll();
   }
 
@@ -72,11 +74,13 @@ class PollingSocket {
       this.token = null;
       this.room = null;
       this.version = 0;
+      this.playing = false;
       this.dispatch("state", null);
       return;
     }
     if (result.unchanged || result.version < this.version) return; // veraltete Antwort einer früheren Abfrage
     if (result.state !== undefined) {
+      this.playing = result.state?.status === "playing";
       this.version = result.version;
       this.dispatch("state", result.state);
     }
@@ -120,7 +124,7 @@ class PollingSocket {
   }
 
   async poll() {
-    let delay = document.hidden ? POLL_HIDDEN_MS : POLL_MS;
+    let delay = document.hidden ? POLL_HIDDEN_MS : this.playing ? POLL_PLAYING_MS : POLL_MS;
     try {
       const result = this.token
         ? await this.request("state", { since: this.version })

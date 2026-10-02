@@ -69,7 +69,7 @@
     "beschleunigung": 1.9,
     "gewicht": 2150,
     "drehmoment": 2360,
-    "drehzahl": 16500
+    "drehzahl": 0
   },
   {
     "c_id": "0007",
@@ -81,7 +81,7 @@
     "beschleunigung": 2.1,
     "gewicht": 2160,
     "drehmoment": 1420,
-    "drehzahl": 20000
+    "drehzahl": 0
   },
   {
     "c_id": "0008",
@@ -381,7 +381,7 @@
     "beschleunigung": 2.9,
     "gewicht": 1680,
     "drehmoment": 1700,
-    "drehzahl": 15000
+    "drehzahl": 0
   },
   {
     "c_id": "0033",
@@ -465,7 +465,7 @@
     "beschleunigung": 2.8,
     "gewicht": 2295,
     "drehmoment": 1050,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0040",
@@ -477,7 +477,7 @@
     "beschleunigung": 1.9,
     "gewicht": 2000,
     "drehmoment": 1200,
-    "drehzahl": 18000
+    "drehzahl": 0
   },
   {
     "c_id": "0041",
@@ -585,7 +585,7 @@
     "beschleunigung": 3.5,
     "gewicht": 2200,
     "drehmoment": 740,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0050",
@@ -597,7 +597,7 @@
     "beschleunigung": 4.4,
     "gewicht": 2100,
     "drehmoment": 680,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0051",
@@ -609,7 +609,7 @@
     "beschleunigung": 3.9,
     "gewicht": 2215,
     "drehmoment": 795,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0052",
@@ -621,7 +621,7 @@
     "beschleunigung": 2.5,
     "gewicht": 2360,
     "drehmoment": 1390,
-    "drehzahl": 20000
+    "drehzahl": 0
   },
   {
     "c_id": "0053",
@@ -633,7 +633,7 @@
     "beschleunigung": 2.2,
     "gewicht": 1100,
     "drehmoment": 650,
-    "drehzahl": 18000
+    "drehzahl": 0
   },
   {
     "c_id": "0054",
@@ -933,7 +933,7 @@
     "beschleunigung": 3.4,
     "gewicht": 2200,
     "drehmoment": 770,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0079",
@@ -981,7 +981,7 @@
     "beschleunigung": 1.9,
     "gewicht": 2430,
     "drehmoment": 1939,
-    "drehzahl": 20000
+    "drehzahl": 0
   },
   {
     "c_id": "0083",
@@ -993,7 +993,7 @@
     "beschleunigung": 3.1,
     "gewicht": 1851,
     "drehmoment": 660,
-    "drehzahl": 18000
+    "drehzahl": 0
   },
   {
     "c_id": "0084",
@@ -1005,7 +1005,7 @@
     "beschleunigung": 3.3,
     "gewicht": 2405,
     "drehmoment": 1130,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0085",
@@ -1017,7 +1017,7 @@
     "beschleunigung": 2.5,
     "gewicht": 2395,
     "drehmoment": 1027,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0086",
@@ -1029,7 +1029,7 @@
     "beschleunigung": 3.8,
     "gewicht": 2380,
     "drehmoment": 820,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0087",
@@ -1041,7 +1041,7 @@
     "beschleunigung": 3.3,
     "gewicht": 2525,
     "drehmoment": 1000,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0088",
@@ -1053,7 +1053,7 @@
     "beschleunigung": 2.5,
     "gewicht": 1850,
     "drehmoment": 1600,
-    "drehzahl": 12500
+    "drehzahl": 0
   },
   {
     "c_id": "0089",
@@ -1065,7 +1065,7 @@
     "beschleunigung": 1.9,
     "gewicht": 2200,
     "drehmoment": 2340,
-    "drehzahl": 14000
+    "drehzahl": 0
   },
   {
     "c_id": "0090",
@@ -1077,7 +1077,7 @@
     "beschleunigung": 1.7,
     "gewicht": 2000,
     "drehmoment": 2000,
-    "drehzahl": 15000
+    "drehzahl": 0
   },
   {
     "c_id": "0091",
@@ -1089,7 +1089,7 @@
     "beschleunigung": 2.8,
     "gewicht": 2565,
     "drehmoment": 985,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0092",
@@ -1101,7 +1101,7 @@
     "beschleunigung": 2.7,
     "gewicht": 1735,
     "drehmoment": 1480,
-    "drehzahl": 18000
+    "drehzahl": 0
   },
   {
     "c_id": "0093",
@@ -1113,7 +1113,7 @@
     "beschleunigung": 3.2,
     "gewicht": 1985,
     "drehmoment": 725,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0094",
@@ -1197,7 +1197,7 @@
     "beschleunigung": 4.5,
     "gewicht": 2890,
     "drehmoment": 900,
-    "drehzahl": 16000
+    "drehzahl": 0
   },
   {
     "c_id": "0101",

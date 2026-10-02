@@ -381,6 +381,7 @@ class TrumpfRoom
     public function revealCards(string $playerId, string $category): void
     {
         trumpf_choose_category($this->data['game'], $this->data['players'], $playerId, $category);
+        $this->recordStats();
         if ($this->data['game']['phase'] === 'finished') {
             $this->data['status'] = 'finished';
         } else {
@@ -388,6 +389,77 @@ class TrumpfRoom
             $this->data['game']['readyIds'] = [];
         }
         $this->touch();
+    }
+
+    /** Statistik für den Endbildschirm: Stiche, Siegesserien, ausgeschieden in Runde, Stiche pro Karte. */
+    private function recordStats(): void
+    {
+        $game = $this->data['game'];
+        $stats = $this->data['stats'] ?? ['players' => [], 'cards' => []];
+        $blank = ['tricks' => 0, 'streak' => 0, 'best' => 0, 'outRound' => null];
+        $category = $game['category'] ?? null;
+        $tableCards = $game['tableCards'] ?? [];
+        if ($category !== null && isset(TRUMPF_CATEGORIES[$category]) && count($tableCards) > 1) {
+            $deck = trumpf_load_deck();
+            $values = [];
+            foreach ($tableCards as $entry) {
+                $values[] = (float) ($deck[$entry['cardId']][$category] ?? 0);
+            }
+            $best = TRUMPF_CATEGORIES[$category]['direction'] === 'low' ? min($values) : max($values);
+            $winners = array_keys(array_filter($values, static function ($value) use ($best) {
+                return $value === $best;
+            }));
+            $winnerPos = count($winners) === 1 ? $winners[0] : null;
+            foreach ($tableCards as $position => $entry) {
+                $entryStats = $stats['players'][$entry['playerId']] ?? $blank;
+                if ($position === $winnerPos) {
+                    $entryStats['tricks']++;
+                    $entryStats['streak']++;
+                    $entryStats['best'] = max($entryStats['best'], $entryStats['streak']);
+                    $stats['cards'][$entry['cardId']] = ($stats['cards'][$entry['cardId']] ?? 0) + 1;
+                } elseif ($winnerPos !== null) {
+                    $entryStats['streak'] = 0;
+                }
+                $stats['players'][$entry['playerId']] = $entryStats;
+            }
+        }
+        foreach ($this->data['players'] as $player) {
+            $entryStats = $stats['players'][$player['id']] ?? $blank;
+            if (count($player['hand']) === 0 && $entryStats['outRound'] === null) {
+                $entryStats['outRound'] = (int) $game['round'];
+            }
+            $stats['players'][$player['id']] = $entryStats;
+        }
+        $this->data['stats'] = $stats;
+    }
+
+    /** Revanche: Jeder stimmt ab, los geht es, wenn alle verbundenen Menschen zugestimmt haben. */
+    public function voteRematch(string $playerId): ?string
+    {
+        if ($this->data['status'] !== 'finished') {
+            return 'Die aktuelle Partie ist noch nicht beendet.';
+        }
+        $votes = $this->data['rematch'] ?? [];
+        if (!in_array($playerId, $votes, true)) {
+            $votes[] = $playerId;
+        }
+        $this->data['rematch'] = $votes;
+        $connected = array_values(array_filter($this->data['players'], static function ($entry) {
+            return $entry['connected'];
+        }));
+        $allVoted = true;
+        foreach ($connected as $player) {
+            $allVoted = $allVoted && (!empty($player['bot']) || in_array($player['id'], $votes, true));
+        }
+        $this->touch();
+        if ($allVoted) {
+            if (count($connected) < 2) {
+                return 'Für eine Revanche müssen mindestens zwei Spieler verbunden sein.';
+            }
+            $this->data['players'] = $connected;
+            $this->beginGame();
+        }
+        return null;
     }
 
     /** Spieler hat beim Ergebnis auf „Weiter“ getippt. Sind alle Menschen bereit, wird das Ergebnis verkürzt. */
@@ -421,9 +493,24 @@ class TrumpfRoom
             $this->data['players'][$index]['away'] = false;
         }
         $this->data['game'] = trumpf_start_game($this->data['players'], (int) $this->data['cardsPerPlayer']);
+        $this->data['stats'] = ['players' => [], 'cards' => []];
+        $this->data['rematch'] = [];
         $this->data['status'] = 'playing';
         $this->armTurn();
         $this->touch();
+    }
+
+    /** Karte mit den meisten Stichen der Partie */
+    private function topCard(): ?array
+    {
+        $cards = $this->data['stats']['cards'] ?? [];
+        if (!$cards) {
+            return null;
+        }
+        arsort($cards);
+        $cardId = (string) array_key_first($cards);
+        $card = trumpf_load_deck()[$cardId] ?? null;
+        return $card === null ? null : ['name' => $card['name'], 'wins' => (int) $cards[$cardId]];
     }
 
     private function expand(string $cardId): array
@@ -494,6 +581,9 @@ class TrumpfRoom
             'categories' => TRUMPF_CATEGORIES,
             'players' => $players,
             'game' => $gameState,
+            'stats' => $data['stats']['players'] ?? new stdClass(),
+            'topCard' => $this->topCard(),
+            'rematchIds' => $data['rematch'] ?? [],
         ];
     }
 }
@@ -711,19 +801,14 @@ try {
             break;
 
         case 'again':
-            $connected = array_values(array_filter($room->data['players'], static function ($entry) {
-                return $entry['connected'];
-            }));
-            if (!$isHost()) {
-                $reply = $fail('Nur der Host kann die nächste Partie starten.');
-            } elseif ($room->data['status'] !== 'finished') {
-                $reply = $fail('Die aktuelle Partie ist noch nicht beendet.');
-            } elseif (count($connected) < 2) {
-                $reply = $fail('Für eine neue Partie müssen mindestens zwei Spieler verbunden sein.');
+            if ($selfIndex === null) {
+                $reply = $fail('Du bist in keiner Partie.');
             } else {
-                $room->data['players'] = $connected;
+                $problem = $room->voteRematch($room->data['players'][$selfIndex]['id']);
                 $selfIndex = $room->playerIndexByToken($token);
-                $room->beginGame();
+                if ($problem !== null) {
+                    $reply = $fail($problem);
+                }
             }
             break;
 

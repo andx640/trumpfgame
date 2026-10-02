@@ -18,6 +18,7 @@ const TRUMPF_CATEGORIES = [
     'beschleunigung' => ['label' => '0–100 km/h', 'unit' => 's', 'direction' => 'low', 'icon' => 'timer'],
     'drehmoment' => ['label' => 'Drehmoment', 'unit' => 'Nm', 'direction' => 'high', 'icon' => 'torque'],
     'gewicht' => ['label' => 'Gewicht', 'unit' => 'kg', 'direction' => 'low', 'icon' => 'weight'],
+    'drehzahl' => ['label' => 'Drehzahl', 'unit' => 'U/min', 'direction' => 'high', 'icon' => 'rpm'],
     'preis' => ['label' => 'Preis', 'unit' => '€', 'direction' => 'high', 'icon' => 'price'],
 ];
 
@@ -345,7 +346,7 @@ function trumpf_automatic_category(string $cardId): string
     $card = trumpf_load_deck()[$cardId] ?? [];
     $valid = [];
     foreach (array_keys(TRUMPF_CATEGORIES) as $category) {
-        if (isset($card[$category]) && is_numeric($card[$category])) {
+        if (isset($card[$category]) && is_numeric($card[$category]) && $card[$category] > 0) {
             $valid[] = $category;
         }
     }
