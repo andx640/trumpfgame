@@ -139,46 +139,65 @@ async function main() {
     group.forEach((card, index) => pageByCard.set(card.c_id, pageByTitle.get(titles[index])));
   }
 
-  const imageTitles = [...new Set(
-    cards
-      .map((card) => FILE_OVERRIDES[card.c_id] || pageByCard.get(card.c_id)?.pageimage)
-      .filter(Boolean)
-      .map((title) => `File:${title}`)
-  )];
-  const imageInfoByTitle = new Map();
-  for (const group of chunks(imageTitles, 40)) {
+  // Karten mit lokalem Foto bleiben unverändert, damit Bild und Urheberangabe zusammenpassen.
+  const result = {};
+  const usedFiles = new Set();
+  for (const card of cards) {
+    const existing = existingCatalog[card.c_id];
+    if (existing?.localImage) {
+      result[card.c_id] = existing;
+      usedFiles.add(normalizedTitle(decodeURIComponent(String(existing.pageUrl || "").split("/wiki/")[1] || "")));
+    }
+  }
+
+  async function imageInfoFor(fileTitle) {
     const data = await query("commons.wikimedia.org", {
       action: "query",
       prop: "imageinfo",
-      titles: group.join("|"),
+      titles: `File:${fileTitle}`,
       iiprop: "url|extmetadata",
       iiurlwidth: "1000"
     });
-    Object.values(data.query?.pages || {}).forEach((page) => {
-      imageInfoByTitle.set(normalizedTitle(page.title), page.imageinfo?.[0] || null);
-    });
+    return Object.values(data.query?.pages || {})[0]?.imageinfo?.[0] || null;
   }
 
-  const result = {};
+  // Varianten teilen sich oft einen Wikipedia-Artikel; dann wird auf Commons nach einem eigenen Foto gesucht.
+  async function searchFile(card) {
+    const data = await query("commons.wikimedia.org", {
+      action: "query",
+      list: "search",
+      srsearch: `${card.name} filetype:bitmap`,
+      srnamespace: "6",
+      srlimit: "20"
+    });
+    const hit = (data.query?.search || []).find(
+      (entry) => /\.(jpe?g|png)$/i.test(entry.title) && !usedFiles.has(normalizedTitle(entry.title))
+    );
+    return hit ? hit.title.replace(/^File:/i, "") : null;
+  }
+
   for (const card of cards) {
+    if (result[card.c_id]) {
+      process.stdout.write(`• ${card.c_id} ${card.name} bereits lokal\n`);
+      continue;
+    }
     const page = pageByCard.get(card.c_id);
-    const fileTitle = FILE_OVERRIDES[card.c_id] || page?.pageimage;
-    const imageInfo = imageInfoByTitle.get(normalizedTitle(fileTitle));
+    let fileTitle = FILE_OVERRIDES[card.c_id] || page?.pageimage;
+    if (!fileTitle || usedFiles.has(normalizedTitle(fileTitle))) fileTitle = await searchFile(card);
+    const imageInfo = fileTitle ? await imageInfoFor(fileTitle) : null;
     const metadata = imageInfo?.extmetadata || {};
-    const image = imageInfo?.thumburl || page?.thumbnail?.source || null;
+    const image = imageInfo?.thumburl || null;
     if (image) {
+      usedFiles.add(normalizedTitle(fileTitle));
       result[card.c_id] = {
         image,
-        ...(existingCatalog[card.c_id]?.localImage
-          ? { localImage: existingCatalog[card.c_id].localImage }
-          : {}),
-        pageUrl: imageInfo?.descriptionurl || page.fullurl,
+        pageUrl: imageInfo.descriptionurl,
         source: "Wikimedia Commons",
         author: cleanHtml(metadata.Artist?.value) || "siehe Bildquelle",
         license: cleanHtml(metadata.LicenseShortName?.value) || "siehe Bildquelle",
-        licenseUrl: metadata.LicenseUrl?.value || imageInfo?.descriptionurl || page.fullurl
+        licenseUrl: metadata.LicenseUrl?.value || imageInfo.descriptionurl
       };
-      process.stdout.write(`✓ ${card.c_id} ${card.name}\n`);
+      process.stdout.write(`✓ ${card.c_id} ${card.name} (${fileTitle})\n`);
     } else {
       process.stdout.write(`– ${card.c_id} ${card.name}: kein Bild gefunden\n`);
     }
