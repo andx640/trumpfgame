@@ -1,5 +1,4 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { socket } from "./socket";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
@@ -479,7 +478,7 @@ function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, 
         </div>
       </div>
       <div className="stack-carousel">
-        <FlyingStack
+        <DeckCarousel
           count={hand.length}
           selectedIndex={selectedIndex}
           onSelectIndex={(index) => onSelectCard(hand[index].c_id)}
@@ -510,116 +509,90 @@ function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, 
               </>
             );
           }}
-        </FlyingStack>
+        </DeckCarousel>
       </div>
     </aside>
   );
 }
 
-// Kartenstapel zum Wischen: Die oberste Karte folgt dem Finger/der Maus, ab SWIPE_THRESHOLD px wird
-// die nächste (oder vorherige) Karte nach vorn geholt. Die Karten laufen im Kreis.
-const SWIPE_THRESHOLD = 90;
-const DRAG_START = 6;
-const VISIBLE_CARDS = 4;
+// Kartenstapel als Karussell: native Scroll-Snap-Leiste, die Karten liegen leicht übereinander.
+// Die Wischbewegung übernimmt der Browser, React rendert nur beim Wechsel der Karte neu.
+const NEAR_CARDS = 3;
 
-function FlyingStack({ count, selectedIndex, onSelectIndex, label, children }) {
-  const [dragging, setDragging] = useState(false);
-  const drag = useRef({ active: false, started: false, pointerId: null, startX: 0, dx: 0 });
+function DeckCarousel({ count, selectedIndex, onSelectIndex, label, children }) {
+  const boxRef = useRef(null);
+  const ignoreUntil = useRef(0);
+  const frame = useRef(0);
+  const mounted = useRef(false);
 
-  const go = useCallback(
-    (direction) => {
-      if (count > 1) onSelectIndex((selectedIndex + direction + count) % count);
-    },
-    [count, selectedIndex, onSelectIndex]
-  );
+  const nearestIndex = () => {
+    const box = boxRef.current;
+    if (!box) return 0;
+    const middle = box.scrollLeft + box.clientWidth / 2;
+    let best = 0;
+    let bestDistance = Infinity;
+    for (let index = 0; index < box.children.length; index += 1) {
+      const item = box.children[index];
+      const distance = Math.abs(item.offsetLeft + item.offsetWidth / 2 - middle);
+      if (distance < bestDistance) {
+        best = index;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  };
+
+  const scrollToIndex = (index, smooth) => {
+    const box = boxRef.current;
+    const item = box?.children[index];
+    if (!item) return;
+    ignoreUntil.current = performance.now() + (smooth ? 600 : 100);
+    box.scrollTo({ left: item.offsetLeft + item.offsetWidth / 2 - box.clientWidth / 2, behavior: smooth ? "smooth" : "auto" });
+  };
+
+  // Wurde die Karte von außen gewechselt (Pfeile, Tasten, neue Hand), dorthin scrollen.
+  useLayoutEffect(() => {
+    const first = !mounted.current;
+    mounted.current = true;
+    if (first || nearestIndex() !== selectedIndex) scrollToIndex(selectedIndex, !first);
+  }, [selectedIndex, count]);
 
   useEffect(() => {
     const onKey = (event) => {
-      if (event.key === "ArrowRight") go(1);
-      if (event.key === "ArrowLeft") go(-1);
+      if (event.key === "ArrowRight") onSelectIndex((selectedIndex + 1) % count);
+      if (event.key === "ArrowLeft") onSelectIndex((selectedIndex - 1 + count) % count);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go]);
+  }, [count, selectedIndex, onSelectIndex]);
 
-  const onPointerDown = (event) => {
-    if (event.button !== undefined && event.button !== 0) return;
-    if (!event.target.closest(".flying-card.is-active")) return;
-    drag.current = { active: true, started: false, pointerId: event.pointerId, startX: event.clientX, dx: 0, element: event.target.closest(".flying-card.is-active") };
-  };
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
 
-  const onPointerMove = (event) => {
-    const d = drag.current;
-    if (!d.active || event.pointerId !== d.pointerId) return;
-    const dx = event.clientX - d.startX;
-    if (!d.started) {
-      // Erst ab ein paar Pixeln gilt es als Ziehen, damit ein Antippen der Werte weiter funktioniert.
-      if (Math.abs(dx) < DRAG_START) return;
-      d.started = true;
-      setDragging(true);
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    }
-    d.dx = dx;
-    // Die Karte folgt dem Finger direkt über eine CSS-Variable, ohne dass React etwas neu zeichnet.
-    d.element?.style.setProperty("--drag", String(dx));
-  };
-
-  const onPointerEnd = (event) => {
-    const d = drag.current;
-    if (!d.active || event.pointerId !== d.pointerId) return;
-    drag.current = { active: false, started: false, pointerId: null, startX: 0, dx: 0, element: null };
-    if (!d.started) return;
-    flushSync(() => setDragging(false)); // Übergang einschalten, bevor die Karte zurückgleitet
-    d.element?.style.removeProperty("--drag");
-    if (event.type !== "pointercancel" && Math.abs(d.dx) > SWIPE_THRESHOLD) go(d.dx < 0 ? 1 : -1);
+  const onScroll = () => {
+    if (performance.now() < ignoreUntil.current || frame.current) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0;
+      const index = nearestIndex();
+      if (index !== selectedIndex) onSelectIndex(index);
+    });
   };
 
   const cards = [];
   for (let index = 0; index < count; index += 1) {
-    let offset = index - selectedIndex;
-    if (offset > count / 2) offset -= count;
-    if (offset < -count / 2) offset += count;
-    const distance = Math.abs(offset);
-    if (distance > VISIBLE_CARDS + 1) continue; // weiter hinten liegende Karten gar nicht erst zeichnen
-    const isActive = offset === 0;
-    const hidden = distance > VISIBLE_CARDS;
-
-    const style = isActive
-      ? {
-          zIndex: 100,
-          opacity: 1,
-          "--dim": 0,
-          transform: "translate3d(calc(var(--drag, 0) * 1px), 0, 0) rotate(calc(var(--drag, 0) * 0.035deg)) scale(1)"
-        }
-      : {
-          zIndex: 100 - distance,
-          opacity: hidden ? 0 : 1,
-          pointerEvents: "none",
-          "--dim": distance * 0.055,
-          transform: `translate3d(${offset * 24}px, ${distance * 10}px, ${-distance * 25}px) rotate(${offset * 4}deg) scale(${1 - distance * 0.045})`
-        };
-
+    const isActive = index === selectedIndex;
     cards.push(
       <div
-        className={`flying-card ${isActive ? "is-active" : ""} ${isActive && dragging ? "is-dragging" : ""}`}
-        style={style}
+        className={`deck-card ${isActive ? "is-active" : ""}`}
         key={index}
+        onClick={isActive ? undefined : () => onSelectIndex(index)}
       >
-        {children(index, isActive)}
+        {Math.abs(index - selectedIndex) <= NEAR_CARDS ? children(index, isActive) : null}
       </div>
     );
   }
 
   return (
-    <div
-      className="flying-stack"
-      role="group"
-      aria-label={label}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerEnd}
-      onPointerCancel={onPointerEnd}
-    >
+    <div className="deck-scroll" role="group" aria-label={label} ref={boxRef} onScroll={onScroll}>
       {cards}
     </div>
   );
