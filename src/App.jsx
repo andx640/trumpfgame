@@ -23,6 +23,7 @@ function App() {
   const [connected, setConnected] = useState(socket.connected);
   const [joining, setJoining] = useState(false);
   const [notice, setNotice] = useState("");
+  const [view, setView] = useState("home"); // home | new | join | collection
 
   useEffect(() => {
     let noticeTimer;
@@ -82,16 +83,21 @@ function App() {
     sessionStorage.removeItem(SESSION_TOKEN);
     sessionStorage.removeItem(SESSION_NAME);
     setState(null);
+    setView("home");
   };
 
   const isPlaying = state && state.status !== "lobby";
 
   return (
     <div className={`app-shell ${isPlaying ? "is-playing" : ""}`}>
-      {!isPlaying && <Header connected={connected} state={state} />}
+      {!isPlaying && !(!state && view === "home") && <Header connected={connected} state={state} />}
       <main>
-        {!state ? (
-          <Welcome onJoin={join} joining={joining} connected={connected} />
+        {!state && view === "home" ? (
+          <Home onNew={() => setView("new")} onJoin={() => setView("join")} onCollection={() => setView("collection")} />
+        ) : !state && view === "collection" ? (
+          <Collection onBack={() => setView("home")} />
+        ) : !state ? (
+          <Welcome mode={view} onBack={() => setView("home")} onJoin={join} joining={joining} connected={connected} />
         ) : state.status === "lobby" ? (
           <Lobby state={state} onLeave={leave} />
         ) : (
@@ -100,6 +106,88 @@ function App() {
       </main>
       {notice && <div className="toast" role="alert">{notice}</div>}
     </div>
+  );
+}
+
+function Home({ onNew, onJoin, onCollection }) {
+  return (
+    <section className="home">
+      <div className="home-inner">
+        <div className="home-logo" role="img" aria-label="Auto Trumpf">
+          <div className="home-logo-top"><span>AUTO</span><FlagPattern /></div>
+          <div className="home-logo-bottom">TRUMPF</div>
+          <p>Die besten Autos.<br />Dein Trumpf.</p>
+        </div>
+
+        <nav className="home-menu" aria-label="Hauptmenü">
+          <button type="button" className="home-primary" onClick={onNew}>
+            <CardsIcon />
+            <span><strong>Neues Spiel</strong><small>Lobby eröffnen · 2–4 Spieler</small></span>
+            <HomeArrow />
+          </button>
+          <button type="button" className="home-card" onClick={onJoin}>
+            <PeopleIcon />
+            <span><strong>Spiel beitreten</strong><small>Einer Lobby beitreten</small></span>
+            <HomeArrow />
+          </button>
+          <button type="button" className="home-card" onClick={onCollection}>
+            <CollectionIcon />
+            <span><strong>Sammlung</strong><small>Alle Autos im Überblick</small></span>
+            <HomeArrow />
+          </button>
+        </nav>
+      </div>
+    </section>
+  );
+}
+
+function Collection({ onBack }) {
+  const [data, setData] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    socket
+      .request("cards")
+      .then((result) => {
+        if (!alive) return;
+        if (result.ok) setData(result);
+        else setFailed(true);
+      })
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const cards = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("de");
+    return (data?.cards || []).filter((card) => !needle || card.name.toLocaleLowerCase("de").includes(needle));
+  }, [data, query]);
+
+  return (
+    <section className="collection page-width">
+      <div className="collection-head">
+        <button type="button" className="text-button" onClick={onBack}>← Zurück</button>
+        <h1>Sammlung</h1>
+        <p className="muted">{data ? `${cards.length} von ${data.cards.length} Autos` : "Lädt …"}</p>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Auto suchen, z. B. Porsche"
+          aria-label="Auto suchen"
+        />
+      </div>
+      {failed && <p className="collection-empty">Die Sammlung konnte nicht geladen werden. Versuche es gleich noch einmal.</p>}
+      {data && cards.length === 0 && <p className="collection-empty">Kein Auto gefunden.</p>}
+      <div className="collection-grid">
+        {cards.map((card) => (
+          <VehicleCard key={card.c_id} card={card} categories={data.categories} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -125,7 +213,7 @@ function Header({ connected, state }) {
   );
 }
 
-function Welcome({ onJoin, joining, connected }) {
+function Welcome({ mode = "new", onBack, onJoin, joining, connected }) {
   const [name, setName] = useState(sessionStorage.getItem(SESSION_NAME) || "");
   const submit = (event) => {
     event.preventDefault();
@@ -149,9 +237,14 @@ function Welcome({ onJoin, joining, connected }) {
       </div>
       <div className="join-card panel">
         <div className="panel-number">01</div>
+        {onBack && <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>}
         <p className="eyebrow">STARTAUFSTELLUNG</p>
-        <h2>Betritt die Lobby</h2>
-        <p className="muted">Wähle deinen Fahrernamen. Der erste Spieler übernimmt die Rennleitung.</p>
+        <h2>{mode === "join" ? "Spiel beitreten" : "Neues Spiel"}</h2>
+        <p className="muted">
+          {mode === "join"
+            ? "Gib deinen Fahrernamen ein und tritt der offenen Lobby bei."
+            : "Wähle deinen Fahrernamen. Der erste Spieler übernimmt die Rennleitung."}
+        </p>
         <form onSubmit={submit}>
           <label htmlFor="player-name">Fahrername</label>
           <input
@@ -584,6 +677,59 @@ function initials(name) {
 
 function LogoMark() {
   return <svg className="logo-mark" viewBox="0 0 42 42" aria-hidden="true"><path d="M5 8h21l11 9-11 17H5l11-13L5 8Z" /><path d="M17 15h10l4 4-7 9H13l6-7-2-6Z" /></svg>;
+}
+
+function FlagPattern() {
+  const cells = [];
+  for (let row = 0; row < 3; row += 1) {
+    for (let col = 0; col < 5; col += 1) {
+      if ((row + col) % 2 === 0) cells.push(<rect key={`${row}-${col}`} x={col * 12} y={row * 12} width="12" height="12" />);
+    }
+  }
+  return (
+    <svg className="home-flag" viewBox="0 0 60 36" aria-hidden="true">{cells}</svg>
+  );
+}
+
+function HomeArrow() {
+  return (
+    <svg className="home-arrow" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CardsIcon() {
+  return (
+    <svg className="home-icon" viewBox="0 0 48 48" aria-hidden="true">
+      <rect x="6" y="9" width="24" height="32" rx="4" transform="rotate(-12 18 25)" fill="currentColor" opacity="0.55" />
+      <rect x="16" y="7" width="26" height="34" rx="4" fill="currentColor" />
+      <path d="M22 28l2-6h12l2 6v6h-3v-2H25v2h-3zm4.5-4l-1 3h11l-1-3z" fill="#e8730a" />
+    </svg>
+  );
+}
+
+function PeopleIcon() {
+  return (
+    <svg className="home-icon" viewBox="0 0 48 48" aria-hidden="true">
+      <circle cx="24" cy="16" r="7" fill="currentColor" />
+      <circle cx="10" cy="20" r="5" fill="currentColor" opacity="0.7" />
+      <circle cx="38" cy="20" r="5" fill="currentColor" opacity="0.7" />
+      <path d="M11 40c0-8 5-13 13-13s13 5 13 13z" fill="currentColor" />
+      <path d="M1 38c0-6 3-10 9-10 2 0 3 .3 4 1-3 2-5 5-5.500 9z" fill="currentColor" opacity="0.7" />
+      <path d="M47 38c0-6-3-10-9-10-2 0-3 .3-4 1 3 2 5 5 5.500 9z" fill="currentColor" opacity="0.7" />
+    </svg>
+  );
+}
+
+function CollectionIcon() {
+  return (
+    <svg className="home-icon" viewBox="0 0 48 48" aria-hidden="true">
+      <rect x="5" y="12" width="22" height="30" rx="4" transform="rotate(-10 16 27)" fill="none" stroke="currentColor" strokeWidth="2.500" />
+      <rect x="17" y="8" width="22" height="32" rx="4" fill="none" stroke="currentColor" strokeWidth="2.500" />
+      <rect x="27" y="10" width="17" height="30" rx="4" transform="rotate(8 35 25)" fill="none" stroke="currentColor" strokeWidth="2.500" opacity="0.6" />
+    </svg>
+  );
 }
 
 function ArrowIcon() {
