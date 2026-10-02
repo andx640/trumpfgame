@@ -554,84 +554,126 @@ function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, 
   );
 }
 
-// Kartenstapel als Karussell: native Scroll-Snap-Leiste, die Karten liegen leicht übereinander.
-// Die Wischbewegung übernimmt der Browser, React rendert nur beim Wechsel der Karte neu.
-const NEAR_CARDS = 3;
+// Kartenstapel als 3D-Karussell (Animation nach der Vorlage index.html): Die Karten liegen gefächert hintereinander,
+// beim Wischen folgen alle dem Finger und rücken nach vorn. Beim Ziehen werden die Stile direkt am DOM gesetzt,
+// React rendert erst wieder, wenn eine andere Karte vorn liegt.
+const DECK_NEAR = 6;
+const DECK_DRAG_START = 6;
+
+function deckSpacing() {
+  return Math.min(window.innerWidth * 0.075, 28);
+}
+
+function circularOffset(index, current, count) {
+  let offset = index - current;
+  if (offset > count / 2) offset -= count;
+  if (offset < -count / 2) offset += count;
+  return offset;
+}
+
+function placeDeckCard(element, offset, dragging) {
+  const distance = Math.abs(offset);
+  element.style.transform = `translate3d(${offset * deckSpacing()}px, 0, ${-distance * 42}px) rotateY(${offset * -7}deg) scale(${Math.max(0.82, 1 - distance * 0.035)})`;
+  element.style.opacity = dragging
+    ? String(Math.max(0, 1 - Math.max(0, distance - 3) * 0.12))
+    : String(distance > 4 ? 0 : 1 - distance * 0.08);
+  element.style.zIndex = String(Math.round(100 - distance * 10));
+}
 
 function DeckCarousel({ count, selectedIndex, onSelectIndex, label, children }) {
-  const boxRef = useRef(null);
-  const ignoreUntil = useRef(0);
-  const frame = useRef(0);
-  const mounted = useRef(false);
+  const stageRef = useRef(null);
+  const cardRefs = useRef(new Map());
+  const drag = useRef({ active: false, started: false, pointerId: null, startX: 0, dx: 0 });
+  const justDragged = useRef(false);
 
-  const nearestIndex = () => {
-    const box = boxRef.current;
-    if (!box) return 0;
-    const middle = box.scrollLeft + box.clientWidth / 2;
-    let best = 0;
-    let bestDistance = Infinity;
-    for (let index = 0; index < box.children.length; index += 1) {
-      const item = box.children[index];
-      const distance = Math.abs(item.offsetLeft + item.offsetWidth / 2 - middle);
-      if (distance < bestDistance) {
-        best = index;
-        bestDistance = distance;
-      }
-    }
-    return best;
+  const layout = (progress = 0, dragging = false) => {
+    cardRefs.current.forEach((element, index) => {
+      if (element) placeDeckCard(element, circularOffset(index, selectedIndex, count) + progress, dragging);
+    });
   };
 
-  const scrollToIndex = (index, smooth) => {
-    const box = boxRef.current;
-    const item = box?.children[index];
-    if (!item) return;
-    ignoreUntil.current = performance.now() + (smooth ? 600 : 100);
-    box.scrollTo({ left: item.offsetLeft + item.offsetWidth / 2 - box.clientWidth / 2, behavior: smooth ? "smooth" : "auto" });
-  };
-
-  // Wurde die Karte von außen gewechselt (Pfeile, Tasten, neue Hand), dorthin scrollen.
   useLayoutEffect(() => {
-    const first = !mounted.current;
-    mounted.current = true;
-    if (first || nearestIndex() !== selectedIndex) scrollToIndex(selectedIndex, !first);
+    layout();
   }, [selectedIndex, count]);
 
   useEffect(() => {
+    const onResize = () => layout();
+    window.addEventListener("resize", onResize);
     const onKey = (event) => {
       if (event.key === "ArrowRight") onSelectIndex((selectedIndex + 1) % count);
       if (event.key === "ArrowLeft") onSelectIndex((selectedIndex - 1 + count) % count);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [count, selectedIndex, onSelectIndex]);
 
-  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  const onPointerDown = (event) => {
+    if (event.button !== undefined && event.button !== 0) return;
+    drag.current = { active: true, started: false, pointerId: event.pointerId, startX: event.clientX, dx: 0 };
+  };
 
-  const onScroll = () => {
-    if (performance.now() < ignoreUntil.current || frame.current) return;
-    frame.current = requestAnimationFrame(() => {
-      frame.current = 0;
-      const index = nearestIndex();
-      if (index !== selectedIndex) onSelectIndex(index);
-    });
+  const onPointerMove = (event) => {
+    const d = drag.current;
+    if (!d.active || event.pointerId !== d.pointerId) return;
+    const dx = event.clientX - d.startX;
+    if (!d.started) {
+      // Erst ab ein paar Pixeln gilt es als Ziehen, damit ein Antippen der Werte weiter funktioniert.
+      if (Math.abs(dx) < DECK_DRAG_START) return;
+      d.started = true;
+      stageRef.current?.classList.add("is-dragging");
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
+    d.dx = dx;
+    layout(dx / deckSpacing(), true);
+  };
+
+  const onPointerEnd = (event) => {
+    const d = drag.current;
+    if (!d.active || event.pointerId !== d.pointerId) return;
+    drag.current = { active: false, started: false, pointerId: null, startX: 0, dx: 0 };
+    if (!d.started) return;
+    justDragged.current = true;
+    window.setTimeout(() => { justDragged.current = false; }, 60);
+    stageRef.current?.classList.remove("is-dragging");
+    const threshold = Math.max(45, window.innerWidth * 0.15);
+    if (event.type !== "pointercancel" && count > 1 && d.dx < -threshold) onSelectIndex((selectedIndex + 1) % count);
+    else if (event.type !== "pointercancel" && count > 1 && d.dx > threshold) onSelectIndex((selectedIndex - 1 + count) % count);
+    else layout();
   };
 
   const cards = [];
   for (let index = 0; index < count; index += 1) {
+    if (Math.abs(circularOffset(index, selectedIndex, count)) > DECK_NEAR) continue;
     const isActive = index === selectedIndex;
     cards.push(
       <div
         className={`deck-card ${isActive ? "is-active" : ""}`}
         key={index}
-        onClick={isActive ? undefined : () => onSelectIndex(index)}
+        ref={(element) => {
+          if (element) cardRefs.current.set(index, element);
+          else cardRefs.current.delete(index);
+        }}
+        onClick={isActive ? undefined : () => { if (!justDragged.current) onSelectIndex(index); }}
       >
-        {Math.abs(index - selectedIndex) <= NEAR_CARDS ? children(index, isActive) : null}
+        {children(index, isActive)}
       </div>
     );
   }
 
   return (
-    <div className="deck-scroll" role="group" aria-label={label} ref={boxRef} onScroll={onScroll}>
+    <div
+      className="deck-stage"
+      role="group"
+      aria-label={label}
+      ref={stageRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+    >
       {cards}
     </div>
   );
