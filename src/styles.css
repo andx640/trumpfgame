@@ -2245,6 +2245,8 @@ input:focus-visible {
   left: 0;
   z-index: 20;
   height: var(--dock-height);
+  overflow: hidden;
+  transition: height 380ms cubic-bezier(0.3, 0.8, 0.3, 1);
   border-top: 1px solid rgba(255,255,255,.15);
   background: linear-gradient(180deg, rgba(12, 18, 28, 0.86), rgba(8, 12, 20, 0.92) 32%);
   box-shadow: 0 -25px 60px rgba(0,0,0,.35);
@@ -3605,4 +3607,82 @@ html:has(.app-shell.is-playing),
 body:has(.app-shell.is-playing) {
   overflow: hidden;
   overscroll-behavior: none;
+}
+
+/* Wer dran ist: Der Kartenstapel fährt hoch, danach zurück; die gewählte Karte wird auf den Tisch gelegt */
+.game-table-screen.is-my-turn .stack-dock {
+  height: calc(100dvh - 8px);
+  background: linear-gradient(180deg, #0c121c, #080c14 32%);
+}
+
+.deck-scroll {
+  transition: transform 380ms cubic-bezier(0.3, 0.8, 0.3, 1);
+  transform-origin: 50% 0;
+}
+
+.game-table-screen.is-my-turn .deck-scroll {
+  transform: translateY(var(--deck-shift, 0px)) scale(var(--deck-scale, 1));
+}
+
+.stack-heading .turn-banner {
+  color: var(--acid);
+  font-weight: 900;
+}
+
+.flip,
+.flip-inner,
+.flip-face {
+  position: absolute;
+  inset: 0;
+}
+
+.flip {
+  perspective: 2600px;
+}
+
+.flip-inner {
+  transform-style: preserve-3d;
+  transition: transform 700ms cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+
+.flip.is-face-up .flip-inner {
+  transform: rotateY(180deg);
+}
+
+.flip.is-instant .flip-inner {
+  transition: none;
+}
+
+.flip-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.flip-front {
+  transform: rotateY(180deg);
+}
+
+.flip-face > .portrait-card,
+.flip-face > .portrait-back-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+.arena-card-place.is-flying-in {
+  position: relative;
+  z-index: 6;
+  animation: lay-on-table 700ms 160ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
+}
+
+@keyframes lay-on-table {
+  from {
+    transform: translateY(60dvh) scale(1.6) rotate(-7deg);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.deck-card:last-child {
+  margin-right: 0;
 }

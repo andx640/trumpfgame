@@ -369,10 +369,10 @@ function Game({ state }) {
   const timerTarget = isPaused ? game.pausedUntil : isChoosing ? game.turnEndsAt : game.revealEndsAt;
   const seconds = timerTarget ? Math.max(0, Math.ceil((timerTarget - now) / 1000)) : 0;
 
-  useEffect(() => setSelectedCardId(topCardId), [topCardId]);
+  useEffect(() => setSelectedCardId(topCardId), [topCardId, isMyTurn]);
 
   return (
-    <section className="game-table-screen" data-seats={seatCount}>
+    <section className={`game-table-screen ${isMyTurn && !isPaused && hand.length ? "is-my-turn" : ""}`} data-seats={seatCount}>
       <div className="arena-table">
         <div className="arena-inlay" />
         {isPaused && (
@@ -394,6 +394,7 @@ function Game({ state }) {
           canChoose={isMyTurn}
           choosing={isChoosing}
           self={self}
+          turnSeconds={isMyTurn && !isPaused ? seconds : null}
         />
       )}
 
@@ -410,8 +411,8 @@ function TableCards({ state, seconds = 0, showTimer = false }) {
   return (
     <div className={`arena-cards count-${participants.length}`}>
       {participants.map((player, index) => {
-        const card = tableByPlayer.get(player.id) ||
-          (game.phase === "choosing" && player.id === selfId ? game.ownCard : null);
+        const card = tableByPlayer.get(player.id) || null;
+        const isSelf = player.id === selfId;
         const isBest = game.result?.winnerIds?.includes(player.id);
         const isActive = player.id === game.activePlayerId;
         return (
@@ -420,18 +421,15 @@ function TableCards({ state, seconds = 0, showTimer = false }) {
             style={{ "--seat-index": index }}
             key={player.id}
           >
-            <div className="arena-card-place">
+            <div className={`arena-card-place ${isSelf && card ? "is-flying-in" : ""}`}>
               <ScaledCard>
-                {card ? (
-                  <VehicleCard
-                    card={card}
-                    categories={categories}
-                    selectable={game.phase === "choosing" && player.id === selfId && game.activePlayerId === selfId}
-                    highlight={game.category}
-                  />
-                ) : (
-                  <CardBack layers={Math.min(player.cardCount, 3)} />
-                )}
+                <FlipCard
+                  card={card}
+                  categories={categories}
+                  highlight={game.category}
+                  instant={isSelf}
+                  layers={Math.min(player.cardCount, 3)}
+                />
               </ScaledCard>
               {isBest && <span className="best-ribbon">{game.result.type === "tie" ? "GLEICHSTAND" : "STICH"}</span>}
             </div>
@@ -450,11 +448,50 @@ function TableCards({ state, seconds = 0, showTimer = false }) {
   );
 }
 
-function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, choosing, self }) {
+// Tischkarte: Rückseite, die sich beim Aufdecken umdreht. Die eigene Karte (instant) wird nicht gedreht,
+// sondern per CSS-Animation vom Kartenstapel auf den Tisch gelegt.
+function FlipCard({ card, categories, highlight, instant, layers }) {
+  const last = useRef(card);
+  if (card) last.current = card;
+  return (
+    <div className={`flip ${card ? "is-face-up" : ""} ${instant ? "is-instant" : ""}`}>
+      <div className="flip-inner">
+        <div className="flip-face flip-back"><CardBack layers={layers} /></div>
+        <div className="flip-face flip-front">
+          {last.current && <VehicleCard card={last.current} categories={categories} highlight={highlight} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, choosing, self, turnSeconds }) {
+  const dockRef = useRef(null);
   const selectedIndex = Math.max(0, hand.findIndex((card) => card.c_id === selectedCardId));
   const step = (direction) => {
     if (hand.length > 1) onSelectCard(hand[(selectedIndex + direction + hand.length) % hand.length].c_id);
   };
+  // Wenn man dran ist, fährt der Stapel hoch und die Karten werden entsprechend größer gezeigt.
+  const hasHand = hand.length > 0;
+  useLayoutEffect(() => {
+    const dock = dockRef.current;
+    if (!dock) return undefined;
+    const update = () => {
+      const card = dock.querySelector(".deck-card");
+      const heading = dock.querySelector(".stack-heading");
+      if (!card || !heading) return;
+      const byHeight = (window.innerHeight - 8 - heading.offsetHeight - 14) / (26 + card.offsetHeight);
+      const byWidth = (window.innerWidth * 0.94) / card.offsetWidth;
+      const scale = Math.max(1, Math.min(byHeight, byWidth));
+      const spare = window.innerHeight - 8 - heading.offsetHeight - 14 - (26 + card.offsetHeight) * scale;
+      dock.style.setProperty("--deck-scale", scale.toFixed(3));
+      dock.style.setProperty("--deck-shift", `${Math.max(0, spare / 2).toFixed(0)}px`);
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [hasHand]);
+
   if (!hand.length) {
     return (
       <div className="empty-stack">
@@ -465,10 +502,12 @@ function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, 
   }
 
   return (
-    <aside className="stack-dock">
+    <aside className="stack-dock" ref={dockRef}>
       <div className="stack-heading">
         <div>
-          <span>DEIN KARTENSTAPEL</span>
+          {turnSeconds !== null && turnSeconds !== undefined
+            ? <span className="turn-banner">DU BIST DRAN · {turnSeconds}s</span>
+            : <span>DEIN KARTENSTAPEL</span>}
           <strong>Karte {selectedIndex + 1} von {hand.length}</strong>
         </div>
         <div className="stack-help">
