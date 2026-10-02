@@ -37,7 +37,7 @@ Der Server liefert den Build anschließend standardmäßig unter `http://localho
 
 Eine unterbrochene Spielsitzung wird im selben Browser-Tab automatisch wiederhergestellt. Antwortet ein aktiver Spieler nicht rechtzeitig, wählt der Server eine zufällige gültige Kategorie.
 
-Die 128 echten Fahrzeugfotos stammen aus Wikimedia Commons und werden für einen zuverlässigen Spielbetrieb lokal zwischengespeichert. Urheber und Lizenzen stehen in `BILDQUELLEN.md`; zusätzlich verlinkt jede Karte ihre eigene Bildseite über `FOTO ↗`. Mit `npm run images:update` können Bildmetadaten und lokale Vorschaubilder erneut erzeugt werden.
+Das Deck besteht ausschließlich aus Supersport- und Hypersportwagen. Die echten Fahrzeugfotos stammen aus Wikimedia Commons und werden für einen zuverlässigen Spielbetrieb lokal zwischengespeichert. Urheber und Lizenzen stehen in `BILDQUELLEN.md`; zusätzlich verlinkt jede Karte ihre eigene Bildseite über `FOTO ↗`. Mit `npm run images:update` können Bildmetadaten und lokale Vorschaubilder erneut erzeugt werden; Karten ohne lokales Foto bekommen dabei automatisch eines.
 
 ## Qualitätssicherung
 

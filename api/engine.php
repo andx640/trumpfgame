@@ -24,8 +24,8 @@ const TRUMPF_CATEGORIES = [
 
 const TRUMPF_LOCAL_CARD_IMAGES = [
     'Audi R8 V10 Performance' => '/cardimages/audi_r8_performance.png',
-    'Audi RS6 Avant' => '/cardimages/audi_rs6_performance.png',
     'Lamborghini Huracán EVO' => '/cardimages/lamborghini_huracan_evo.png',
+    'Lamborghini Huracán STO' => '/cardimages/lamborghini_huracan_sto_ur.png',
 ];
 
 function trumpf_data_file(string $name): string
