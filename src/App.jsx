@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { socket } from "./socket";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
@@ -522,7 +523,6 @@ const DRAG_START = 6;
 const VISIBLE_CARDS = 4;
 
 function FlyingStack({ count, selectedIndex, onSelectIndex, label, children }) {
-  const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
   const drag = useRef({ active: false, started: false, pointerId: null, startX: 0, dx: 0 });
 
@@ -545,7 +545,7 @@ function FlyingStack({ count, selectedIndex, onSelectIndex, label, children }) {
   const onPointerDown = (event) => {
     if (event.button !== undefined && event.button !== 0) return;
     if (!event.target.closest(".flying-card.is-active")) return;
-    drag.current = { active: true, started: false, pointerId: event.pointerId, startX: event.clientX, dx: 0 };
+    drag.current = { active: true, started: false, pointerId: event.pointerId, startX: event.clientX, dx: 0, element: event.target.closest(".flying-card.is-active") };
   };
 
   const onPointerMove = (event) => {
@@ -560,16 +560,17 @@ function FlyingStack({ count, selectedIndex, onSelectIndex, label, children }) {
       event.currentTarget.setPointerCapture?.(event.pointerId);
     }
     d.dx = dx;
-    setDragX(dx);
+    // Die Karte folgt dem Finger direkt über eine CSS-Variable, ohne dass React etwas neu zeichnet.
+    d.element?.style.setProperty("--drag", String(dx));
   };
 
   const onPointerEnd = (event) => {
     const d = drag.current;
     if (!d.active || event.pointerId !== d.pointerId) return;
-    drag.current = { active: false, started: false, pointerId: null, startX: 0, dx: 0 };
+    drag.current = { active: false, started: false, pointerId: null, startX: 0, dx: 0, element: null };
     if (!d.started) return;
-    setDragging(false);
-    setDragX(0);
+    flushSync(() => setDragging(false)); // Übergang einschalten, bevor die Karte zurückgleitet
+    d.element?.style.removeProperty("--drag");
     if (event.type !== "pointercancel" && Math.abs(d.dx) > SWIPE_THRESHOLD) go(d.dx < 0 ? 1 : -1);
   };
 
@@ -588,7 +589,7 @@ function FlyingStack({ count, selectedIndex, onSelectIndex, label, children }) {
           zIndex: 100,
           opacity: 1,
           "--dim": 0,
-          transform: `translate3d(${dragX}px, 0, 0) rotate(${dragX * 0.035}deg) scale(1)`
+          transform: "translate3d(calc(var(--drag, 0) * 1px), 0, 0) rotate(calc(var(--drag, 0) * 0.035deg)) scale(1)"
         }
       : {
           zIndex: 100 - distance,
