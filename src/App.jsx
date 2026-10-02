@@ -370,7 +370,7 @@ function Game({ state }) {
   useEffect(() => setSelectedCardId(topCardId), [topCardId]);
 
   return (
-    <section className="game-table-screen" data-seats={seatCount} data-phase={game.phase}>
+    <section className="game-table-screen" data-seats={seatCount}>
       <div className="arena-table">
         <div className="arena-inlay" />
         {isPaused && (
@@ -586,14 +586,14 @@ function FlyingStack({ count, selectedIndex, onSelectIndex, label, children }) {
       ? {
           zIndex: 100,
           opacity: 1,
-          "--dim": 0,
+          filter: "none",
           transform: `translate3d(${dragX}px, 0, 0) rotate(${dragX * 0.035}deg) scale(1)`
         }
       : {
           zIndex: 100 - distance,
           opacity: hidden ? 0 : 1,
           pointerEvents: "none",
-          "--dim": distance * 0.055,
+          filter: `brightness(${1 - distance * 0.055})`,
           transform: `translate3d(${offset * 24}px, ${distance * 10}px, ${-distance * 25}px) rotate(${offset * 4}deg) scale(${1 - distance * 0.045})`
         };
 
