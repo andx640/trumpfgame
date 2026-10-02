@@ -89,7 +89,7 @@ function App() {
   const isPlaying = state && state.status !== "lobby";
 
   return (
-    <div className={`app-shell ${isPlaying ? "is-playing" : ""}`}>
+    <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${!state && view === "home" ? "is-home" : ""}`}>
       {!isPlaying && !(!state && view === "home") && <Header connected={connected} state={state} />}
       <main>
         {!state && view === "home" ? (
@@ -113,8 +113,8 @@ function Home({ onNew, onJoin, onCollection }) {
   return (
     <section className="home">
       <div className="home-inner">
-        <div className="home-logo" role="img" aria-label="Auto Trumpf">
-          <div className="home-logo-top"><span>AUTO</span><FlagPattern /></div>
+        <div className="home-logo" role="img" aria-label="Andi Trumpf">
+          <div className="home-logo-top"><span>ANDI</span><FlagPattern /></div>
           <div className="home-logo-bottom">TRUMPF</div>
           <p>Die besten Autos.<br />Dein Trumpf.</p>
         </div>
@@ -122,7 +122,7 @@ function Home({ onNew, onJoin, onCollection }) {
         <nav className="home-menu" aria-label="Hauptmenü">
           <button type="button" className="home-primary" onClick={onNew}>
             <CardsIcon />
-            <span><strong>Neues Spiel</strong><small>Lobby eröffnen · 2–4 Spieler</small></span>
+            <span><strong>Neues Spiel</strong><small>Lobby eröffnen</small></span>
             <HomeArrow />
           </button>
           <button type="button" className="home-card" onClick={onJoin}>
@@ -194,10 +194,10 @@ function Collection({ onBack }) {
 function Header({ connected, state }) {
   return (
     <header className="site-header">
-      <div className="brand" aria-label="Pitlane Trumpf">
+      <div className="brand" aria-label="Andi Trumpf">
         <LogoMark />
         <div>
-          <strong>PITLANE</strong>
+          <strong>ANDI</strong>
           <span>TRUMPF</span>
         </div>
       </div>
@@ -385,7 +385,7 @@ function Game({ state }) {
   return (
     <section className="game-table-screen">
       <div className="arena-topbar">
-        <div className="arena-brand"><LogoMark /><span>PITLANE <b>TRUMPF</b></span></div>
+        <div className="arena-brand"><LogoMark /><span>ANDI <b>TRUMPF</b></span></div>
         <div className={`turn-message ${isMyTurn ? "is-own-turn" : ""}`}>
           {((isChoosing && !isMyTurn) || isPaused) && <SpinnerIcon />}
           <strong>{statusText}</strong>
@@ -630,7 +630,7 @@ function CardBack({ layers = 1 }) {
         <i className="back-layer" style={{ "--layer": index + 1 }} key={index} />
       ))}
       <div className="portrait-back">
-        <div className="portrait-back-pattern"><LogoMark /><b>PITLANE</b><span>TRUMPF</span></div>
+        <div className="portrait-back-pattern"><LogoMark /><b>ANDI</b><span>TRUMPF</span></div>
       </div>
     </div>
   );
