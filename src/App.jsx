@@ -89,8 +89,8 @@ function App() {
   const isPlaying = state && state.status !== "lobby";
 
   return (
-    <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${!state && view === "home" ? "is-home" : ""}`}>
-      {!isPlaying && !(!state && view === "home") && <Header connected={connected} state={state} />}
+    <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${!state && (view === "home" || view === "new" || view === "join") ? "is-home" : ""}`}>
+      {!isPlaying && !(!state && (view === "home" || view === "new" || view === "join")) && <Header connected={connected} state={state} />}
       <main>
         {!state && view === "home" ? (
           <Home onNew={() => setView("new")} onJoin={() => setView("join")} onCollection={() => setView("collection")} />
@@ -215,6 +215,7 @@ function Header({ connected, state }) {
 
 function Welcome({ mode = "new", onBack, onJoin, joining, connected }) {
   const [name, setName] = useState(sessionStorage.getItem(SESSION_NAME) || "");
+  const [sessionId, setSessionId] = useState("");
   const submit = (event) => {
     event.preventDefault();
     if (name.trim()) onJoin(name.trim());
@@ -222,19 +223,6 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected }) {
 
   return (
     <section className="welcome page-width">
-      <div className="hero-copy">
-        <div className="eyebrow"><span /> AUTO-QUARTETT · LIVE</div>
-        <h1>Werte wählen.<br /><em>Stiche holen.</em></h1>
-        <p>
-          Das klassische Trumpfspiel am digitalen Renntisch. Zwei bis vier Fahrer,
-          128 Boliden und nur eine Pole Position.
-        </p>
-        <div className="hero-stats" aria-label="Spieldetails">
-          <span><b>2–4</b> Spieler</span>
-          <span><b>128</b> Fahrzeuge</span>
-          <span><b>7</b> Kategorien</span>
-        </div>
-      </div>
       <div className="join-card panel">
         <div className="panel-number">01</div>
         {onBack && <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>}
@@ -242,8 +230,8 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected }) {
         <h2>{mode === "join" ? "Spiel beitreten" : "Neues Spiel"}</h2>
         <p className="muted">
           {mode === "join"
-            ? "Gib deinen Fahrernamen ein und tritt der offenen Lobby bei."
-            : "Wähle deinen Fahrernamen. Der erste Spieler übernimmt die Rennleitung."}
+            ? "Gib einen Spielernamen und die Session-ID ein."
+            : "Gib einen Spielernamen ein."}
         </p>
         <form onSubmit={submit}>
           <label htmlFor="player-name">Fahrername</label>
@@ -255,6 +243,18 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected }) {
             autoComplete="nickname"
             autoFocus={typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches}
           />
+          {mode === "join" && (
+            <>
+              <label htmlFor="session-id">Session-ID</label>
+              <input
+                id="session-id"
+                value={sessionId}
+                onChange={(event) => setSessionId(event.target.value.trim().slice(0, 32))}
+                placeholder="Session-ID eingeben"
+                autoComplete="off"
+              />
+            </>
+          )}
           <button className="primary-button" disabled={!connected || joining || !name.trim()}>
             <span>{joining ? "Beitritt läuft …" : "Lobby beitreten"}</span>
             <ArrowIcon />
