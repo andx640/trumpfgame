@@ -59,7 +59,7 @@ const FILE_OVERRIDES = {
 
 // Gezielte Commons-Suche für Varianten: Suchbegriff und Muster, das im Dateinamen vorkommen muss.
 const SEARCH_HINTS = {
-  "0034": ["Koenigsegg One:1", /one[ :_-]?1/],
+  "0034": ["Koenigsegg One:1", /one[ :_-]?1(?!.*(engine|motor|interior))/],
   "0050": ["McLaren 675LT", /675/],
   "0051": ["McLaren 600LT", /600 ?lt/],
   "0064": ["Ferrari 812 Competizione", /competizione/],
