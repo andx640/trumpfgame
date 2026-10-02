@@ -67,8 +67,9 @@ function apiUrl(host, parameters) {
 
 async function query(host, parameters, attempt = 0) {
   const response = await fetch(apiUrl(host, parameters), { headers: { "User-Agent": USER_AGENT } });
-  if (response.status === 429 && attempt < 4) {
-    await new Promise((resolve) => setTimeout(resolve, 1_500 * (attempt + 1)));
+  if (response.status === 429 && attempt < 8) {
+    const retryAfter = Number(response.headers.get("retry-after")) || 5 * (attempt + 1);
+    await new Promise((resolve) => setTimeout(resolve, retryAfter * 1_000));
     return query(host, parameters, attempt + 1);
   }
   if (!response.ok) throw new Error(`${host} antwortet mit HTTP ${response.status}`);
@@ -181,6 +182,7 @@ async function main() {
       process.stdout.write(`• ${card.c_id} ${card.name} bereits lokal\n`);
       continue;
     }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
     const page = pageByCard.get(card.c_id);
     let fileTitle = FILE_OVERRIDES[card.c_id] || page?.pageimage;
     if (!fileTitle || usedFiles.has(normalizedTitle(fileTitle))) fileTitle = await searchFile(card);
