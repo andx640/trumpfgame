@@ -143,6 +143,9 @@ function call(int $port, array $body): array
 
 try {
     check(call($port, ['action' => 'ping'])['ok'] === true, 'ping');
+    $all = call($port, ['action' => 'cards']);
+    check($all['ok'] && count($all['cards']) === 128 && isset($all['categories']['leistung']), 'Sammlung: alle 128 Karten abrufbar');
+    check(isset($all['cards'][0]['name'], $all['cards'][0]['image'], $all['cards'][0]['leistung']), 'Sammlung: Karten haben Name, Bild und Werte');
 
     $a = call($port, ['action' => 'join', 'name' => '  Ada  ']);
     check($a['ok'] && !empty($a['token']), 'Ada tritt bei');

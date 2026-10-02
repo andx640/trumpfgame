@@ -403,6 +403,10 @@ $action = is_string($input['action'] ?? null) ? $input['action'] : '';
 if ($action === 'ping') {
     respond(['ok' => true]);
 }
+if ($action === 'cards') {
+    // Alle Fahrzeugkarten für die Sammlung (öffentlich, ohne Spielstand).
+    respond(['ok' => true, 'categories' => TRUMPF_CATEGORIES, 'cards' => array_values(trumpf_load_deck())]);
+}
 $token = is_string($input['token'] ?? null) ? $input['token'] : '';
 
 $dataDir = getenv('TRUMPF_DATA_DIR') ?: __DIR__ . '/data';
