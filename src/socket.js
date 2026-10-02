@@ -20,6 +20,7 @@ class PollingSocket {
     this.connected = false;
     this.listeners = new Map();
     this.token = null;
+    this.room = null;
     this.version = 0;
     this.timer = null;
     this.poll();
@@ -51,7 +52,7 @@ class PollingSocket {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
-      body: JSON.stringify({ action, token: this.token, ...body })
+      body: JSON.stringify({ action, token: this.token, room: this.room, ...body })
     });
     const result = await response.json();
     this.setConnected(true);
@@ -61,6 +62,7 @@ class PollingSocket {
   applyResult(result) {
     if (result.code === "not_joined") {
       this.token = null;
+      this.room = null;
       this.version = 0;
       this.dispatch("state", null);
       return;
@@ -77,7 +79,10 @@ class PollingSocket {
     if (!action) return this;
 
     let body = {};
-    if (event === "joinGame") body = { name: payload?.name, token: payload?.token ?? this.token };
+    if (event === "joinGame") {
+      if (payload?.room) this.room = payload.room;
+      body = { name: payload?.name, token: payload?.token ?? this.token, room: payload?.room ?? this.room, create: payload?.create };
+    }
     if (event === "chooseCategory") body = { category: payload };
     if (event === "setCardsPerPlayer") body = { count: payload };
 
@@ -85,10 +90,12 @@ class PollingSocket {
       .then((result) => {
         if (event === "joinGame") {
           this.token = result.ok ? result.token : null;
+          this.room = result.ok ? result.room : null;
           this.version = 0;
         }
         if (event === "leaveLobby") {
           this.token = null;
+          this.room = null;
           this.version = 0;
         }
         this.applyResult(result);

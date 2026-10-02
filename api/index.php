@@ -421,11 +421,46 @@ if (!is_file($guard)) {
     );
 }
 
-$lock = fopen($dataDir . '/room.lock', 'c');
+$roomCode = strtoupper(is_string($input['room'] ?? null) ? trim($input['room']) : '');
+$roomCode = preg_match('/^[A-Z0-9]{4,8}$/', $roomCode) ? $roomCode : '';
+$creating = $action === 'join' && !empty($input['create']);
+
+if ($creating) {
+    // Neue Session: eindeutigen Code vergeben, alte Sessions (> 24 h) aufräumen.
+    $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    $gc = fopen($dataDir . '/create.lock', 'c');
+    if ($gc === false || !flock($gc, LOCK_EX)) {
+        respond(['ok' => false, 'message' => 'Spielstand ist gerade gesperrt.'], 503);
+    }
+    foreach (glob($dataDir . '/room_*.json') ?: [] as $old) {
+        if (@filemtime($old) < time() - 86400) {
+            @unlink($old);
+            @unlink(substr($old, 0, -5) . '.lock');
+        }
+    }
+    do {
+        $roomCode = '';
+        for ($i = 0; $i < 5; $i++) {
+            $roomCode .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        }
+    } while (is_file($dataDir . '/room_' . $roomCode . '.json'));
+    file_put_contents($dataDir . '/room_' . $roomCode . '.json', json_encode(TrumpfRoom::fresh()));
+    flock($gc, LOCK_UN);
+    fclose($gc);
+}
+
+if ($roomCode === '' || !is_file($dataDir . '/room_' . $roomCode . '.json')) {
+    if ($action === 'join') {
+        respond(['ok' => false, 'message' => 'Diese Session-ID gibt es nicht.']);
+    }
+    respond(['ok' => false, 'code' => 'not_joined', 'message' => 'Du bist nicht mehr in der Lobby.', 'version' => 0]);
+}
+
+$lock = fopen($dataDir . '/room_' . $roomCode . '.lock', 'c');
 if ($lock === false || !flock($lock, LOCK_EX)) {
     respond(['ok' => false, 'message' => 'Spielstand ist gerade gesperrt.'], 503);
 }
-$roomFile = $dataDir . '/room.json';
+$roomFile = $dataDir . '/room_' . $roomCode . '.json';
 $stored = is_file($roomFile) ? json_decode((string) file_get_contents($roomFile), true) : null;
 $room = new TrumpfRoom(is_array($stored) ? $stored : TrumpfRoom::fresh(), (int) floor(microtime(true) * 1000));
 
@@ -587,7 +622,8 @@ if ($room->dirty) {
 }
 
 $reply['version'] = $room->data['version'];
+$reply['room'] = $roomCode;
 if (empty($reply['unchanged']) && ($reply['code'] ?? '') !== 'not_joined') {
-    $reply['state'] = $selfIndex === null ? null : $room->publicStateFor($selfIndex);
+    $reply['state'] = $selfIndex === null ? null : $room->publicStateFor($selfIndex) + ['sessionId' => $roomCode];
 }
 respond($reply);

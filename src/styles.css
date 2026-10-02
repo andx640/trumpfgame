@@ -3329,3 +3329,9 @@ body:has(.app-shell.is-home) {
 .app-shell.is-home .welcome .join-card {
   width: min(100%, 460px);
 }
+
+.session-code b {
+  letter-spacing: 0.18em;
+  font-size: 1.3em;
+  user-select: all;
+}
