@@ -1,9 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { EffectCoverflow, Pagination } from "swiper/modules";
-import { Swiper, SwiperSlide } from "swiper/react";
-import "swiper/css";
-import "swiper/css/effect-coverflow";
-import "swiper/css/pagination";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
@@ -473,6 +468,9 @@ function TableCards({ state }) {
 
 function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, choosing, self }) {
   const selectedIndex = Math.max(0, hand.findIndex((card) => card.c_id === selectedCardId));
+  const step = (direction) => {
+    if (hand.length > 1) onSelectCard(hand[(selectedIndex + direction + hand.length) % hand.length].c_id);
+  };
   if (!hand.length) {
     return (
       <div className="empty-stack">
@@ -490,62 +488,153 @@ function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, 
           <strong>Karte {selectedIndex + 1} von {hand.length}</strong>
         </div>
         <div className="stack-help">
-          <span className="swipe-symbol">←</span>
+          <button type="button" className="swipe-symbol" onClick={() => step(-1)} aria-label="Vorherige Karte">←</button>
           Wischen
-          <span className="swipe-symbol">→</span>
+          <button type="button" className="swipe-symbol" onClick={() => step(1)} aria-label="Nächste Karte">→</button>
         </div>
       </div>
       <div className="stack-carousel">
-        <Swiper
-          className="hand-swiper"
-          modules={[EffectCoverflow, Pagination]}
-          slidesPerView="auto"
-          centeredSlides
-          spaceBetween={10}
-          loop={false}
-          grabCursor
-          effect="coverflow"
-          coverflowEffect={{
-            rotate: 0,
-            stretch: 0,
-            depth: 280,
-            modifier: 1,
-            slideShadows: false
-          }}
-          pagination={{ clickable: true }}
-          initialSlide={selectedIndex}
-          onSlideChange={(swiper) => onSelectCard(hand[swiper.activeIndex]?.c_id)}
-          aria-label={`Kartenkarussell, Karte ${selectedIndex + 1} von ${hand.length}`}
-          key={`${hand[0].c_id}-${hand.length}`}
+        <FlyingStack
+          count={hand.length}
+          selectedIndex={selectedIndex}
+          onSelectIndex={(index) => onSelectCard(hand[index].c_id)}
+          label={`Kartenstapel, Karte ${selectedIndex + 1} von ${hand.length}`}
         >
-          {hand.map((card, index) => {
-            const selected = card.c_id === selectedCardId;
+          {(index, isActive) => {
+            const card = hand[index];
             const isTop = index === 0;
             return (
-              <SwiperSlide
-                className={`carousel-card ${selected ? "is-selected" : ""} ${isTop ? "is-top-card" : ""}`}
-                onClick={() => onSelectCard(card.c_id)}
-                key={card.c_id}
-              >
-                <div className="stack-card-label">
-                  {isTop ? <b>SPIELKARTE</b> : <span>#{index + 1}</span>}
-                </div>
+              <>
+                {isActive && (
+                  <div className="stack-card-label">
+                    {isTop ? <b>SPIELKARTE</b> : <span>#{index + 1}</span>}
+                  </div>
+                )}
                 <VehicleCard
                   card={card}
                   categories={categories}
-                  selectable={selected && isTop && canChoose && choosing}
+                  selectable={isActive && isTop && canChoose && choosing}
                   highlight={null}
                 />
-                {selected && !isTop && <div className="not-playable"><LockIcon /> Nur Karte 1 ist spielbar</div>}
-                {selected && isTop && choosing && !canChoose && (
+                {isActive && !isTop && <div className="not-playable"><LockIcon /> Nur Karte 1 ist spielbar</div>}
+                {isActive && isTop && choosing && !canChoose && (
                   <div className="not-playable"><SpinnerIcon /> {self?.eliminated ? "Du schaust zu" : "Warte auf den aktiven Spieler"}</div>
                 )}
-              </SwiperSlide>
+              </>
             );
-          })}
-        </Swiper>
+          }}
+        </FlyingStack>
       </div>
     </aside>
+  );
+}
+
+// Kartenstapel zum Wischen: Die oberste Karte folgt dem Finger/der Maus, ab SWIPE_THRESHOLD px wird
+// die nächste (oder vorherige) Karte nach vorn geholt. Die Karten laufen im Kreis.
+const SWIPE_THRESHOLD = 90;
+const DRAG_START = 6;
+const VISIBLE_CARDS = 4;
+
+function FlyingStack({ count, selectedIndex, onSelectIndex, label, children }) {
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef({ active: false, started: false, pointerId: null, startX: 0, dx: 0 });
+
+  const go = useCallback(
+    (direction) => {
+      if (count > 1) onSelectIndex((selectedIndex + direction + count) % count);
+    },
+    [count, selectedIndex, onSelectIndex]
+  );
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "ArrowRight") go(1);
+      if (event.key === "ArrowLeft") go(-1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [go]);
+
+  const onPointerDown = (event) => {
+    if (event.button !== undefined && event.button !== 0) return;
+    if (!event.target.closest(".flying-card.is-active")) return;
+    drag.current = { active: true, started: false, pointerId: event.pointerId, startX: event.clientX, dx: 0 };
+  };
+
+  const onPointerMove = (event) => {
+    const d = drag.current;
+    if (!d.active || event.pointerId !== d.pointerId) return;
+    const dx = event.clientX - d.startX;
+    if (!d.started) {
+      // Erst ab ein paar Pixeln gilt es als Ziehen, damit ein Antippen der Werte weiter funktioniert.
+      if (Math.abs(dx) < DRAG_START) return;
+      d.started = true;
+      setDragging(true);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
+    d.dx = dx;
+    setDragX(dx);
+  };
+
+  const onPointerEnd = (event) => {
+    const d = drag.current;
+    if (!d.active || event.pointerId !== d.pointerId) return;
+    drag.current = { active: false, started: false, pointerId: null, startX: 0, dx: 0 };
+    if (!d.started) return;
+    setDragging(false);
+    setDragX(0);
+    if (event.type !== "pointercancel" && Math.abs(d.dx) > SWIPE_THRESHOLD) go(d.dx < 0 ? 1 : -1);
+  };
+
+  const cards = [];
+  for (let index = 0; index < count; index += 1) {
+    let offset = index - selectedIndex;
+    if (offset > count / 2) offset -= count;
+    if (offset < -count / 2) offset += count;
+    const distance = Math.abs(offset);
+    if (distance > VISIBLE_CARDS + 1) continue; // weiter hinten liegende Karten gar nicht erst zeichnen
+    const isActive = offset === 0;
+    const hidden = distance > VISIBLE_CARDS;
+
+    const style = isActive
+      ? {
+          zIndex: 100,
+          opacity: 1,
+          filter: "none",
+          transform: `translate3d(${dragX}px, 0, 0) rotate(${dragX * 0.035}deg) scale(1)`
+        }
+      : {
+          zIndex: 100 - distance,
+          opacity: hidden ? 0 : 1,
+          pointerEvents: "none",
+          filter: `brightness(${1 - distance * 0.055})`,
+          transform: `translate3d(${offset * 24}px, ${distance * 10}px, ${-distance * 25}px) rotate(${offset * 4}deg) scale(${1 - distance * 0.045})`
+        };
+
+    cards.push(
+      <div
+        className={`flying-card ${isActive ? "is-active" : ""} ${isActive && dragging ? "is-dragging" : ""}`}
+        style={style}
+        key={index}
+      >
+        {children(index, isActive)}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flying-stack"
+      role="group"
+      aria-label={label}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+    >
+      {cards}
+    </div>
   );
 }
 
