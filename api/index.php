@@ -13,6 +13,8 @@ const LOBBY_TIMEOUT_MS = 20000;    // in der Lobby fliegen inaktive Spieler raus
 const IDLE_RESET_MS = 300000;      // laufende Partie ohne jeden Spieler wird nach 5 Minuten zurückgesetzt
 const LAST_SEEN_REFRESH_MS = 3000;
 const PAUSE_END_MS = 60000;        // weniger als 2 Spieler online: nach 1 Minute endet die Partie
+const DEV_SESSION_ID = '123456';   // feste Session für die Entwicklung (nur lokal, siehe dev_session_enabled)
+const BOT_THINK_MS = 1500;         // so lange „überlegt“ der Test-Bot, bevor er eine Kategorie wählt
 
 function cleanName($value): string
 {
@@ -21,6 +23,60 @@ function cleanName($value): string
     $value = $mb ? mb_substr($value, 0, 100, 'UTF-8') : substr($value, 0, 100);
     $value = trim((string) preg_replace('/\s+/u', ' ', $value));
     return $mb ? mb_substr($value, 0, 20, 'UTF-8') : substr($value, 0, 20);
+}
+
+/**
+ * Entwicklungsmodus: Die feste Session DEV_SESSION_ID mit einem Test-Bot gibt es nur lokal (localhost / 127.0.0.1)
+ * oder wenn TRUMPF_DEV_SESSION=1 gesetzt ist. TRUMPF_DEV_SESSION=0 schaltet sie überall aus. Auf dem echten Server
+ * (andere Domain) ist sie aus.
+ */
+function dev_session_enabled(): bool
+{
+    $flag = getenv('TRUMPF_DEV_SESSION');
+    if ($flag !== false && $flag !== '') {
+        return $flag === '1';
+    }
+    $host = strtolower((string) preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '')));
+    return in_array($host, ['localhost', '127.0.0.1', '[::1]'], true);
+}
+
+/** Frischer Raum für die Dev-Session: schon ein Bot als Mitspieler, damit man alleine starten kann. */
+function dev_room_data(): array
+{
+    $room = TrumpfRoom::fresh();
+    $room['players'][] = [
+        'id' => bin2hex(random_bytes(16)),
+        'token' => bin2hex(random_bytes(24)),
+        'name' => 'Test-Bot',
+        'connected' => true,
+        'lastSeen' => (int) floor(microtime(true) * 1000),
+        'hand' => [],
+        'bot' => true,
+    ];
+    return $room;
+}
+
+/** Der Bot wählt die Kategorie, in der seine Karte im Vergleich zu allen Karten am stärksten ist. */
+function bot_category(string $cardId): string
+{
+    $deck = trumpf_load_deck();
+    $card = $deck[$cardId] ?? null;
+    if ($card === null) {
+        return (string) array_key_first(TRUMPF_CATEGORIES);
+    }
+    $best = (string) array_key_first(TRUMPF_CATEGORIES);
+    $bestScore = -1;
+    foreach (TRUMPF_CATEGORIES as $key => $rule) {
+        $worse = 0;
+        foreach ($deck as $other) {
+            $worse += ($rule['direction'] === 'low' ? $other[$key] > $card[$key] : $other[$key] < $card[$key]) ? 1 : 0;
+        }
+        if ($worse > $bestScore) {
+            $bestScore = $worse;
+            $best = $key;
+        }
+    }
+    return $best;
 }
 
 function respond(array $data, int $status = 200): void
@@ -95,18 +151,31 @@ class TrumpfRoom
     {
         $players = $this->data['players'];
         $hostIndex = trumpf_player_index($players, $this->data['hostId']);
-        if ($hostIndex !== null && $players[$hostIndex]['connected']) {
+        $host = $hostIndex !== null ? $players[$hostIndex] : null;
+        if ($host !== null && $host['connected'] && empty($host['bot'])) {
             return;
         }
+        // Ein Bot soll nie Host sein, solange ein Mensch da ist (sonst könnte niemand starten).
         $newHost = null;
         foreach ($players as $player) {
-            if ($player['connected']) {
+            if ($player['connected'] && empty($player['bot'])) {
                 $newHost = $player['id'];
                 break;
             }
         }
-        if ($newHost === null && $players) {
-            $newHost = $players[0]['id'];
+        if ($newHost === null) {
+            if ($host !== null && $host['connected']) {
+                return;
+            }
+            foreach ($players as $player) {
+                if ($player['connected']) {
+                    $newHost = $player['id'];
+                    break;
+                }
+            }
+            if ($newHost === null && $players) {
+                $newHost = $players[0]['id'];
+            }
         }
         if ($newHost !== $this->data['hostId']) {
             $this->data['hostId'] = $newHost;
@@ -117,6 +186,11 @@ class TrumpfRoom
     /** Anwesenheit, Lobby-Aufräumen und abgelaufene Zeiten – läuft bei jeder Anfrage. */
     public function tick(): void
     {
+        foreach ($this->data['players'] as $index => $player) {
+            if (!empty($player['bot'])) {
+                $this->data['players'][$index]['lastSeen'] = $this->now; // Bots sind immer online
+            }
+        }
         foreach ($this->data['players'] as $index => $player) {
             $online = ($this->now - $player['lastSeen']) <= ONLINE_TIMEOUT_MS;
             if ($player['connected'] !== $online) {
@@ -143,6 +217,22 @@ class TrumpfRoom
 
         for ($step = 0; !$paused && $step < 6 && $this->data['game'] !== null; $step++) {
             $game = $this->data['game'];
+            if ($game['phase'] === 'choosing' && $game['turnEndsAt'] !== null) {
+                $botIndex = trumpf_player_index($this->data['players'], $game['activePlayerId']);
+                $botCard = $botIndex === null ? null : ($this->data['players'][$botIndex]['hand'][0] ?? null);
+                if (
+                    $botCard !== null
+                    && !empty($this->data['players'][$botIndex]['bot'])
+                    && $this->now >= $game['turnEndsAt'] - TURN_DURATION_MS + BOT_THINK_MS
+                ) {
+                    try {
+                        $this->revealCards($game['activePlayerId'], bot_category((string) $botCard));
+                    } catch (TrumpfError $error) {
+                        break;
+                    }
+                    continue;
+                }
+            }
             if ($game['phase'] === 'choosing' && $game['turnEndsAt'] !== null && $this->now >= $game['turnEndsAt']) {
                 $chooserIndex = trumpf_player_index($this->data['players'], $game['activePlayerId']);
                 $cardId = $chooserIndex === null ? null : ($this->data['players'][$chooserIndex]['hand'][0] ?? null);
@@ -449,6 +539,11 @@ if ($creating) {
     fclose($gc);
 }
 
+$devRoom = $roomCode === DEV_SESSION_ID && dev_session_enabled();
+if ($devRoom && !is_file($dataDir . '/room_' . $roomCode . '.json')) {
+    file_put_contents($dataDir . '/room_' . $roomCode . '.json', json_encode(dev_room_data()));
+}
+
 if ($roomCode === '' || !is_file($dataDir . '/room_' . $roomCode . '.json')) {
     if ($action === 'join') {
         respond(['ok' => false, 'message' => 'Diese Session-ID gibt es nicht.']);
@@ -497,11 +592,11 @@ try {
                 // Spielt niemand mehr mit (alle offline), ist der alte Stand verwaist: neue Lobby statt Sperre.
                 $anyoneOnline = false;
                 foreach ($room->data['players'] as $entry) {
-                    $anyoneOnline = $anyoneOnline || $entry['connected'];
+                    $anyoneOnline = $anyoneOnline || ($entry['connected'] && empty($entry['bot']));
                 }
                 if (!$anyoneOnline) {
                     $version = $room->data['version'];
-                    $room->data = TrumpfRoom::fresh();
+                    $room->data = $devRoom ? dev_room_data() : TrumpfRoom::fresh();
                     $room->data['version'] = $version;
                     $room->touch();
                 }
@@ -534,6 +629,7 @@ try {
                 if ($room->data['hostId'] === null) {
                     $room->data['hostId'] = $room->data['players'][$selfIndex]['id'];
                 }
+                $room->transferHost(); // ein Bot als Host wird sofort durch den Menschen ersetzt
                 $room->touch();
                 $reply += ['token' => $newToken, 'reconnected' => false];
             }
