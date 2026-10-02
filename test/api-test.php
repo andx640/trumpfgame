@@ -290,6 +290,51 @@ try {
     $second = call($port, ['action' => 'choose', 'token' => $tokenById[$mover2], 'category' => 'leistung']);
     check($second['ok'] && count($second['state']['game']['tableCards']) === 3, 'nach der Rückkehr spielen wieder alle drei');
 
+    // --- Entwicklungs-Session 123456 mit Test-Bot -------------------------------------------------
+    $callAs = function (string $host, array $body) use ($port): array {
+        $context = stream_context_create(['http' => [
+            'method' => 'POST',
+            'header' => "Content-Type: application/json\r\nHost: $host\r\n",
+            'content' => json_encode($body),
+            'ignore_errors' => true,
+        ]]);
+        return json_decode((string) file_get_contents("http://127.0.0.1:$port/api/index.php", false, $context), true) ?? [];
+    };
+    @unlink("$dataDir/room_123456.json");
+    $prod = $callAs('andi-trumpf.de', ['action' => 'join', 'name' => 'Andi', 'room' => '123456']);
+    check($prod['ok'] === false && !file_exists("$dataDir/room_123456.json"), 'echte Domain: Session 123456 gibt es nicht und wird nicht angelegt');
+
+    $currentRoom = '123456';
+    $dev = call($port, ['action' => 'join', 'name' => 'Andi', 'room' => '123456']);
+    check($dev['ok'] && $dev['room'] === '123456', 'lokal: Beitritt zu 123456 ohne vorher zu erstellen');
+    $names = array_map(fn($p) => $p['name'], $dev['state']['players']);
+    check($names === ['Test-Bot', 'Andi'], 'in der Session wartet schon der Test-Bot (' . implode(', ', $names) . ')');
+    check($dev['state']['hostId'] === $dev['state']['selfId'], 'der Mensch ist Host, nicht der Bot');
+    $botRow = array_values(array_filter($dev['state']['players'], fn($p) => $p['name'] === 'Test-Bot'))[0];
+    check($botRow['connected'] === true, 'der Bot ist online');
+
+    $set = call($port, ['action' => 'setCards', 'token' => $dev['token'], 'count' => 8]);
+    $go = call($port, ['action' => 'start', 'token' => $dev['token']]);
+    check($go['ok'] && $go['state']['game']['phase'] === 'choosing', 'alleine mit dem Bot starten geht');
+    check($go['state']['game']['activePlayerId'] === $botRow['id'], 'der Bot ist als Erster am Zug');
+    usleep(1800000);
+    $after = call($port, ['action' => 'state', 'token' => $dev['token']])['state'];
+    check($after['game']['phase'] === 'revealed' && count($after['game']['tableCards']) === 2, 'der Bot wählt von selbst eine Kategorie (' . ($after['game']['category'] ?? '?') . ')');
+
+    // Der Bot bleibt online, auch wenn der Mensch weg ist; ein neuer Beitritt setzt die Session zurück.
+    $room = json_decode((string) file_get_contents("$dataDir/room_123456.json"), true);
+    foreach ($room['players'] as $i => $pl) {
+        if (empty($pl['bot'])) {
+            $room['players'][$i]['lastSeen'] -= 600000;
+        }
+    }
+    file_put_contents("$dataDir/room_123456.json", json_encode($room));
+    $again = call($port, ['action' => 'join', 'name' => 'Andi2', 'room' => '123456']);
+    $names = $again['ok'] ? array_map(fn($p) => $p['name'], $again['state']['players']) : [];
+    check($again['ok'] && $again['state']['status'] === 'lobby' && $names === ['Test-Bot', 'Andi2'], 'nach dem Weggehen: neue Lobby mit Bot statt "Spiel läuft bereits"');
+    check($again['state']['hostId'] === $again['state']['selfId'], 'auch dann ist der Mensch Host');
+    $currentRoom = $a['room'];
+
     check(call($port, ['action' => 'state', 'token' => 'falsch'])['code'] === 'not_joined', 'unbekannter Token');
     check(call($port, ['action' => 'unsinn', 'token' => $a['token']])['ok'] === false, 'unbekannte Aktion');
     $htaccess = file_exists("$dataDir/.htaccess");
