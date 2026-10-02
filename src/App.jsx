@@ -5,13 +5,27 @@ const SESSION_TOKEN = "pitlane-trumpf-token";
 const SESSION_NAME = "pitlane-trumpf-name";
 const SESSION_ROOM = "pitlane-trumpf-room";
 
-function useClock() {
-  const [now, setNow] = useState(Date.now());
+// Sekunden bis zu einem Zeitpunkt. Nur die kleinen Anzeige-Komponenten ticken, nicht das ganze Spiel.
+function useSeconds(target) {
+  const compute = () => (target ? Math.max(0, Math.ceil((target - Date.now()) / 1000)) : 0);
+  const [seconds, setSeconds] = useState(compute);
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    const tick = () => setSeconds(compute());
+    tick();
+    if (!target) return undefined;
+    const timer = window.setInterval(tick, 250);
     return () => window.clearInterval(timer);
-  }, []);
-  return now;
+  }, [target]);
+  return seconds;
+}
+
+function Seconds({ target }) {
+  return useSeconds(target);
+}
+
+function TurnTimer({ target }) {
+  const seconds = useSeconds(target);
+  return <span className={`turn-timer ${seconds <= 5 ? "is-low" : ""}`}>{seconds}s</span>;
 }
 
 function App() {
@@ -360,14 +374,12 @@ function Game({ state }) {
   const hand = game.ownHand || [];
   const topCardId = hand[0]?.c_id || null;
   const [selectedCardId, setSelectedCardId] = useState(topCardId);
-  const now = useClock();
   const self = players.find((player) => player.id === selfId);
   const seatCount = Math.min(4, Math.max(2, players.filter((player) => !player.eliminated || game.tableCards.some((entry) => entry.playerId === player.id)).length));
   const isChoosing = game.phase === "choosing";
   const isMyTurn = isChoosing && game.activePlayerId === selfId;
   const isPaused = Boolean(game.pausedUntil) && game.phase !== "finished";
   const timerTarget = isPaused ? game.pausedUntil : isChoosing ? game.turnEndsAt : game.revealEndsAt;
-  const seconds = timerTarget ? Math.max(0, Math.ceil((timerTarget - now) / 1000)) : 0;
 
   useEffect(() => setSelectedCardId(topCardId), [topCardId, isMyTurn]);
 
@@ -377,11 +389,11 @@ function Game({ state }) {
         <div className="arena-inlay" />
         {isPaused && (
           <div className="arena-notice" role="status">
-            <SpinnerIcon /> Mitspieler fehlen – das Spiel endet in {seconds} s, wenn niemand zurückkommt
+            <SpinnerIcon /> Mitspieler fehlen – das Spiel endet in <Seconds target={timerTarget} /> s, wenn niemand zurückkommt
           </div>
         )}
         {game.potCount > 0 && game.phase !== "finished" && <div className="arena-pot">Pot <b>{game.potCount}</b></div>}
-        <TableCards state={state} seconds={seconds} showTimer={isChoosing && !isPaused} />
+        <TableCards state={state} timerTarget={isChoosing && !isPaused ? game.turnEndsAt : null} />
         <div className="arena-watermark"><LogoMark /><span>TRUMPF</span></div>
       </div>
 
@@ -394,7 +406,7 @@ function Game({ state }) {
           canChoose={isMyTurn}
           choosing={isChoosing}
           self={self}
-          turnSeconds={isMyTurn && !isPaused ? seconds : null}
+          turnTarget={isMyTurn && !isPaused ? game.turnEndsAt : null}
         />
       )}
 
@@ -403,7 +415,7 @@ function Game({ state }) {
   );
 }
 
-function TableCards({ state, seconds = 0, showTimer = false }) {
+const TableCards = memo(function TableCards({ state, timerTarget = null }) {
   const { game, players, categories, selfId } = state;
   const tableByPlayer = new Map(game.tableCards.map((entry) => [entry.playerId, entry.card]));
   const participants = players.filter((player) => !player.eliminated || tableByPlayer.has(player.id));
@@ -437,7 +449,7 @@ function TableCards({ state, seconds = 0, showTimer = false }) {
               <span className="player-dot" />
               <strong>{player.name}</strong>
               {player.id === selfId && <small>DU</small>}
-              {isActive && showTimer && <span className={`turn-timer ${seconds <= 5 ? "is-low" : ""}`}>{seconds}s</span>}
+              {isActive && timerTarget && <TurnTimer target={timerTarget} />}
               <b>{player.cardCount}</b>
               {!player.connected && <i>offline</i>}
             </div>
@@ -446,7 +458,7 @@ function TableCards({ state, seconds = 0, showTimer = false }) {
       })}
     </div>
   );
-}
+});
 
 // Tischkarte: Rückseite, die sich beim Aufdecken umdreht. Die eigene Karte (instant) wird nicht gedreht,
 // sondern per CSS-Animation vom Kartenstapel auf den Tisch gelegt.
@@ -465,33 +477,11 @@ function FlipCard({ card, categories, highlight, instant, layers }) {
   );
 }
 
-function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, choosing, self, turnSeconds }) {
-  const dockRef = useRef(null);
+const HandStack = memo(function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, choosing, self, turnTarget }) {
   const selectedIndex = Math.max(0, hand.findIndex((card) => card.c_id === selectedCardId));
   const step = (direction) => {
     if (hand.length > 1) onSelectCard(hand[(selectedIndex + direction + hand.length) % hand.length].c_id);
   };
-  // Wenn man dran ist, fährt der Stapel hoch und die Karten werden entsprechend größer gezeigt.
-  const hasHand = hand.length > 0;
-  useLayoutEffect(() => {
-    const dock = dockRef.current;
-    if (!dock) return undefined;
-    const update = () => {
-      const card = dock.querySelector(".deck-card");
-      const heading = dock.querySelector(".stack-heading");
-      if (!card || !heading) return;
-      const byHeight = (window.innerHeight - 8 - heading.offsetHeight - 14) / (26 + card.offsetHeight);
-      const byWidth = (window.innerWidth * 0.94) / card.offsetWidth;
-      const scale = Math.max(1, Math.min(byHeight, byWidth));
-      const spare = window.innerHeight - 8 - heading.offsetHeight - 14 - (26 + card.offsetHeight) * scale;
-      dock.style.setProperty("--deck-scale", scale.toFixed(3));
-      dock.style.setProperty("--deck-shift", `${Math.max(0, spare / 2).toFixed(0)}px`);
-    };
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, [hasHand]);
-
   if (!hand.length) {
     return (
       <div className="empty-stack">
@@ -502,11 +492,11 @@ function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, 
   }
 
   return (
-    <aside className="stack-dock" ref={dockRef}>
+    <aside className="stack-dock">
       <div className="stack-heading">
         <div>
-          {turnSeconds !== null && turnSeconds !== undefined
-            ? <span className="turn-banner">DU BIST DRAN · {turnSeconds}s</span>
+          {turnTarget
+            ? <span className="turn-banner">DU BIST DRAN · <Seconds target={turnTarget} />s</span>
             : <span>DEIN KARTENSTAPEL</span>}
           <strong>Karte {selectedIndex + 1} von {hand.length}</strong>
         </div>
@@ -552,12 +542,13 @@ function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, 
       </div>
     </aside>
   );
-}
+});
 
 // Kartenstapel als 3D-Karussell (Animation nach der Vorlage index.html): Die Karten liegen gefächert hintereinander,
 // beim Wischen folgen alle dem Finger und rücken nach vorn. Beim Ziehen werden die Stile direkt am DOM gesetzt,
 // React rendert erst wieder, wenn eine andere Karte vorn liegt.
-const DECK_NEAR = 6;
+const DECK_NEAR = 5; // so viele Karten pro Seite gibt es im Fächer
+const DECK_FULL = 2; // nur so viele davon mit vollem Inhalt, die übrigen sind schlichte Kartenrahmen
 const DECK_DRAG_START = 6;
 
 function deckSpacing() {
@@ -658,7 +649,7 @@ function DeckCarousel({ count, selectedIndex, onSelectIndex, label, children }) 
         }}
         onClick={isActive ? undefined : () => { if (!justDragged.current) onSelectIndex(index); }}
       >
-        {children(index, isActive)}
+        {Math.abs(circularOffset(index, selectedIndex, count)) <= DECK_FULL ? children(index, isActive) : <div className="deck-blank" />}
       </div>
     );
   }
@@ -730,7 +721,7 @@ const VehicleCard = memo(function VehicleCard({ card, categories, selectable = f
     <article className="portrait-card">
       <div className="gt-photo">
         {card.image && !imageFailed ? (
-          <img src={card.image} alt={card.name} loading="lazy" onError={() => setImageFailed(true)} />
+          <img src={card.image} alt={card.name} loading="lazy" decoding="async" onError={() => setImageFailed(true)} />
         ) : (
           <VehicleFallback card={card} />
         )}
