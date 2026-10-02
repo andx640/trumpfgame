@@ -3331,7 +3331,7 @@ body:has(.app-shell.is-home) {
   flex: 0 0 var(--deck-w);
   width: var(--deck-w);
   aspect-ratio: 906 / 1405;
-  margin-right: calc(var(--deck-w) * -0.2);
+  margin-right: calc(var(--deck-w) * -0.5);
   transform: scale(0.9);
   transform-origin: 50% 0;
   transition: transform 200ms ease;
