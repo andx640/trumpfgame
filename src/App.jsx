@@ -116,7 +116,6 @@ function Home({ onNew, onJoin, onCollection }) {
         <div className="home-logo" role="img" aria-label="Andi Trumpf">
           <div className="home-logo-top"><span>ANDI</span><FlagPattern /></div>
           <div className="home-logo-bottom">TRUMPF</div>
-          <p>Die besten Autos.<br />Dein Trumpf.</p>
         </div>
 
         <nav className="home-menu" aria-label="Hauptmenü">
