@@ -3614,3 +3614,25 @@ body:has(.app-shell.is-home) {
 .arena-pot b {
   color: var(--acid);
 }
+
+/* Spielansicht fest am Bildschirm: kein Scrollen der Seite */
+.app-shell.is-playing {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell.is-playing .game-table-screen {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+
+html:has(.app-shell.is-playing),
+body:has(.app-shell.is-playing) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
