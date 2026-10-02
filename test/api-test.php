@@ -300,13 +300,34 @@ try {
         ]]);
         return json_decode((string) file_get_contents("http://127.0.0.1:$port/api/index.php", false, $context), true) ?? [];
     };
+    // Online ist die Test-Session ebenfalls da (andere Domain im Host-Header), nur TRUMPF_DEV_SESSION=0 schaltet sie ab.
     @unlink("$dataDir/room_123456.json");
-    $prod = $callAs('andi-trumpf.de', ['action' => 'join', 'name' => 'Andi', 'room' => '123456']);
-    check($prod['ok'] === false && !file_exists("$dataDir/room_123456.json"), 'echte Domain: Session 123456 gibt es nicht und wird nicht angelegt');
+    $online = $callAs('andi-trumpf.de', ['action' => 'join', 'name' => 'Check', 'room' => '123456']);
+    check($online['ok'] === true && $online['room'] === '123456', 'auch auf der echten Domain gibt es die Session 123456');
+    @unlink("$dataDir/room_123456.json");
+    $off = proc_open(
+        ['php', '-S', "127.0.0.1:" . ($port + 1), '-t', $root],
+        [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
+        $offPipes,
+        $root,
+        array_merge($_ENV, ['TRUMPF_DATA_DIR' => $dataDir, 'TRUMPF_DEV_SESSION' => '0', 'PATH' => getenv('PATH')])
+    );
+    for ($i = 0; $i < 50 && !@fsockopen('127.0.0.1', $port + 1); $i++) {
+        usleep(100000);
+    }
+    $offReply = json_decode((string) file_get_contents("http://127.0.0.1:" . ($port + 1) . "/api/index.php", false, stream_context_create(['http' => [
+        'method' => 'POST',
+        'header' => "Content-Type: application/json\r\n",
+        'content' => json_encode(['action' => 'join', 'name' => 'Check', 'room' => '123456']),
+        'ignore_errors' => true,
+    ]])), true) ?? [];
+    proc_terminate($off);
+    check(($offReply['ok'] ?? true) === false && !file_exists("$dataDir/room_123456.json"), 'mit TRUMPF_DEV_SESSION=0 gibt es die Session nicht');
+    @unlink("$dataDir/room_123456.json");
 
     $currentRoom = '123456';
     $dev = call($port, ['action' => 'join', 'name' => 'Andi', 'room' => '123456']);
-    check($dev['ok'] && $dev['room'] === '123456', 'lokal: Beitritt zu 123456 ohne vorher zu erstellen');
+    check($dev['ok'] && $dev['room'] === '123456', 'Beitritt zu 123456 ohne vorher zu erstellen');
     $names = array_map(fn($p) => $p['name'], $dev['state']['players']);
     check($names === ['Test-Bot', 'Andi'], 'in der Session wartet schon der Test-Bot (' . implode(', ', $names) . ')');
     check($dev['state']['hostId'] === $dev['state']['selfId'], 'der Mensch ist Host, nicht der Bot');

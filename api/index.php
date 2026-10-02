@@ -13,7 +13,7 @@ const LOBBY_TIMEOUT_MS = 20000;    // in der Lobby fliegen inaktive Spieler raus
 const IDLE_RESET_MS = 300000;      // laufende Partie ohne jeden Spieler wird nach 5 Minuten zurückgesetzt
 const LAST_SEEN_REFRESH_MS = 3000;
 const PAUSE_END_MS = 60000;        // weniger als 2 Spieler online: nach 1 Minute endet die Partie
-const DEV_SESSION_ID = '123456';   // feste Session für die Entwicklung (nur lokal, siehe dev_session_enabled)
+const DEV_SESSION_ID = '123456';   // feste Test-Session mit Bot (siehe dev_session_enabled)
 const BOT_THINK_MS = 1500;         // so lange „überlegt“ der Test-Bot, bevor er eine Kategorie wählt
 
 function cleanName($value): string
@@ -26,18 +26,12 @@ function cleanName($value): string
 }
 
 /**
- * Entwicklungsmodus: Die feste Session DEV_SESSION_ID mit einem Test-Bot gibt es nur lokal (localhost / 127.0.0.1)
- * oder wenn TRUMPF_DEV_SESSION=1 gesetzt ist. TRUMPF_DEV_SESSION=0 schaltet sie überall aus. Auf dem echten Server
- * (andere Domain) ist sie aus.
+ * Feste Test-Session DEV_SESSION_ID mit einem Test-Bot: Sie gibt es immer, auch online, damit man alleine
+ * ins Spielfeld kommt, ohne einen zweiten Spieler zu brauchen. TRUMPF_DEV_SESSION=0 schaltet sie ab.
  */
 function dev_session_enabled(): bool
 {
-    $flag = getenv('TRUMPF_DEV_SESSION');
-    if ($flag !== false && $flag !== '') {
-        return $flag === '1';
-    }
-    $host = strtolower((string) preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '')));
-    return in_array($host, ['localhost', '127.0.0.1', '[::1]'], true);
+    return getenv('TRUMPF_DEV_SESSION') !== '0';
 }
 
 /** Frischer Raum für die Dev-Session: schon ein Bot als Mitspieler, damit man alleine starten kann. */
