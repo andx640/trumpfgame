@@ -3447,9 +3447,20 @@ body:has(.app-shell.is-home) {
   }
 
   .arena-cards {
-    grid-template-columns: repeat(2, var(--table-card-width, 125px));
+    grid-template-columns: repeat(2, max-content);
+    grid-auto-rows: max-content;
     justify-content: center;
     gap: 12px 4vw !important;
+  }
+
+  .arena-cards .arena-seat {
+    width: var(--table-card-width);
+  }
+
+  /* Drei Spieler: zwei oben, einer mittig darunter */
+  .arena-cards.count-3 .arena-seat:nth-child(3) {
+    grid-column: 1 / -1;
+    justify-self: center;
   }
 
   .arena-cards.count-2 {
