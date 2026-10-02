@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
@@ -668,7 +668,7 @@ function cardValue(card, key) {
   return formatValue(value, key);
 }
 
-function VehicleCard({ card, categories, selectable = false, highlight = null }) {
+const VehicleCard = memo(function VehicleCard({ card, categories, selectable = false, highlight = null }) {
   const [imageFailed, setImageFailed] = useState(false);
   const nameSize = Math.min(58, 700 / (card.name.length * 0.43));
   return (
@@ -721,7 +721,7 @@ function VehicleCard({ card, categories, selectable = false, highlight = null })
       </div>
     </article>
   );
-}
+});
 
 // Bronze-Symbole der Kartenfelder, flach gezeichnet in vier Tönen.
 function GtIcon({ type }) {
