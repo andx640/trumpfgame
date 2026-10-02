@@ -360,7 +360,6 @@ function Game({ state }) {
   const [selectedCardId, setSelectedCardId] = useState(topCardId);
   const now = useClock();
   const self = players.find((player) => player.id === selfId);
-  const activePlayer = players.find((player) => player.id === game.activePlayerId);
   const seatCount = Math.min(4, Math.max(2, players.filter((player) => !player.eliminated || game.tableCards.some((entry) => entry.playerId === player.id)).length));
   const isChoosing = game.phase === "choosing";
   const isMyTurn = isChoosing && game.activePlayerId === selfId;
@@ -370,37 +369,17 @@ function Game({ state }) {
 
   useEffect(() => setSelectedCardId(topCardId), [topCardId]);
 
-  const statusText = useMemo(() => {
-    if (game.phase === "finished") return "Partie beendet";
-    if (isPaused) return "Mitspieler fehlen – Spiel endet bald, wenn niemand zurückkommt";
-    if (isChoosing) {
-      return isMyTurn
-        ? "Du bist dran – wähle eine Kategorie auf Karte 1"
-        : `Warten auf ${activePlayer?.name || "Mitspieler"} …`;
-    }
-    if (game.result?.type === "tie") return "Gleichstand – die Karten kommen in den Pot";
-    const winner = players.find((player) => player.id === game.result?.winnerIds?.[0]);
-    return `${winner?.name || "Der Gewinner"} gewinnt diesen Stich`;
-  }, [activePlayer?.name, game.phase, game.result, isChoosing, isMyTurn, isPaused, players]);
-
   return (
     <section className="game-table-screen" data-seats={seatCount}>
-      <div className="arena-topbar">
-        <div className="arena-brand"><LogoMark /><span>ANDI <b>TRUMPF</b></span></div>
-        <div className={`turn-message ${isMyTurn ? "is-own-turn" : ""}`}>
-          {((isChoosing && !isMyTurn) || isPaused) && <SpinnerIcon />}
-          <strong>{statusText}</strong>
-        </div>
-        <div className="arena-round">
-          <span>Runde <b>{game.round}</b></span>
-          {game.potCount > 0 && <span>Pot <b>{game.potCount}</b></span>}
-          {game.phase !== "finished" && <span className="simple-timer"><b>{seconds}</b>s</span>}
-        </div>
-      </div>
-
       <div className="arena-table">
         <div className="arena-inlay" />
-        <TableCards state={state} />
+        {isPaused && (
+          <div className="arena-notice" role="status">
+            <SpinnerIcon /> Mitspieler fehlen – das Spiel endet in {seconds} s, wenn niemand zurückkommt
+          </div>
+        )}
+        {game.potCount > 0 && game.phase !== "finished" && <div className="arena-pot">Pot <b>{game.potCount}</b></div>}
+        <TableCards state={state} seconds={seconds} showTimer={isChoosing && !isPaused} />
         <div className="arena-watermark"><LogoMark /><span>TRUMPF</span></div>
       </div>
 
@@ -421,7 +400,7 @@ function Game({ state }) {
   );
 }
 
-function TableCards({ state }) {
+function TableCards({ state, seconds = 0, showTimer = false }) {
   const { game, players, categories, selfId } = state;
   const tableByPlayer = new Map(game.tableCards.map((entry) => [entry.playerId, entry.card]));
   const participants = players.filter((player) => !player.eliminated || tableByPlayer.has(player.id));
@@ -432,9 +411,10 @@ function TableCards({ state }) {
         const card = tableByPlayer.get(player.id) ||
           (game.phase === "choosing" && player.id === selfId ? game.ownCard : null);
         const isBest = game.result?.winnerIds?.includes(player.id);
+        const isActive = player.id === game.activePlayerId;
         return (
           <div
-            className={`arena-seat ${player.id === game.activePlayerId ? "is-active" : ""} ${isBest ? "is-best" : ""}`}
+            className={`arena-seat ${isActive ? "is-active" : ""} ${isBest ? "is-best" : ""}`}
             style={{ "--seat-index": index }}
             key={player.id}
           >
@@ -454,10 +434,11 @@ function TableCards({ state }) {
               </ScaledCard>
               {isBest && <span className="best-ribbon">{game.result.type === "tie" ? "GLEICHSTAND" : "STICH"}</span>}
             </div>
-            <div className="player-under-card">
+            <div className="player-under-card" aria-current={isActive ? "true" : undefined}>
               <span className="player-dot" />
               <strong>{player.name}</strong>
               {player.id === selfId && <small>DU</small>}
+              {isActive && showTimer && <span className={`turn-timer ${seconds <= 5 ? "is-low" : ""}`}>{seconds}s</span>}
               <b>{player.cardCount}</b>
               {!player.connected && <i>offline</i>}
             </div>
