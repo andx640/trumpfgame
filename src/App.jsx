@@ -716,6 +716,7 @@ function cardValue(card, key) {
   if (card[key] == null || !Number.isFinite(value) || value <= 0) return null;
   if (key === "hubraum") return new Intl.NumberFormat("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value / 1000);
   if (key === "preis" && value >= 1_000_000) return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(value / 1_000_000)} Mio`;
+  if (key !== "preis" && key !== "beschleunigung") return String(Math.round(value)); // wie auf der Vorlage ohne Tausenderpunkt
   return formatValue(value, key);
 }
 
