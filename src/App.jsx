@@ -370,7 +370,7 @@ function Game({ state }) {
   useEffect(() => setSelectedCardId(topCardId), [topCardId]);
 
   return (
-    <section className="game-table-screen" data-seats={seatCount} data-phase={game.phase}>
+    <section className="game-table-screen" data-seats={seatCount}>
       <div className="arena-table">
         <div className="arena-inlay" />
         {isPaused && (
