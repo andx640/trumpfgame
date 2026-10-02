@@ -7,7 +7,7 @@ const SESSION_ROOM = "pitlane-trumpf-room";
 
 // Sekunden bis zu einem Zeitpunkt. Nur die kleinen Anzeige-Komponenten ticken, nicht das ganze Spiel.
 function useSeconds(target) {
-  const compute = () => (target ? Math.max(0, Math.ceil((target - Date.now()) / 1000)) : 0);
+  const compute = () => (target ? Math.max(0, Math.ceil((target - socket.now()) / 1000)) : 0);
   const [seconds, setSeconds] = useState(compute);
   useEffect(() => {
     const tick = () => setSeconds(compute());
@@ -23,9 +23,51 @@ function Seconds({ target }) {
   return useSeconds(target);
 }
 
+const LOW_SECONDS = 10;
+
 function TurnTimer({ target }) {
   const seconds = useSeconds(target);
-  return <span className={`turn-timer ${seconds <= 5 ? "is-low" : ""}`}>{seconds}s</span>;
+  return <span className={`turn-timer ${seconds <= LOW_SECONDS ? "is-low" : ""}`}>{seconds}s</span>;
+}
+
+function vibrate(pattern) {
+  try {
+    navigator.vibrate?.(pattern);
+  } catch {
+    // nicht jedes Gerät kann vibrieren
+  }
+}
+
+// Ring, der in der verbleibenden Zeit leerläuft. Läuft per CSS-Animation, ohne dass React tickt.
+function TimerRing({ target, duration }) {
+  const remaining = Math.max(0, target - socket.now());
+  const elapsed = Math.max(0, duration - remaining);
+  return (
+    <svg className="timer-ring" viewBox="0 0 36 36" aria-hidden="true">
+      <circle className="timer-ring-track" cx="18" cy="18" r="15.9155" />
+      <circle
+        className="timer-ring-bar"
+        cx="18"
+        cy="18"
+        r="15.9155"
+        key={target}
+        style={{ animationDuration: `${duration}ms`, animationDelay: `-${elapsed}ms` }}
+      />
+    </svg>
+  );
+}
+
+function TurnBanner({ target, duration }) {
+  const seconds = useSeconds(target);
+  const low = seconds <= LOW_SECONDS;
+  useEffect(() => {
+    if (low && seconds > 0) vibrate(200);
+  }, [low]);
+  return (
+    <span className={`turn-banner ${low ? "is-low" : ""}`}>
+      <TimerRing target={target} duration={duration} /> DU BIST DRAN · {seconds}s
+    </span>
+  );
 }
 
 function App() {
@@ -382,6 +424,16 @@ function Game({ state }) {
   const timerTarget = isPaused ? game.pausedUntil : isChoosing ? game.turnEndsAt : game.revealEndsAt;
 
   useEffect(() => setSelectedCardId(topCardId), [topCardId, isMyTurn]);
+  useEffect(() => {
+    if (isMyTurn && !isPaused) vibrate([70, 50, 70]);
+  }, [isMyTurn, isPaused, game.turnEndsAt]);
+
+  const isRevealed = game.phase === "revealed";
+  const activePlayer = players.find((player) => player.id === game.activePlayerId);
+  const onTable = new Set(game.tableCards.map((entry) => entry.playerId));
+  const readyIds = game.readyIds || [];
+  const readyNeeded = players.filter((player) => player.connected && !player.isBot && (player.cardCount > 0 || onTable.has(player.id)));
+  const readyCount = readyNeeded.filter((player) => readyIds.includes(player.id)).length;
 
   return (
     <section className={`game-table-screen ${isMyTurn && !isPaused && hand.length ? "is-my-turn" : ""} ${game.phase === "revealed" ? "is-revealing" : ""}`} data-seats={seatCount}>
@@ -392,7 +444,19 @@ function Game({ state }) {
             <SpinnerIcon /> Mitspieler fehlen – das Spiel endet in <Seconds target={timerTarget} /> s, wenn niemand zurückkommt
           </div>
         )}
-        {game.potCount > 0 && game.phase !== "finished" && <div className="arena-pot">Pot <b>{game.potCount}</b></div>}
+        {game.potCount > 0 && game.phase !== "finished" && <div className="arena-pot">Pott <b>{game.potCount}</b></div>}
+        {isChoosing && !isMyTurn && !isPaused && activePlayer && game.turnEndsAt && (
+          <div className="arena-waiting" role="status">
+            <TimerRing target={game.turnEndsAt} duration={game.turnDurationMs || 45000} />
+            <span><b>{activePlayer.name}</b> wählt …</span>
+          </div>
+        )}
+        {isRevealed && game.result?.type === "tie" && (
+          <div className="arena-result" role="status">
+            <strong>Gleichstand!</strong>
+            <span>Pott: {game.potCount} Karten · <b>{activePlayer?.name}</b> wählt nochmal</span>
+          </div>
+        )}
         <TableCards state={state} timerTarget={isChoosing && !isPaused ? game.turnEndsAt : null} />
         <div className="arena-watermark"><LogoMark /><span>TRUMPF</span></div>
       </div>
@@ -407,7 +471,11 @@ function Game({ state }) {
           choosing={isChoosing}
           self={self}
           turnTarget={isMyTurn && !isPaused ? game.turnEndsAt : null}
-          revealTarget={game.phase === "revealed" && !isPaused ? game.revealEndsAt : null}
+          turnDuration={game.turnDurationMs || 45000}
+          revealTarget={isRevealed && !isPaused ? game.revealEndsAt : null}
+          isReady={readyIds.includes(selfId)}
+          readyCount={readyCount}
+          readyTotal={readyNeeded.length}
         />
       )}
 
@@ -416,22 +484,64 @@ function Game({ state }) {
   );
 }
 
+const COLLECT_LEAD_MS = 1000; // so lange vor Rundenende fliegen die Karten zum Gewinner
+
 const TableCards = memo(function TableCards({ state, timerTarget = null }) {
   const { game, players, categories, selfId } = state;
   const tableByPlayer = new Map(game.tableCards.map((entry) => [entry.playerId, entry.card]));
   const participants = players.filter((player) => !player.eliminated || tableByPlayer.has(player.id));
+  const rootRef = useRef(null);
+  const countsBefore = useRef(new Map());
+  const [collecting, setCollecting] = useState(false);
+  const isRevealed = game.phase === "revealed";
+
+  // Kartenzahlen vor dem Aufdecken merken, damit der Zähler des Gewinners erst beim Einsammeln hochzählt.
+  useEffect(() => {
+    if (game.phase === "choosing") countsBefore.current = new Map(players.map((player) => [player.id, player.cardCount]));
+  }, [game.phase, players]);
+
+  useEffect(() => setCollecting(false), [game.phase, game.round]);
+
+  useEffect(() => {
+    if (!isRevealed || !game.revealEndsAt || game.pausedUntil) return undefined;
+    const timer = window.setTimeout(() => setCollecting(true), Math.max(0, game.revealEndsAt - socket.now() - COLLECT_LEAD_MS));
+    return () => window.clearTimeout(timer);
+  }, [isRevealed, game.revealEndsAt, game.pausedUntil]);
+
+  // Ziel der Karten: Kartenzähler des Gewinners, bei Gleichstand der Pott in der Tischmitte.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!collecting || !root) return;
+    const winnerId = game.result?.type === "winner" ? game.result.winnerIds?.[0] : null;
+    const target = winnerId
+      ? root.querySelector(`[data-player="${winnerId}"] .player-under-card b`)
+      : root.parentElement?.querySelector(".arena-pot");
+    const box = (target || root).getBoundingClientRect();
+    const tx = box.left + box.width / 2;
+    const ty = box.top + box.height / 2;
+    root.querySelectorAll(".arena-card-place").forEach((place) => {
+      const rect = place.getBoundingClientRect();
+      place.style.setProperty("--fly-x", `${Math.round(tx - (rect.left + rect.width / 2))}px`);
+      place.style.setProperty("--fly-y", `${Math.round(ty - (rect.top + rect.height / 2))}px`);
+    });
+  }, [collecting]);
 
   return (
-    <div className={`arena-cards count-${participants.length}`}>
+    <div className={`arena-cards count-${participants.length} ${collecting ? "is-collecting" : ""}`} ref={rootRef}>
       {participants.map((player, index) => {
         const card = tableByPlayer.get(player.id) || null;
         const isSelf = player.id === selfId;
         const isBest = game.result?.winnerIds?.includes(player.id);
         const isActive = player.id === game.activePlayerId;
+        const before = countsBefore.current.get(player.id);
+        const played = isRevealed && tableByPlayer.has(player.id) && before !== undefined;
+        const gain = played ? player.cardCount - (before - 1) : 0;
+        const shownCount = played && !collecting ? Math.min(player.cardCount, before - 1) : player.cardCount;
         return (
           <div
             className={`arena-seat ${isActive ? "is-active" : ""} ${isBest ? "is-best" : ""}`}
             style={{ "--seat-index": index }}
+            data-player={player.id}
             key={player.id}
           >
             <div className={`arena-card-place ${isSelf && card ? "is-flying-in" : ""}`}>
@@ -451,7 +561,8 @@ const TableCards = memo(function TableCards({ state, timerTarget = null }) {
               <strong>{player.name}</strong>
               {player.id === selfId && <small>DU</small>}
               {isActive && timerTarget && <TurnTimer target={timerTarget} />}
-              <b>{player.cardCount}</b>
+              <b className={collecting && gain > 0 ? "is-bump" : ""}>{shownCount}</b>
+              {collecting && gain > 0 && <em className="count-gain">+{gain}</em>}
               {!player.connected && <i>offline</i>}
             </div>
           </div>
@@ -478,7 +589,7 @@ function FlipCard({ card, categories, highlight, instant, layers }) {
   );
 }
 
-const HandStack = memo(function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, choosing, self, turnTarget, revealTarget }) {
+const HandStack = memo(function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, choosing, self, turnTarget, turnDuration, revealTarget, isReady, readyCount, readyTotal }) {
   const selectedIndex = Math.max(0, hand.findIndex((card) => card.c_id === selectedCardId));
   const step = (direction) => {
     if (hand.length > 1) onSelectCard(hand[(selectedIndex + direction + hand.length) % hand.length].c_id);
@@ -497,17 +608,28 @@ const HandStack = memo(function HandStack({ hand, categories, selectedCardId, on
       <div className="stack-heading">
         <div>
           {turnTarget
-            ? <span className="turn-banner">DU BIST DRAN · <Seconds target={turnTarget} />s</span>
+            ? <TurnBanner target={turnTarget} duration={turnDuration} />
             : revealTarget
               ? <span className="turn-banner">ERGEBNIS · weiter in <Seconds target={revealTarget} />s</span>
               : <span>DEIN KARTENSTAPEL</span>}
           <strong>Karte {selectedIndex + 1} von {hand.length}</strong>
         </div>
-        <div className="stack-help">
-          <button type="button" className="swipe-symbol" onClick={() => step(-1)} aria-label="Vorherige Karte">←</button>
-          Wischen
-          <button type="button" className="swipe-symbol" onClick={() => step(1)} aria-label="Nächste Karte">→</button>
-        </div>
+        {revealTarget ? (
+          <button
+            type="button"
+            className={`ready-button ${isReady ? "is-ready" : ""}`}
+            disabled={isReady}
+            onClick={() => socket.emit("readyForNext")}
+          >
+            {isReady ? `Bereit ${readyCount}/${readyTotal}` : "Weiter"}
+          </button>
+        ) : (
+          <div className="stack-help">
+            <button type="button" className="swipe-symbol" onClick={() => step(-1)} aria-label="Vorherige Karte">←</button>
+            Wischen
+            <button type="button" className="swipe-symbol" onClick={() => step(1)} aria-label="Nächste Karte">→</button>
+          </div>
+        )}
       </div>
       <div className="stack-carousel">
         <DeckCarousel
@@ -534,8 +656,8 @@ const HandStack = memo(function HandStack({ hand, categories, selectedCardId, on
                     highlight={null}
                   />
                   {isActive && !isTop && <div className="not-playable"><LockIcon /> Nur Karte 1 ist spielbar</div>}
-                  {isActive && isTop && choosing && !canChoose && (
-                    <div className="not-playable"><SpinnerIcon /> {self?.eliminated ? "Du schaust zu" : "Warte auf den aktiven Spieler"}</div>
+                  {isActive && isTop && choosing && !canChoose && self?.eliminated && (
+                    <div className="not-playable"><SpinnerIcon /> Du schaust zu</div>
                   )}
                 </ScaledCard>
               </>

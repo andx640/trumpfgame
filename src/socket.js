@@ -12,6 +12,7 @@ const ACTIONS = {
   chooseCategory: "choose",
   setCardsPerPlayer: "setCards",
   playAgain: "again",
+  readyForNext: "ready",
   requestState: "state"
 };
 
@@ -23,7 +24,13 @@ class PollingSocket {
     this.room = null;
     this.version = 0;
     this.timer = null;
+    this.clockOffset = 0; // Serverzeit minus Gerätezeit, damit alle Timer gleich laufen
     this.poll();
+  }
+
+  /** aktuelle Serverzeit in ms */
+  now() {
+    return Date.now() + this.clockOffset;
   }
 
   on(event, listener) {
@@ -55,6 +62,7 @@ class PollingSocket {
       body: JSON.stringify({ action, token: this.token, room: this.room, ...body })
     });
     const result = await response.json();
+    if (Number.isFinite(result.serverNow)) this.clockOffset = result.serverNow - Date.now();
     this.setConnected(true);
     return result;
   }

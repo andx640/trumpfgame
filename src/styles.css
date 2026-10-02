@@ -3661,12 +3661,12 @@ body:has(.app-shell.is-playing) {
 
 .flip-inner {
   transform-style: preserve-3d;
-  transition: transform 1100ms cubic-bezier(0.45, 0.05, 0.25, 1);
+  transition: transform 450ms ease;
 }
 
 .flip.is-face-up .flip-inner {
   transform: rotateY(180deg);
-  transition-delay: 700ms;
+  transition: transform 1100ms cubic-bezier(0.45, 0.05, 0.25, 1) 700ms;
 }
 
 .flip.is-instant .flip-inner {
@@ -3718,4 +3718,184 @@ body:has(.app-shell.is-playing) {
 
 .game-table-screen.is-revealing[data-seats="2"] .arena-seat {
   --table-card-width: min(44vw, 330px, calc((var(--table-h) - 84px) / 1.551));
+}
+
+/* Timer-Ring: läuft per CSS leer, die letzten 10 s rot */
+.timer-ring {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  transform: rotate(-90deg);
+}
+
+.timer-ring circle {
+  fill: none;
+  stroke-width: 4;
+}
+
+.timer-ring-track {
+  stroke: rgba(255, 255, 255, 0.14);
+}
+
+.timer-ring-bar {
+  stroke: var(--acid);
+  stroke-dasharray: 100;
+  stroke-linecap: round;
+  animation-name: ring-drain;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+@keyframes ring-drain {
+  0% { stroke-dashoffset: 0; stroke: #f9902a; }
+  77% { stroke-dashoffset: 77; stroke: #f9902a; }
+  78% { stroke-dashoffset: 78; stroke: #ff4d3a; }
+  100% { stroke-dashoffset: 100; stroke: #ff4d3a; }
+}
+
+.turn-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.turn-banner .timer-ring {
+  width: 18px;
+  height: 18px;
+}
+
+.stack-heading .turn-banner.is-low,
+.turn-timer.is-low {
+  color: #ff4d3a;
+}
+
+/* Wer gerade wählt (für alle, die warten) */
+.arena-waiting,
+.arena-result {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 10px 18px 10px 12px;
+  border: 1px solid rgba(249, 144, 42, 0.6);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(10, 15, 24, 0.92);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+  font-size: 15px;
+  font-weight: 700;
+  transform: translate(-50%, -50%);
+  animation: banner-in 350ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+  pointer-events: none;
+}
+
+.arena-waiting .timer-ring {
+  width: 28px;
+  height: 28px;
+}
+
+.arena-waiting b,
+.arena-result b {
+  color: var(--acid);
+}
+
+.arena-result {
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 22px;
+  border-radius: 18px;
+  text-align: center;
+  animation-delay: 1500ms;
+}
+
+.arena-result strong {
+  color: var(--acid);
+  font-size: 20px;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.arena-result span {
+  color: #d5dbe6;
+  font-size: 13px;
+}
+
+@keyframes banner-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Einsammeln: Tischkarten fliegen zum Gewinner (oder in den Pott) */
+.arena-cards.is-collecting .arena-card-place {
+  z-index: 7;
+  opacity: 0;
+  transform: translate(var(--fly-x, 0px), var(--fly-y, 0px)) scale(0.22) rotate(8deg);
+  transition:
+    transform 750ms cubic-bezier(0.55, 0, 0.3, 1),
+    opacity 250ms ease 550ms;
+}
+
+.player-under-card {
+  position: relative;
+}
+
+.player-under-card b.is-bump {
+  animation: count-bump 600ms 600ms ease both;
+}
+
+@keyframes count-bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.6); color: #fff; }
+  100% { transform: scale(1); }
+}
+
+.count-gain {
+  position: absolute;
+  right: 6px;
+  bottom: 100%;
+  color: var(--acid);
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 900;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  animation: gain-float 1100ms 600ms ease-out both;
+  pointer-events: none;
+}
+
+@keyframes gain-float {
+  0% { opacity: 0; transform: translateY(8px) scale(0.8); }
+  25% { opacity: 1; transform: translateY(0) scale(1.15); }
+  100% { opacity: 0; transform: translateY(-26px) scale(1); }
+}
+
+/* Weiter-Knopf beim Ergebnis */
+.ready-button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  color: #1a0f08;
+  background: linear-gradient(180deg, #f9902a 0%, #e9700a 100%);
+  box-shadow: 0 6px 18px rgba(242, 116, 12, 0.35);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.ready-button.is-ready {
+  color: #9aa6ba;
+  background: rgba(22, 30, 44, 0.96);
+  box-shadow: none;
+  font-weight: 700;
+  cursor: default;
 }
