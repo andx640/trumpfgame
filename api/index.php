@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 require __DIR__ . '/engine.php';
 
-const TURN_DURATION_MS = 90000;
-const REVEAL_DURATION_MS = 10000;
+const TURN_DURATION_MS = 45000;
+const REVEAL_DURATION_MS = 7000;
+const READY_GRACE_MS = 1200;       // sind alle bereit, geht es nach dieser Zeit weiter (Zeit für die Einsammel-Animation)
 const MAX_PLAYERS = 4;
 const CARD_COUNT_OPTIONS = [8, 16, 32];
 const ONLINE_TIMEOUT_MS = 15000;   // danach gilt ein Spieler als offline
@@ -384,6 +385,32 @@ class TrumpfRoom
             $this->data['status'] = 'finished';
         } else {
             $this->data['game']['revealEndsAt'] = $this->now + REVEAL_DURATION_MS;
+            $this->data['game']['readyIds'] = [];
+        }
+        $this->touch();
+    }
+
+    /** Spieler hat beim Ergebnis auf „Weiter“ getippt. Sind alle Menschen bereit, wird das Ergebnis verkürzt. */
+    public function markReady(string $playerId): void
+    {
+        $game = $this->data['game'];
+        if ($game === null || $game['phase'] !== 'revealed' || $game['revealEndsAt'] === null) {
+            return;
+        }
+        $ready = $game['readyIds'] ?? [];
+        if (!in_array($playerId, $ready, true)) {
+            $ready[] = $playerId;
+        }
+        $this->data['game']['readyIds'] = $ready;
+        $onTable = array_column($game['tableCards'], 'playerId');
+        $allReady = true;
+        foreach ($this->data['players'] as $player) {
+            $needed = $player['connected'] && empty($player['bot'])
+                && (count($player['hand']) > 0 || in_array($player['id'], $onTable, true));
+            $allReady = $allReady && (!$needed || in_array($player['id'], $ready, true));
+        }
+        if ($allReady) {
+            $this->data['game']['revealEndsAt'] = min($game['revealEndsAt'], $this->now + READY_GRACE_MS);
         }
         $this->touch();
     }
@@ -419,6 +446,7 @@ class TrumpfRoom
                 'name' => $entry['name'],
                 'isHost' => $entry['id'] === $data['hostId'],
                 'connected' => $entry['connected'],
+                'isBot' => !empty($entry['bot']),
                 'cardCount' => $count,
                 'eliminated' => $data['status'] !== 'lobby' && $count === 0,
             ];
@@ -448,6 +476,9 @@ class TrumpfRoom
                 'turnEndsAt' => $game['turnEndsAt'],
                 'revealEndsAt' => $game['revealEndsAt'],
                 'pausedUntil' => $game['pausedUntil'] ?? null,
+                'readyIds' => $game['readyIds'] ?? [],
+                'turnDurationMs' => TURN_DURATION_MS,
+                'revealDurationMs' => REVEAL_DURATION_MS,
                 'ownCard' => $hand[0] ?? null,
                 'ownHand' => $hand,
             ];
@@ -485,7 +516,7 @@ if (!is_array($input)) {
 }
 $action = is_string($input['action'] ?? null) ? $input['action'] : '';
 if ($action === 'ping') {
-    respond(['ok' => true]);
+    respond(['ok' => true, 'serverNow' => (int) floor(microtime(true) * 1000)]);
 }
 if ($action === 'cards') {
     // Alle Fahrzeugkarten für die Sammlung (öffentlich, ohne Spielstand).
@@ -659,6 +690,12 @@ try {
             }
             break;
 
+        case 'ready':
+            if ($selfIndex !== null && $room->data['status'] === 'playing') {
+                $room->markReady($room->data['players'][$selfIndex]['id']);
+            }
+            break;
+
         case 'setCards':
             $count = $input['count'] ?? null;
             if (!$isHost()) {
@@ -712,6 +749,7 @@ if ($room->dirty) {
 }
 
 $reply['version'] = $room->data['version'];
+$reply['serverNow'] = $room->now;
 $reply['room'] = $roomCode;
 if (empty($reply['unchanged']) && ($reply['code'] ?? '') !== 'not_joined') {
     $reply['state'] = $selfIndex === null ? null : $room->publicStateFor($selfIndex) + ['sessionId' => $roomCode];
