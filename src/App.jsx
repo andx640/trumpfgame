@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
@@ -361,6 +361,7 @@ function Game({ state }) {
   const now = useClock();
   const self = players.find((player) => player.id === selfId);
   const activePlayer = players.find((player) => player.id === game.activePlayerId);
+  const seatCount = Math.min(4, Math.max(2, players.filter((player) => !player.eliminated || game.tableCards.some((entry) => entry.playerId === player.id)).length));
   const isChoosing = game.phase === "choosing";
   const isMyTurn = isChoosing && game.activePlayerId === selfId;
   const isPaused = Boolean(game.pausedUntil) && game.phase !== "finished";
@@ -383,7 +384,7 @@ function Game({ state }) {
   }, [activePlayer?.name, game.phase, game.result, isChoosing, isMyTurn, isPaused, players]);
 
   return (
-    <section className="game-table-screen">
+    <section className="game-table-screen" data-seats={seatCount}>
       <div className="arena-topbar">
         <div className="arena-brand"><LogoMark /><span>ANDI <b>TRUMPF</b></span></div>
         <div className={`turn-message ${isMyTurn ? "is-own-turn" : ""}`}>
@@ -438,17 +439,19 @@ function TableCards({ state }) {
             key={player.id}
           >
             <div className="arena-card-place">
-              {card ? (
-                <VehicleCard
-                  card={card}
-                  categories={categories}
-                  selectable={game.phase === "choosing" && player.id === selfId && game.activePlayerId === selfId}
-                  highlight={game.category}
-                  tableCard
-                />
-              ) : (
-                <CardBack layers={Math.min(player.cardCount, 3)} />
-              )}
+              <ScaledCard>
+                {card ? (
+                  <VehicleCard
+                    card={card}
+                    categories={categories}
+                    selectable={game.phase === "choosing" && player.id === selfId && game.activePlayerId === selfId}
+                    highlight={game.category}
+                    tableCard
+                  />
+                ) : (
+                  <CardBack layers={Math.min(player.cardCount, 3)} />
+                )}
+              </ScaledCard>
               {isBest && <span className="best-ribbon">{game.result.type === "tie" ? "GLEICHSTAND" : "STICH"}</span>}
             </div>
             <div className="player-under-card">
@@ -509,16 +512,18 @@ function HandStack({ hand, categories, selectedCardId, onSelectCard, canChoose, 
                     {isTop ? <b>SPIELKARTE</b> : <span>#{index + 1}</span>}
                   </div>
                 )}
-                <VehicleCard
-                  card={card}
-                  categories={categories}
-                  selectable={isActive && isTop && canChoose && choosing}
-                  highlight={null}
-                />
-                {isActive && !isTop && <div className="not-playable"><LockIcon /> Nur Karte 1 ist spielbar</div>}
-                {isActive && isTop && choosing && !canChoose && (
-                  <div className="not-playable"><SpinnerIcon /> {self?.eliminated ? "Du schaust zu" : "Warte auf den aktiven Spieler"}</div>
-                )}
+                <ScaledCard>
+                  <VehicleCard
+                    card={card}
+                    categories={categories}
+                    selectable={isActive && isTop && canChoose && choosing}
+                    highlight={null}
+                  />
+                  {isActive && !isTop && <div className="not-playable"><LockIcon /> Nur Karte 1 ist spielbar</div>}
+                  {isActive && isTop && choosing && !canChoose && (
+                    <div className="not-playable"><SpinnerIcon /> {self?.eliminated ? "Du schaust zu" : "Warte auf den aktiven Spieler"}</div>
+                  )}
+                </ScaledCard>
               </>
             );
           }}
@@ -633,6 +638,29 @@ function FlyingStack({ count, selectedIndex, onSelectIndex, label, children }) {
       onPointerCancel={onPointerEnd}
     >
       {cards}
+    </div>
+  );
+}
+
+// Spielkarten werden immer in der Entwurfsgröße 200 × 300 gezeichnet und gleichmäßig auf die verfügbare
+// Breite skaliert. So bleibt der Text auf jeder Kartengröße gleich gut lesbar.
+const CARD_DESIGN_WIDTH = 200;
+
+function ScaledCard({ children }) {
+  const ref = useRef(null);
+  const [scale, setScale] = useState(1);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const update = () => setScale(element.offsetWidth / CARD_DESIGN_WIDTH);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div className="scaled-card" ref={ref}>
+      <div className="scaled-card-inner" style={{ transform: `scale(${scale})` }}>{children}</div>
     </div>
   );
 }
