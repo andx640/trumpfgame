@@ -37,7 +37,7 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0031 | Maserati MC20 | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Maserati_MC20_IAA_2021_1X7A0087.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0032 | Lotus Evija | [MrWalkr](https://commons.wikimedia.org/wiki/File:2022_Lotus_Evija_Silver.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0033 | Koenigsegg Regera | [Aab254](https://commons.wikimedia.org/wiki/File:Regera_(light_gradient).png) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0) |
-| 0034 | Koenigsegg One:1 | [MrWalkr](https://commons.wikimedia.org/wiki/File:Agera_RST_Koenigsegg.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0034 | Koenigsegg One:1 | [Eduardo Parise / eduparise](https://commons.wikimedia.org/wiki/File:Koenigsegg_One-1_-_Gen%C3%A8ve_2014_-_01.jpg) | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0) |
 | 0035 | Koenigsegg CC850 | [MrWalkr](https://commons.wikimedia.org/wiki/File:2022_Koenigsegg_CC850.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0036 | Mercedes-AMG One | [Calreyn88](https://commons.wikimedia.org/wiki/File:2023_Mercedes_AMG_One_1.jpg) | [CC0](http://creativecommons.org/publicdomain/zero/1.0/deed.en) |
 | 0037 | Koenigsegg CCXR | [Alexandre Prévot from Nancy, France](https://commons.wikimedia.org/wiki/File:Koenigsegg_CCX_-_Flickr_-_Alexandre_Pr%C3%A9vot_(11).jpg) | [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0) |
@@ -53,8 +53,8 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0047 | McLaren W1 | [MrWalkr](https://commons.wikimedia.org/wiki/File:2024_McLaren_W1_SP25.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0048 | McLaren 750S | [Alexander-93](https://commons.wikimedia.org/wiki/File:McLaren_750S_Spider_IMG_2458.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0049 | McLaren Artura | [Liam Walker](https://commons.wikimedia.org/wiki/File:2021_McLaren_Artura_(1).jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
-| 0050 | McLaren 675LT | [Tokumeigakarinoaoshima](https://commons.wikimedia.org/wiki/File:The_frontview_of_McLaren_650S_Coup%C3%A9_(cropped-2).JPG) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
-| 0051 | McLaren 600LT | [Mr.choppers](https://commons.wikimedia.org/wiki/File:2017_McLaren_570S,_blue,_front_left.jpg) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
+| 0050 | McLaren 675LT | [MrWalkr](https://commons.wikimedia.org/wiki/File:2016_McLaren_675LT_Orange.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0051 | McLaren 600LT | [Matti Blume](https://commons.wikimedia.org/wiki/File:McLaren_600LT_Spider,_GIMS_2019,_Le_Grand-Saconnex_(GIMS1233).jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0052 | McLaren 12C | [M 93](https://commons.wikimedia.org/wiki/File:McLaren_MP4-12C_%E2%80%93_Frontansicht_(1),_30._August_2012,_D%C3%BCsseldorf.jpg) | [CC BY-SA 3.0 de](https://creativecommons.org/licenses/by-sa/3.0/de/deed.en) |
 | 0053 | Ferrari F80 | [Pauls.127](https://commons.wikimedia.org/wiki/File:FerrariF80_(resized)_(cropped).jpg) | [CC0](http://creativecommons.org/publicdomain/zero/1.0/deed.en) |
 | 0054 | Porsche 911 GT3 RS | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Porsche_992_GT3_1X7A0323.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
@@ -67,17 +67,17 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0061 | Aston Martin DBS 770 Ultimate | [Vauxford](https://commons.wikimedia.org/wiki/File:2018_Aston_Martin_DBS_Superleggera_V12_Automatic_5.2_Front.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0062 | Ferrari Daytona SP3 | [Prova MO](https://commons.wikimedia.org/wiki/File:Ferrari_Daytona_SP3_front_side_at_CF_2022.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0063 | Ferrari Monza SP2 | [TTTNIS](https://commons.wikimedia.org/wiki/File:2021_Ferrari_Monza_SP2.jpg) | [CC0](http://creativecommons.org/publicdomain/zero/1.0/deed.en) |
-| 0064 | Ferrari 812 Competizione | [Alexander-93](https://commons.wikimedia.org/wiki/File:Ferrari_812_Superfast_IMG_8829.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0064 | Ferrari 812 Competizione | [Calreyn88](https://commons.wikimedia.org/wiki/File:Ferrari_812_Competizione_Aperta.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0065 | Ferrari 296 GTB | [Max Baillie](https://commons.wikimedia.org/wiki/File:2022_Ferrari_296_(cropped).jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0066 | Chevrolet Corvette ZR1 | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Chevrolet_Corvette_C8_IAA_2021_1X7A0156.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
-| 0067 | Ferrari 488 Pista | [Vauxford](https://commons.wikimedia.org/wiki/File:2018_Ferrari_488_GTB_Spider_S-A_3.9_Front.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0067 | Ferrari 488 Pista | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Ferrari_488_Pista_Genf_2018.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0068 | Dodge Viper ACR | [Patrick Corcoran](https://commons.wikimedia.org/wiki/File:%22_14_Fiat-Chrysler_SRT_Viper_GTS_(cropped).jpg) | [CC BY 2.0 it](https://creativecommons.org/licenses/by/2.0/it/deed.en) |
 | 0069 | Acura NSX Type S | [Matti Blume](https://commons.wikimedia.org/wiki/File:Honda,_Paris_Motor_Show_2018,_Paris_(1Y7A1625)_(cropped).jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
-| 0070 | Ferrari 458 Speciale | [Michael Barera](https://commons.wikimedia.org/wiki/File:Ferrari_458_Fort_Worth_June_2016_56_(Ferrari)_(cropped-2).jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0070 | Ferrari 458 Speciale | [MotorBlog](https://commons.wikimedia.org/wiki/File:Ferrari_458_Speciale_-.jpg) | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0) |
 | 0071 | Ferrari 12Cilindri | [Mr.choppers](https://commons.wikimedia.org/wiki/File:2025_Ferrari_12Cilindri_in_Rosso_Imola,_front_left.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0072 | Ferrari F50 | [MrWalkr](https://commons.wikimedia.org/wiki/File:1999_Ferrari_F50.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
-| 0073 | Ferrari 599 GTO | [Mr.choppers](https://commons.wikimedia.org/wiki/File:2009_Ferrari_599_GTB_Fiorano_F1,_Rosso_Fiorano_-_front_right.jpg) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
-| 0074 | Ferrari F12tdf | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Ferrari_F12berlinetta_IMG_2941.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0073 | Ferrari 599 GTO | [Handelsgeselschaft](https://commons.wikimedia.org/wiki/File:Ferrari_599_GTO,_Pau_2015.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0074 | Ferrari F12tdf | [Falcon® Photography from France](https://commons.wikimedia.org/wiki/File:Gray_Tdf_(27618963026).jpg) | [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0) |
 | 0075 | Ferrari 288 GTO | [GTHO](https://commons.wikimedia.org/wiki/File:Ferrari_288_GTO_(1).JPG) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0076 | Ferrari SF90 XX Stradale | [Calreyn88](https://commons.wikimedia.org/wiki/File:2024_Ferrari_SF90_XX_Spider_2.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0077 | Lamborghini Sián FKP 37 | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Lamborghini_Sian_at_IAA_2019_IMG_0332.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
@@ -89,7 +89,7 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0083 | Lamborghini Aventador LP 780-4 Ultimae | [Ethan Llamas](https://commons.wikimedia.org/wiki/File:Lamborghini_Aventador_LP_780-4_Ultimae_Roadster_2022_(2).jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0084 | Lamborghini Reventón | [Francesco Gasparetti from Senigallia, Italy](https://commons.wikimedia.org/wiki/File:MotorShow_2007,_Lamborghini_-_Flickr_-_Gaspa_(1)_(cropped).jpg) | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0) |
 | 0085 | Lamborghini Gallardo LP 570-4 Superleggera | [JoachimKohler-HB](https://commons.wikimedia.org/wiki/File:Lamborghini_Superleggera-20180708.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
-| 0086 | Lamborghini Diablo GT | [MrWalkr](https://commons.wikimedia.org/wiki/File:1995_Lamborghini_Diablo_SE_30.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0086 | Lamborghini Diablo GT | [MrWalkr](https://commons.wikimedia.org/wiki/File:2000_Lamborghini_Diablo_GT_Rear.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0087 | Aston Martin Valhalla | [MrWalkr](https://commons.wikimedia.org/wiki/File:2026_Aston_Martin_Valhalla_SCD_26.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0088 | Rimac Concept One | [Norbert Aepli, Switzerland ( User:Noebu )](https://commons.wikimedia.org/wiki/File:2016-03-01_Geneva_Motor_Show_0977_(cropped).JPG) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0) |
 | 0089 | Pininfarina Battista | [Vauxford](https://commons.wikimedia.org/wiki/File:2019_Automobili_Pininfarina_Battista_Front.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
@@ -97,14 +97,14 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0091 | Aston Martin One-77 | [MrWalkr](https://commons.wikimedia.org/wiki/File:2011_Aston_Martin_One-77_SCD_24.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0092 | Nio EP9 | [Jengtingchen](https://commons.wikimedia.org/wiki/File:Nio_EP9.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0093 | Aston Martin Vulcan | [Kevin Decherf from Nantes, France](https://commons.wikimedia.org/wiki/File:Aston_Martin_Vulcan_(27701406352).jpg) | [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0) |
-| 0094 | Aston Martin Vanquish | [Jakub "flyz1" Maciejewski](https://commons.wikimedia.org/wiki/File:Aston_Martin_Vanquish_S_-_prawy_prz%C3%B3d_(MSP17).jpg) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
+| 0094 | Aston Martin Vanquish | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Aston_Martin_Vanquish_(2024)_DSC_7892.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0095 | Mercedes-Benz SLR McLaren | [Alexandre Prévot from Nancy, France](https://commons.wikimedia.org/wiki/File:Mercedes-Benz_SLR_McLaren_(8615164079).jpg) | [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0) |
-| 0096 | Mercedes-AMG GT R Pro | [Thesupermat](https://commons.wikimedia.org/wiki/File:Festival_automobile_international_2015_-_Mercedes_AMG_GT_-_003.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0096 | Mercedes-AMG GT R Pro | [MrWalkr](https://commons.wikimedia.org/wiki/File:2019_Mercedes-AMG_GT_R_Pro_FOS19.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0097 | Porsche 911 GT2 RS | [Alexandre Prévot from Nancy, France](https://commons.wikimedia.org/wiki/File:Porsche_991_GT2_RS_(41654760692)_(cropped).jpg) | [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0) |
 | 0098 | Porsche 911 GT1 Straßenversion | [Morio](https://commons.wikimedia.org/wiki/File:Porsche_911_GT1-96_front-left_Porsche_Museum.jpg) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
 | 0099 | Gordon Murray T.50 | [MrWalkr](https://commons.wikimedia.org/wiki/File:2024_GMA_T.50_SCD24.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0100 | Czinger 21C | [MrWalkr](https://commons.wikimedia.org/wiki/File:Czinger_21C_FOS2022.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
-| 0101 | Zenvo TSR-S | [Karsakov](https://commons.wikimedia.org/wiki/File:Zenvo_TS1_cropped_(cropped).jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0101 | Zenvo TSR-S | [Calreyn88](https://commons.wikimedia.org/wiki/File:Zenvo_TSR-S_VP2.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0102 | De Tomaso P72 | [Calreyn88](https://commons.wikimedia.org/wiki/File:2022_De_Tomaso_P72_2.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0103 | Pagani Huayra BC | [Matti Blume](https://commons.wikimedia.org/wiki/File:Pagani_Huayra_BC_Roadster,_BAS_24,_Brussels_(P1170496).jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.en) |
 | 0104 | Pagani Zonda Cinque | [https://www.flickr.com/photos/ejcallow/](https://commons.wikimedia.org/wiki/File:Pagani_Zonda_Cinque.jpg) | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0) |
@@ -112,7 +112,7 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0106 | Saleen S7 Twin Turbo | [steve lyon from los angeles, ca, usa](https://commons.wikimedia.org/wiki/File:Saleen_S7_(8228619567).jpg) | [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0) |
 | 0107 | Noble M600 | [Brian Snelson](https://commons.wikimedia.org/wiki/File:Noble_M600.jpg) | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0) |
 | 0108 | Vector W8 | [Karrmann](https://commons.wikimedia.org/wiki/File:VectorW8.jpg) | [CC BY-SA 3.0](http://creativecommons.org/licenses/by-sa/3.0/) |
-| 0109 | Chevrolet Corvette E-Ray | [Ermell](https://commons.wikimedia.org/wiki/File:Chevrolet_Corvette_Sting_Ray_Convertible_(C2)-_6280171.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0109 | Chevrolet Corvette E-Ray | [John Bauld from Toronto, Canada](https://commons.wikimedia.org/wiki/File:Corvette_E-Ray_(54336528524).jpg) | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0) |
 | 0110 | Brabham BT62 | [Vauxford](https://commons.wikimedia.org/wiki/File:2018_Brabham_BT62_5.4_Front.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0111 | Apollo Intensa Emozione | [Kevauto](https://commons.wikimedia.org/wiki/File:Apollo_Intensa_Emozione_(IE)_Golden_Dragon,_front_2.1.20.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0112 | Mercedes-Benz SLS AMG Black Series | [M 93](https://commons.wikimedia.org/wiki/File:Mercedes-Benz_SLS_AMG_(C_197)_%E2%80%93_Frontansicht_ge%C3%B6ffnet,_10._August_2011,_D%C3%BCsseldorf.jpg) | [CC BY-SA 3.0 de](https://creativecommons.org/licenses/by-sa/3.0/de/deed.en) |
