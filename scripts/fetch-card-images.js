@@ -57,6 +57,25 @@ const FILE_OVERRIDES = {
   "0036": "2023 Mercedes AMG One 1.jpg"
 };
 
+// Gezielte Commons-Suche für Varianten: Suchbegriff und Muster, das im Dateinamen vorkommen muss.
+const SEARCH_HINTS = {
+  "0034": ["Koenigsegg One:1", /one[ :_-]?1/],
+  "0050": ["McLaren 675LT", /675/],
+  "0051": ["McLaren 600LT", /600 ?lt/],
+  "0064": ["Ferrari 812 Competizione", /competizione/],
+  "0067": ["Ferrari 488 Pista", /pista/],
+  "0070": ["Ferrari 458 Speciale", /speciale/],
+  "0073": ["Ferrari 599 GTO", /599 ?gto/],
+  "0074": ["Ferrari F12tdf", /tdf/],
+  "0086": ["Lamborghini Diablo GT", /diablo gt(?!r)/],
+  "0094": ["Aston Martin Vanquish 2025", /vanquish(?!.*\bs\b).*202[4-6]|202[4-6].*vanquish(?!.*\bs\b)/],
+  "0096": ["Mercedes-AMG GT R Pro", /r pro/],
+  "0101": ["Zenvo TSR-S", /tsr/],
+  "0109": ["Corvette E-Ray", /e-?ray/]
+};
+// Mit REFRESH_IDS=0001,0002 werden diese Karten neu gesucht, auch wenn schon ein Foto da ist.
+const REFRESH_IDS = new Set(String(process.env.REFRESH_IDS || "").split(",").map((id) => id.trim()).filter(Boolean));
+
 function apiUrl(host, parameters) {
   const url = new URL(`https://${host}/w/api.php`);
   Object.entries({ format: "json", origin: "*", ...parameters }).forEach(([key, value]) => {
@@ -145,7 +164,7 @@ async function main() {
   const usedFiles = new Set();
   for (const card of cards) {
     const existing = existingCatalog[card.c_id];
-    if (existing?.localImage) {
+    if (existing?.localImage && !REFRESH_IDS.has(card.c_id)) {
       result[card.c_id] = existing;
       usedFiles.add(normalizedTitle(decodeURIComponent(String(existing.pageUrl || "").split("/wiki/")[1] || "")));
     }
@@ -164,15 +183,19 @@ async function main() {
 
   // Varianten teilen sich oft einen Wikipedia-Artikel; dann wird auf Commons nach einem eigenen Foto gesucht.
   async function searchFile(card) {
+    const [searchTerm, mustMatch] = SEARCH_HINTS[card.c_id] || [card.name, null];
     const data = await query("commons.wikimedia.org", {
       action: "query",
       list: "search",
-      srsearch: `${card.name} filetype:bitmap`,
+      srsearch: `${searchTerm} filetype:bitmap`,
       srnamespace: "6",
       srlimit: "20"
     });
     const hit = (data.query?.search || []).find(
-      (entry) => /\.(jpe?g|png)$/i.test(entry.title) && !usedFiles.has(normalizedTitle(entry.title))
+      (entry) =>
+        /\.(jpe?g|png)$/i.test(entry.title) &&
+        !usedFiles.has(normalizedTitle(entry.title)) &&
+        (!mustMatch || mustMatch.test(normalizedTitle(entry.title)))
     );
     return hit ? hit.title.replace(/^File:/i, "") : null;
   }
@@ -185,7 +208,9 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 1_000));
     const page = pageByCard.get(card.c_id);
     let fileTitle = FILE_OVERRIDES[card.c_id] || page?.pageimage;
-    if (!fileTitle || usedFiles.has(normalizedTitle(fileTitle))) fileTitle = await searchFile(card);
+    if (!fileTitle || usedFiles.has(normalizedTitle(fileTitle)) || SEARCH_HINTS[card.c_id]) {
+      fileTitle = await searchFile(card);
+    }
     const imageInfo = fileTitle ? await imageInfoFor(fileTitle) : null;
     const metadata = imageInfo?.extmetadata || {};
     const image = imageInfo?.thumburl || null;
@@ -200,6 +225,15 @@ async function main() {
         licenseUrl: metadata.LicenseUrl?.value || imageInfo.descriptionurl
       };
       process.stdout.write(`✓ ${card.c_id} ${card.name} (${fileTitle})\n`);
+      // Neues Foto für eine schon gespeicherte Karte: alte lokale Datei entfernen, damit sie neu geladen wird.
+      if (existingCatalog[card.c_id]?.localImage && existingCatalog[card.c_id].pageUrl !== imageInfo.descriptionurl) {
+        await fs.rm(path.join(__dirname, "..", existingCatalog[card.c_id].localImage), { force: true });
+      } else if (existingCatalog[card.c_id]?.localImage) {
+        result[card.c_id].localImage = existingCatalog[card.c_id].localImage;
+      }
+    } else if (existingCatalog[card.c_id]) {
+      result[card.c_id] = existingCatalog[card.c_id];
+      process.stdout.write(`• ${card.c_id} ${card.name}: kein passenderes Foto, altes bleibt\n`);
     } else {
       process.stdout.write(`– ${card.c_id} ${card.name}: kein Bild gefunden\n`);
     }

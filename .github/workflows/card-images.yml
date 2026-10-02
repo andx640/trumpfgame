@@ -3,6 +3,11 @@ name: Kartenbilder laden
 # Lädt fehlende Fahrzeugfotos von Wikimedia Commons und committet sie in den Branch.
 on:
   workflow_dispatch:
+    inputs:
+      refresh:
+        description: "Karten-IDs, die neu gesucht werden sollen (kommagetrennt)"
+        required: false
+        default: ""
   push:
     branches: ["claude/**"]
     paths: [".github/workflows/card-images.yml"]
@@ -21,6 +26,8 @@ jobs:
           node-version: 22
 
       - run: npm run images:update
+        env:
+          REFRESH_IDS: ${{ inputs.refresh }}
 
       - name: Bilder committen
         run: |
