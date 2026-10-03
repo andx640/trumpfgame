@@ -15,8 +15,8 @@ const LOBBY_TIMEOUT_MS = 20000;    // in der Lobby fliegen inaktive Spieler raus
 const IDLE_RESET_MS = 300000;      // laufende Partie ohne jeden Spieler wird nach 5 Minuten zurückgesetzt
 const LAST_SEEN_REFRESH_MS = 3000;
 const PAUSE_END_MS = 60000;        // weniger als 2 Spieler online: nach 1 Minute endet die Partie
-const DEV_SESSION_ID = '123456';   // feste Test-Session mit Bot (siehe dev_session_enabled)
-const BOT_THINK_MS = 1500;         // so lange „überlegt“ der Test-Bot, bevor er eine Kategorie wählt
+const AI_LEVELS = ['easy', 'medium', 'hard'];
+const AI_NAMES = ['easy' => 'KI Leicht', 'medium' => 'KI Mittel', 'hard' => 'KI Schwer'];
 
 function cleanName($value): string
 {
@@ -25,54 +25,6 @@ function cleanName($value): string
     $value = $mb ? mb_substr($value, 0, 100, 'UTF-8') : substr($value, 0, 100);
     $value = trim((string) preg_replace('/\s+/u', ' ', $value));
     return $mb ? mb_substr($value, 0, 20, 'UTF-8') : substr($value, 0, 20);
-}
-
-/**
- * Feste Test-Session DEV_SESSION_ID mit einem Test-Bot: Sie gibt es immer, auch online, damit man alleine
- * ins Spielfeld kommt, ohne einen zweiten Spieler zu brauchen. TRUMPF_DEV_SESSION=0 schaltet sie ab.
- */
-function dev_session_enabled(): bool
-{
-    return getenv('TRUMPF_DEV_SESSION') !== '0';
-}
-
-/** Frischer Raum für die Dev-Session: schon ein Bot als Mitspieler, damit man alleine starten kann. */
-function dev_room_data(): array
-{
-    $room = TrumpfRoom::fresh();
-    $room['players'][] = [
-        'id' => bin2hex(random_bytes(16)),
-        'token' => bin2hex(random_bytes(24)),
-        'name' => 'Test-Bot',
-        'connected' => true,
-        'lastSeen' => (int) floor(microtime(true) * 1000),
-        'hand' => [],
-        'bot' => true,
-    ];
-    return $room;
-}
-
-/** Der Bot wählt die Kategorie, in der seine Karte im Vergleich zu allen Karten am stärksten ist. */
-function bot_category(string $cardId): string
-{
-    $deck = trumpf_load_deck();
-    $card = $deck[$cardId] ?? null;
-    if ($card === null) {
-        return (string) array_key_first(TRUMPF_CATEGORIES);
-    }
-    $best = (string) array_key_first(TRUMPF_CATEGORIES);
-    $bestScore = -1;
-    foreach (TRUMPF_CATEGORIES as $key => $rule) {
-        $worse = 0;
-        foreach ($deck as $other) {
-            $worse += ($rule['direction'] === 'low' ? $other[$key] > $card[$key] : $other[$key] < $card[$key]) ? 1 : 0;
-        }
-        if ($worse > $bestScore) {
-            $bestScore = $worse;
-            $best = $key;
-        }
-    }
-    return $best;
 }
 
 function respond(array $data, int $status = 200): void
@@ -215,14 +167,15 @@ class TrumpfRoom
             $game = $this->data['game'];
             if ($game['phase'] === 'choosing' && $game['turnEndsAt'] !== null) {
                 $botIndex = trumpf_player_index($this->data['players'], $game['activePlayerId']);
-                $botCard = $botIndex === null ? null : ($this->data['players'][$botIndex]['hand'][0] ?? null);
+                $bot = $botIndex === null ? null : $this->data['players'][$botIndex];
+                $botCard = $bot === null ? null : ($bot['hand'][0] ?? null);
                 if (
                     $botCard !== null
-                    && !empty($this->data['players'][$botIndex]['bot'])
-                    && $this->now >= $game['turnEndsAt'] - TURN_DURATION_MS + BOT_THINK_MS
+                    && !empty($bot['bot'])
+                    && $this->now >= $game['turnEndsAt'] - TURN_DURATION_MS + ai_think_ms((string) ($bot['difficulty'] ?? 'medium'), $bot['id'] . ':' . $game['round'])
                 ) {
                     try {
-                        $this->revealCards($game['activePlayerId'], bot_category((string) $botCard));
+                        $this->revealCards($game['activePlayerId'], ai_choose_category((string) $botCard, (string) ($bot['difficulty'] ?? 'medium'), $this->cardsInPlay()));
                     } catch (TrumpfError $error) {
                         break;
                     }
@@ -370,6 +323,21 @@ class TrumpfRoom
             $this->data['version'] = $version;
             $this->touch();
         }
+    }
+
+    /** Alle Karten, die in dieser Partie noch im Spiel sind (Hände, Pott, Tisch). */
+    public function cardsInPlay(): array
+    {
+        $ids = [];
+        foreach ($this->data['players'] as $player) {
+            foreach ($player['hand'] as $cardId) {
+                $ids[] = (string) $cardId;
+            }
+        }
+        foreach ($this->data['game']['pot'] ?? [] as $cardId) {
+            $ids[] = (string) $cardId;
+        }
+        return $ids;
     }
 
     public function armTurn(): void
@@ -535,6 +503,7 @@ class TrumpfRoom
                 'isHost' => $entry['id'] === $data['hostId'],
                 'connected' => $entry['connected'],
                 'isBot' => !empty($entry['bot']),
+                'difficulty' => $entry['difficulty'] ?? null,
                 'level' => $entry['accountLevel'] ?? null,
                 'cardCount' => $count,
                 'eliminated' => $data['status'] !== 'lobby' && $count === 0,
@@ -587,6 +556,8 @@ class TrumpfRoom
             'stats' => $data['stats']['players'] ?? new stdClass(),
             'topCard' => $this->topCard(),
             'rematchIds' => $data['rematch'] ?? [],
+            'solo' => !empty($data['solo']),
+            'aiLevel' => $data['aiLevel'] ?? null,
         ];
     }
 }
@@ -660,11 +631,6 @@ if ($creating) {
     fclose($gc);
 }
 
-$devRoom = $roomCode === DEV_SESSION_ID && dev_session_enabled();
-if ($devRoom && !is_file($dataDir . '/room_' . $roomCode . '.json')) {
-    file_put_contents($dataDir . '/room_' . $roomCode . '.json', json_encode(dev_room_data()));
-}
-
 if ($roomCode === '' || !is_file($dataDir . '/room_' . $roomCode . '.json')) {
     if ($action === 'join') {
         respond(['ok' => false, 'message' => 'Diese Session-ID gibt es nicht.']);
@@ -689,6 +655,7 @@ $room->tick();
 $selfIndex = $room->playerIndexByToken($token);
 
 $reply = ['ok' => true];
+$deleteRoom = false;
 $fail = static function (string $message) {
     return ['ok' => false, 'message' => $message];
 };
@@ -705,6 +672,10 @@ try {
                 $name = $account['name'];
             } elseif ($name !== '' && $selfIndex === null && trumpf_account_by_name($name) !== null) {
                 $reply = $fail('Dieser Spielername ist registriert. Melde dich an oder nimm einen anderen Namen.');
+                break;
+            }
+            if ($selfIndex === null && !empty($room->data['solo'])) {
+                $reply = $fail('Das ist ein Spiel gegen die KI, da kann niemand sonst beitreten.');
                 break;
             }
             if ($selfIndex !== null) {
@@ -724,7 +695,7 @@ try {
                 }
                 if (!$anyoneOnline) {
                     $version = $room->data['version'];
-                    $room->data = $devRoom ? dev_room_data() : TrumpfRoom::fresh();
+                    $room->data = TrumpfRoom::fresh();
                     $room->data['version'] = $version;
                     $room->touch();
                 }
@@ -759,6 +730,26 @@ try {
                 if ($room->data['hostId'] === null) {
                     $room->data['hostId'] = $room->data['players'][$selfIndex]['id'];
                 }
+                $ai = $creating && is_array($input['ai'] ?? null) ? $input['ai'] : null;
+                if ($ai !== null) {
+                    // Spiel gegen die KI: 1 bis 3 Gegner in der gewählten Stufe, niemand sonst kann beitreten.
+                    $level = in_array($ai['difficulty'] ?? '', AI_LEVELS, true) ? $ai['difficulty'] : 'medium';
+                    $opponents = max(1, min(MAX_PLAYERS - 1, (int) ($ai['opponents'] ?? 1)));
+                    for ($i = 1; $i <= $opponents; $i++) {
+                        $room->data['players'][] = [
+                            'id' => bin2hex(random_bytes(16)),
+                            'token' => bin2hex(random_bytes(24)),
+                            'name' => AI_NAMES[$level] . ($opponents > 1 ? ' ' . $i : ''),
+                            'connected' => true,
+                            'lastSeen' => $room->now,
+                            'hand' => [],
+                            'bot' => true,
+                            'difficulty' => $level,
+                        ];
+                    }
+                    $room->data['solo'] = true;
+                    $room->data['aiLevel'] = $level;
+                }
                 $room->transferHost(); // ein Bot als Host wird sofort durch den Menschen ersetzt
                 $room->touch();
                 $reply += ['token' => $newToken, 'reconnected' => false];
@@ -771,6 +762,9 @@ try {
                 $selfIndex = null;
                 $room->transferHost();
                 $room->touch();
+                if (!empty($room->data['solo'])) {
+                    $deleteRoom = true; // gegen die KI spielt sonst niemand, der Raum wird nicht mehr gebraucht
+                }
             }
             break;
 
@@ -843,6 +837,11 @@ try {
 }
 
 trumpf_record_results($room);
+
+if ($deleteRoom) {
+    $room->dirty = false;
+    @unlink($roomFile);
+}
 
 if ($room->dirty) {
     $tmp = $roomFile . '.tmp';

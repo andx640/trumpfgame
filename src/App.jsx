@@ -178,9 +178,9 @@ function App() {
     };
   }, []);
 
-  const join = (name, room) => {
+  const join = (name, room, ai) => {
     setJoining(true);
-    socket.emit("joinGame", { name, room, create: view === "new", authToken: account ? authToken : undefined }, (response) => {
+    socket.emit("joinGame", { name, room, create: view === "new", authToken: account ? authToken : undefined, ai }, (response) => {
       setJoining(false);
       if (!response?.ok) {
         setNotice(response?.message || "Beitritt fehlgeschlagen.");
@@ -375,13 +375,24 @@ function Header({ connected, state }) {
   );
 }
 
+const AI_LEVEL_INFO = [
+  { id: "easy", label: "Leicht", hint: "wählt oft zufällig" },
+  { id: "medium", label: "Mittel", hint: "spielt meist clever" },
+  { id: "hard", label: "Schwer", hint: "kennt die Karten im Spiel" }
+];
+
 function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) {
   const [typedName, setName] = useState(sessionStorage.getItem(SESSION_NAME) || "");
-  const name = account ? account.name : typedName;
   const [sessionId, setSessionId] = useState("");
+  const [vsAi, setVsAi] = useState(false);
+  const [difficulty, setDifficulty] = useState("medium");
+  const [opponents, setOpponents] = useState(1);
+  const name = account ? account.name : typedName;
+  const ai = mode === "new" && vsAi;
   const submit = (event) => {
     event.preventDefault();
-    if (name.trim() && (mode !== "join" || sessionId)) onJoin(name.trim(), sessionId);
+    if (!name.trim() || (mode === "join" && !sessionId)) return;
+    onJoin(name.trim(), sessionId, ai ? { difficulty, opponents } : undefined);
   };
 
   return (
@@ -391,10 +402,18 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
         {onBack && <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>}
         <p className="eyebrow">STARTAUFSTELLUNG</p>
         <h2>{mode === "join" ? "Spiel beitreten" : "Neues Spiel"}</h2>
+        {mode === "new" && (
+          <div className="account-tabs" role="tablist" aria-label="Spielart">
+            <button type="button" role="tab" aria-selected={!vsAi} onClick={() => setVsAi(false)}>Mit Freunden</button>
+            <button type="button" role="tab" aria-selected={vsAi} onClick={() => setVsAi(true)}>Gegen KI</button>
+          </div>
+        )}
         <p className="muted">
           {mode === "join"
             ? "Gib einen Spielernamen und die Session-ID ein."
-            : "Gib einen Spielernamen ein."}
+            : ai
+              ? "Wähle die Stärke und die Zahl der Gegner."
+              : "Gib einen Spielernamen ein, danach schickst du Freunden die Session-ID."}
         </p>
         <form onSubmit={submit}>
           <label htmlFor="player-name">Fahrername</label>
@@ -419,8 +438,36 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
               />
             </>
           )}
+          {ai && (
+            <>
+              <span className="field-label">Schwierigkeit</span>
+              <div className="ai-levels" role="radiogroup" aria-label="Schwierigkeit">
+                {AI_LEVEL_INFO.map((level) => (
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={difficulty === level.id}
+                    className={`ai-level is-${level.id}`}
+                    key={level.id}
+                    onClick={() => setDifficulty(level.id)}
+                  >
+                    <strong>{level.label}</strong>
+                    <small>{level.hint}</small>
+                  </button>
+                ))}
+              </div>
+              <span className="field-label">Gegner</span>
+              <div className="ai-opponents" role="radiogroup" aria-label="Anzahl der Gegner">
+                {[1, 2, 3].map((count) => (
+                  <button type="button" role="radio" aria-checked={opponents === count} key={count} onClick={() => setOpponents(count)}>
+                    {count} Gegner
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <button className="primary-button" disabled={!connected || joining || !name.trim() || (mode === "join" && sessionId.length < 4)}>
-            <span>{joining ? "Beitritt läuft …" : "Lobby beitreten"}</span>
+            <span>{joining ? "Beitritt läuft …" : mode === "join" ? "Lobby beitreten" : ai ? "Gegen KI spielen" : "Lobby eröffnen"}</span>
             <ArrowIcon />
           </button>
         </form>
@@ -436,7 +483,7 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
 function Lobby({ state, onLeave }) {
   const selfIsHost = state.selfId === state.hostId;
   const canStart = state.players.length >= 2;
-  const openSeats = Array.from({ length: state.maxPlayers - state.players.length });
+  const openSeats = state.solo ? [] : Array.from({ length: state.maxPlayers - state.players.length });
   const cardCountOptions = state.cardCountOptions || [8, 16, 32];
   const totalCards = state.players.length * state.cardsPerPlayer;
 
@@ -446,11 +493,15 @@ function Lobby({ state, onLeave }) {
         <div>
           <p className="eyebrow"><span /> BOXENGASSE OFFEN</p>
           <h1>Die Startaufstellung</h1>
-          <p className="muted">Sobald mindestens zwei Fahrer bereit sind, kann der Host austeilen.</p>
+          <p className="muted">{state.solo ? "Du spielst gegen die KI. Wähle die Kartenzahl und starte." : "Sobald mindestens zwei Fahrer bereit sind, kann der Host austeilen."}</p>
         </div>
         <button className="text-button" onClick={onLeave}>Lobby verlassen</button>
       </div>
-      <p className="muted session-code">Session-ID zum Beitreten: <b>{state.sessionId}</b></p>
+      {state.solo ? (
+        <p className="muted session-code">Spiel gegen KI · Stufe <b>{AI_LEVEL_INFO.find((level) => level.id === state.aiLevel)?.label || "Mittel"}</b></p>
+      ) : (
+        <p className="muted session-code">Session-ID zum Beitreten: <b>{state.sessionId}</b></p>
+      )}
 
       <div className="lobby-grid">
         <div className="players-panel panel">
@@ -464,7 +515,7 @@ function Lobby({ state, onLeave }) {
                 <div className="avatar">{initials(player.name)}</div>
                 <div className="seat-copy">
                   <strong>{player.name} {player.level && <LevelBadge level={player.level} />} {player.id === state.selfId && <small>DU</small>}</strong>
-                  <span>{player.isHost ? "Rennleitung · Host" : `Startplatz ${index + 1}`}</span>
+                  <span>{player.isBot ? "Computergegner" : player.isHost ? "Rennleitung · Host" : `Startplatz ${index + 1}`}</span>
                 </div>
                 <i className="ready-light" aria-label="Bereit" />
               </div>

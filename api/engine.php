@@ -355,3 +355,59 @@ function trumpf_automatic_category(string $cardId): string
     }
     return $valid[random_int(0, count($valid) - 1)];
 }
+
+/** Wie lange die KI „überlegt“, bevor sie wählt (je nach Stufe, pro Runde und Spieler leicht unterschiedlich). */
+function ai_think_ms(string $level, string $seed): int
+{
+    $jitter = crc32($seed) % 1000;
+    $base = ['easy' => 1800, 'medium' => 1400, 'hard' => 1000][$level] ?? 1400;
+    return $base + (int) ($jitter * 1.2);
+}
+
+/**
+ * Die KI wählt die Kategorie für ihre oberste Karte.
+ *  - leicht: meistens zufällig (nur Werte, die die Karte hat), nur manchmal die beste
+ *  - mittel: beste Kategorie im Vergleich zu allen Karten, aber mit Schwankung
+ *  - schwer: beste Kategorie im Vergleich zu den Karten, die in dieser Partie wirklich im Spiel sind
+ *
+ * @param string[] $inPlayIds Karten-IDs, die in dieser Partie im Spiel sind
+ */
+function ai_choose_category(string $cardId, string $level, array $inPlayIds): string
+{
+    $deck = trumpf_load_deck();
+    $card = $deck[$cardId] ?? null;
+    $first = (string) array_key_first(TRUMPF_CATEGORIES);
+    if ($card === null) {
+        return $first;
+    }
+    $reference = $level === 'hard' && count($inPlayIds) > 1
+        ? array_values(array_intersect_key($deck, array_flip($inPlayIds)))
+        : array_values($deck);
+    $scores = [];
+    foreach (TRUMPF_CATEGORIES as $key => $rule) {
+        if (!isset($card[$key]) || !is_numeric($card[$key]) || $card[$key] <= 0) {
+            continue; // Karte hat hier keinen Wert (z. B. Elektroauto bei Hubraum)
+        }
+        $worse = 0;
+        foreach ($reference as $other) {
+            $worse += ($rule['direction'] === 'low' ? $other[$key] > $card[$key] : $other[$key] < $card[$key]) ? 1 : 0;
+        }
+        $scores[$key] = $worse / max(1, count($reference));
+    }
+    if (!$scores) {
+        return $first;
+    }
+    $randomKey = static function () use ($scores) {
+        $keys = array_keys($scores);
+        return $keys[random_int(0, count($keys) - 1)];
+    };
+    if ($level === 'easy') {
+        return random_int(1, 100) <= 30 ? (string) array_search(max($scores), $scores, true) : $randomKey();
+    }
+    if ($level === 'medium') {
+        foreach ($scores as $key => $score) {
+            $scores[$key] = $score + random_int(0, 55) / 100;
+        }
+    }
+    return (string) array_search(max($scores), $scores, true);
+}

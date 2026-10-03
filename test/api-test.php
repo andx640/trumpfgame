@@ -290,71 +290,72 @@ try {
     $second = call($port, ['action' => 'choose', 'token' => $tokenById[$mover2], 'category' => 'leistung']);
     check($second['ok'] && count($second['state']['game']['tableCards']) === 3, 'nach der Rückkehr spielen wieder alle drei');
 
-    // --- Entwicklungs-Session 123456 mit Test-Bot -------------------------------------------------
-    $callAs = function (string $host, array $body) use ($port): array {
-        $context = stream_context_create(['http' => [
-            'method' => 'POST',
-            'header' => "Content-Type: application/json\r\nHost: $host\r\n",
-            'content' => json_encode($body),
-            'ignore_errors' => true,
-        ]]);
-        return json_decode((string) file_get_contents("http://127.0.0.1:$port/api/index.php", false, $context), true) ?? [];
-    };
-    // Online ist die Test-Session ebenfalls da (andere Domain im Host-Header), nur TRUMPF_DEV_SESSION=0 schaltet sie ab.
-    @unlink("$dataDir/room_123456.json");
-    $online = $callAs('andi-trumpf.de', ['action' => 'join', 'name' => 'Check', 'room' => '123456']);
-    check($online['ok'] === true && $online['room'] === '123456', 'auch auf der echten Domain gibt es die Session 123456');
-    @unlink("$dataDir/room_123456.json");
-    $off = proc_open(
-        ['php', '-S', "127.0.0.1:" . ($port + 1), '-t', $root],
-        [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
-        $offPipes,
-        $root,
-        array_merge($_ENV, ['TRUMPF_DATA_DIR' => $dataDir, 'TRUMPF_DEV_SESSION' => '0', 'PATH' => getenv('PATH')])
-    );
-    for ($i = 0; $i < 50 && !@fsockopen('127.0.0.1', $port + 1); $i++) {
-        usleep(100000);
-    }
-    $offReply = json_decode((string) file_get_contents("http://127.0.0.1:" . ($port + 1) . "/api/index.php", false, stream_context_create(['http' => [
-        'method' => 'POST',
-        'header' => "Content-Type: application/json\r\n",
-        'content' => json_encode(['action' => 'join', 'name' => 'Check', 'room' => '123456']),
-        'ignore_errors' => true,
-    ]])), true) ?? [];
-    proc_terminate($off);
-    check(($offReply['ok'] ?? true) === false && !file_exists("$dataDir/room_123456.json"), 'mit TRUMPF_DEV_SESSION=0 gibt es die Session nicht');
-    @unlink("$dataDir/room_123456.json");
-
-    $currentRoom = '123456';
-    $dev = call($port, ['action' => 'join', 'name' => 'Andi', 'room' => '123456']);
-    check($dev['ok'] && $dev['room'] === '123456', 'Beitritt zu 123456 ohne vorher zu erstellen');
-    $names = array_map(fn($p) => $p['name'], $dev['state']['players']);
-    check($names === ['Test-Bot', 'Andi'], 'in der Session wartet schon der Test-Bot (' . implode(', ', $names) . ')');
-    check($dev['state']['hostId'] === $dev['state']['selfId'], 'der Mensch ist Host, nicht der Bot');
-    $botRow = array_values(array_filter($dev['state']['players'], fn($p) => $p['name'] === 'Test-Bot'))[0];
-    check($botRow['connected'] === true, 'der Bot ist online');
-
-    $set = call($port, ['action' => 'setCards', 'token' => $dev['token'], 'count' => 8]);
-    $go = call($port, ['action' => 'start', 'token' => $dev['token']]);
-    check($go['ok'] && $go['state']['game']['phase'] === 'choosing', 'alleine mit dem Bot starten geht');
-    check($go['state']['game']['activePlayerId'] === $botRow['id'], 'der Bot ist als Erster am Zug');
-    usleep(1800000);
-    $after = call($port, ['action' => 'state', 'token' => $dev['token']])['state'];
-    check($after['game']['phase'] === 'revealed' && count($after['game']['tableCards']) === 2, 'der Bot wählt von selbst eine Kategorie (' . ($after['game']['category'] ?? '?') . ')');
-
-    // Der Bot bleibt online, auch wenn der Mensch weg ist; ein neuer Beitritt setzt die Session zurück.
-    $room = json_decode((string) file_get_contents("$dataDir/room_123456.json"), true);
-    foreach ($room['players'] as $i => $pl) {
-        if (empty($pl['bot'])) {
-            $room['players'][$i]['lastSeen'] -= 600000;
+    // KI-Stärke: gegen zufällige Gegnerkarten muss Schwer ≥ Mittel > Leicht gewinnen
+    $deckAll = trumpf_load_deck();
+    $ids = array_keys($deckAll);
+    mt_srand(7);
+    $rates = [];
+    foreach (['easy', 'medium', 'hard'] as $level) {
+        $wins = 0;
+        $games = 1500;
+        for ($i = 0; $i < $games; $i++) {
+            $mine = $ids[mt_rand(0, count($ids) - 1)];
+            $theirs = $ids[mt_rand(0, count($ids) - 1)];
+            if ($mine === $theirs) {
+                continue;
+            }
+            $category = ai_choose_category($mine, $level, array_slice($ids, 0, 64));
+            $low = TRUMPF_CATEGORIES[$category]['direction'] === 'low';
+            $mineValue = $deckAll[$mine][$category];
+            $theirValue = $deckAll[$theirs][$category];
+            $wins += ($low ? $mineValue < $theirValue : $mineValue > $theirValue) ? 1 : 0;
         }
+        $rates[$level] = $wins / $games;
     }
-    file_put_contents("$dataDir/room_123456.json", json_encode($room));
-    $again = call($port, ['action' => 'join', 'name' => 'Andi2', 'room' => '123456']);
-    $names = $again['ok'] ? array_map(fn($p) => $p['name'], $again['state']['players']) : [];
-    check($again['ok'] && $again['state']['status'] === 'lobby' && $names === ['Test-Bot', 'Andi2'], 'nach dem Weggehen: neue Lobby mit Bot statt "Spiel läuft bereits"');
-    check($again['state']['hostId'] === $again['state']['selfId'], 'auch dann ist der Mensch Host');
-    $currentRoom = $a['room'];
+    check($rates['easy'] < $rates['medium'] && $rates['medium'] <= $rates['hard'] + 0.02 && $rates['hard'] > 0.75, sprintf('KI-Stärke wächst mit der Stufe (leicht %.0f %%, mittel %.0f %%, schwer %.0f %%)', 100 * $rates['easy'], 100 * $rates['medium'], 100 * $rates['hard']));
+    $electric = array_values(array_filter($deckAll, fn($c) => $c['hubraum'] == 0 || $c['drehzahl'] == 0))[0];
+    $chosen = [];
+    for ($i = 0; $i < 60; $i++) {
+        $chosen[ai_choose_category($electric['c_id'], 'easy', [])] = true;
+    }
+    check(!isset($chosen['hubraum']) && !isset($chosen['drehzahl']), 'KI wählt keine Kategorie, die die Karte nicht hat');
+
+    // --- Spiel gegen die KI ---------------------------------------------------------------------
+    $currentRoom = null;
+    check(call($port, ['action' => 'join', 'name' => 'Dev', 'room' => '123456'])['ok'] === false, 'die alte Test-Session 123456 gibt es nicht mehr');
+    check(!file_exists("$dataDir/room_123456.json"), 'es wird keine Datei für 123456 angelegt');
+    $solo = call($port, ['action' => 'join', 'name' => 'Andi', 'create' => true, 'ai' => ['difficulty' => 'hard', 'opponents' => 2]]);
+    $currentRoom = $solo['room'];
+    $names = array_map(fn($p) => $p['name'], $solo['state']['players']);
+    check($solo['ok'] && $names === ['Andi', 'KI Schwer 1', 'KI Schwer 2'] && $solo['state']['solo'] === true && $solo['state']['aiLevel'] === 'hard', 'KI-Spiel: Mensch plus zwei KI-Gegner (' . implode(', ', $names) . ')');
+    check($solo['state']['hostId'] === $solo['state']['selfId'], 'der Mensch ist Host, nicht die KI');
+    check(count(array_filter($solo['state']['players'], fn($p) => $p['isBot'] && $p['connected'] && $p['difficulty'] === 'hard')) === 2, 'KI-Spieler sind online und kennen ihre Stufe');
+    check(call($port, ['action' => 'join', 'name' => 'Fremder', 'room' => $solo['room']])['ok'] === false, 'in ein KI-Spiel kann niemand sonst beitreten');
+    $badLevel = call($port, ['action' => 'join', 'name' => 'Bob', 'create' => true, 'ai' => ['difficulty' => 'gott', 'opponents' => 9]]);
+    $currentRoom = $badLevel['room'];
+    check($badLevel['ok'] && count($badLevel['state']['players']) === 4 && $badLevel['state']['aiLevel'] === 'medium', 'ungültige Stufe wird Mittel, höchstens drei Gegner');
+    $leave = call($port, ['action' => 'leave', 'token' => $badLevel['token']]);
+    check(!file_exists("$dataDir/room_{$badLevel['room']}.json"), 'KI-Raum wird beim Verlassen der Lobby gelöscht');
+
+    foreach (['easy' => 'KI Leicht', 'medium' => 'KI Mittel'] as $level => $label) {
+        $one = call($port, ['action' => 'join', 'name' => 'Cleo', 'create' => true, 'ai' => ['difficulty' => $level, 'opponents' => 1]]);
+        check($one['ok'] && $one['state']['players'][1]['name'] === $label, "Stufe $level: Gegner heißt $label");
+    }
+
+    $currentRoom = $solo['room'];
+    call($port, ['action' => 'setCards', 'token' => $solo['token'], 'count' => 8]);
+    $go = call($port, ['action' => 'start', 'token' => $solo['token']]);
+    check($go['ok'] && $go['state']['game']['phase'] === 'choosing' && count($go['state']['game']['ownHand']) === 8, 'KI-Spiel starten');
+    $first = $go['state']['game']['activePlayerId'];
+    $activeIsBot = (bool) array_filter($go['state']['players'], fn($p) => $p['id'] === $first && $p['isBot']);
+    if ($activeIsBot) {
+        usleep(3400000);
+        $after = call($port, ['action' => 'state', 'token' => $solo['token']])['state'];
+        check($after['game']['phase'] === 'revealed' && count($after['game']['tableCards']) === 3, 'die KI wählt von selbst (' . ($after['game']['category'] ?? '?') . ')');
+    } else {
+        $played = call($port, ['action' => 'choose', 'token' => $solo['token'], 'category' => 'leistung']);
+        check($played['ok'] && $played['state']['game']['phase'] === 'revealed', 'Mensch wählt, KI-Karten werden aufgedeckt');
+    }
 
     check(call($port, ['action' => 'state', 'token' => 'falsch'])['code'] === 'not_joined', 'unbekannter Token');
     check(call($port, ['action' => 'unsinn', 'token' => $a['token']])['ok'] === false, 'unbekannte Aktion');

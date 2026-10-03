@@ -8,6 +8,7 @@ const XP_WIN = 100;
 const XP_PLAYED = 25;
 const XP_PER_TRICK = 10;
 const XP_PER_OPPONENT = 25; // Sieg gegen mehr Gegner bringt mehr
+const XP_AI_FACTOR = ['easy' => 0.4, 'medium' => 0.7, 'hard' => 1.0];
 
 function trumpf_db(): ?PDO
 {
@@ -179,7 +180,7 @@ function trumpf_account_action(string $action, array $input): void
         }
 
         if ($action === 'register') {
-            if (trumpf_lower($name) === 'test-bot') {
+            if (strpos(trumpf_lower($name), 'ki ') === 0) {
                 respond(['ok' => false, 'message' => 'Dieser Name ist reserviert.']);
             }
             if (trumpf_account_by_name($name) !== null) {
@@ -232,6 +233,10 @@ function trumpf_record_results(TrumpfRoom $room): void
             $won = $player['id'] === $game['winnerId'];
             $tricks = (int) ($room->data['stats']['players'][$player['id']]['tricks'] ?? 0);
             $xp = ($won ? XP_WIN + XP_PER_OPPONENT * ($opponents - 1) : XP_PLAYED) + XP_PER_TRICK * $tricks;
+            if (!empty($room->data['solo'])) {
+                // Gegen die KI gibt es je nach Stufe weniger XP, damit Leicht nicht zum schnellen Aufleveln taugt.
+                $xp = (int) round($xp * (XP_AI_FACTOR[$room->data['aiLevel'] ?? 'medium'] ?? 0.7));
+            }
 
             $query = $db->prepare('SELECT xp FROM accounts WHERE id = ?');
             $query->execute([$accountId]);
