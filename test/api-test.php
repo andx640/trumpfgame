@@ -385,6 +385,30 @@ try {
     check($profile['ok'] && $profile['account']['gamesPlayed'] === 1 && $profile['account']['wins'] === 1 && $profile['account']['winRate'] === 100 && $profile['account']['xp'] === 130, 'Statistik wird genau einmal gespeichert');
     check(call($port, ['action' => 'profile', 'authToken' => str_repeat('a', 48)])['ok'] === false, 'unbekanntes Anmelde-Token');
 
+    // Freunde
+    $cem = call($port, ['action' => 'register', 'name' => 'Cem', 'password' => 'pw']);
+    check(call($port, ['action' => 'friendAdd', 'authToken' => $reg['authToken'], 'name' => 'Ana'])['ok'] === false, 'Freunde: sich selbst nicht addbar');
+    check(call($port, ['action' => 'friendAdd', 'authToken' => $reg['authToken'], 'name' => 'Niemand'])['ok'] === false, 'Freunde: unbekannter Name');
+    check(call($port, ['action' => 'friendAdd', 'name' => 'Cem'])['code'] === 'logged_out', 'Freunde: ohne Anmeldung nicht möglich');
+    check(call($port, ['action' => 'friendAdd', 'authToken' => $reg['authToken'], 'name' => 'cem'])['ok'] === true, 'Freundschaftsanfrage senden');
+    check(call($port, ['action' => 'friendAdd', 'authToken' => $reg['authToken'], 'name' => 'Cem'])['ok'] === false, 'Anfrage nicht doppelt');
+    check(call($port, ['action' => 'friendProfile', 'authToken' => $reg['authToken'], 'name' => 'Cem'])['ok'] === false, 'Profil erst nach Annahme sichtbar');
+    $cemList = call($port, ['action' => 'friends', 'authToken' => $cem['authToken']]);
+    check($cemList['ok'] && count($cemList['incoming']) === 1 && $cemList['incoming'][0]['name'] === 'Ana' && count($cemList['friends']) === 0, 'Anfrage erscheint beim anderen');
+    $anaList = call($port, ['action' => 'friends', 'authToken' => $reg['authToken']]);
+    check(count($anaList['outgoing']) === 1 && $anaList['outgoing'][0]['name'] === 'Cem', 'gesendete Anfrage ist sichtbar');
+    check(call($port, ['action' => 'friendAccept', 'authToken' => $cem['authToken'], 'name' => 'Ana'])['ok'] === true, 'Anfrage annehmen');
+    $anaList = call($port, ['action' => 'friends', 'authToken' => $reg['authToken']]);
+    check(count($anaList['friends']) === 1 && $anaList['friends'][0]['name'] === 'Cem' && isset($anaList['friends'][0]['winRate']), 'Freundesliste mit Profil');
+    $friendProfile = call($port, ['action' => 'friendProfile', 'authToken' => $cem['authToken'], 'name' => 'Ana']);
+    check($friendProfile['ok'] && $friendProfile['account']['gamesPlayed'] === 1 && $friendProfile['account']['wins'] === 1, 'Freundesprofil zeigt Statistik');
+    check(!isset($friendProfile['account']['password']), 'Passwort wird nie ausgeliefert');
+    $dora = call($port, ['action' => 'register', 'name' => 'Dora', 'password' => 'pw']);
+    call($port, ['action' => 'friendAdd', 'authToken' => $dora['authToken'], 'name' => 'Ana']);
+    check(call($port, ['action' => 'friendAdd', 'authToken' => $reg['authToken'], 'name' => 'Dora'])['ok'] === true && count(call($port, ['action' => 'friends', 'authToken' => $reg['authToken']])['friends']) === 2, 'gegenseitige Anfragen werden zur Freundschaft');
+    call($port, ['action' => 'friendRemove', 'authToken' => $reg['authToken'], 'name' => 'Cem']);
+    check(count(call($port, ['action' => 'friends', 'authToken' => $cem['authToken']])['friends']) === 0, 'Freund entfernen');
+
     $htaccess = file_exists("$dataDir/.htaccess");
     check($htaccess, 'Datenordner ist per .htaccess geschützt');
 } finally {

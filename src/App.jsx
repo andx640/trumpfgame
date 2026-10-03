@@ -97,6 +97,7 @@ function App() {
   const [view, setView] = useState("home"); // home | new | join | collection | account | profile
   const [authToken, setAuthToken] = useState(readAuthToken);
   const [account, setAccount] = useState(null);
+  const [friendAccount, setFriendAccount] = useState(null);
 
   const loadProfile = useCallback((token) => {
     if (!token) return;
@@ -201,7 +202,7 @@ function App() {
   };
 
   const isPlaying = state && state.status !== "lobby";
-  const fullScreenView = !state && ["home", "new", "join", "account", "profile"].includes(view);
+  const fullScreenView = !state && ["home", "new", "join", "account", "profile", "friend"].includes(view);
 
   return (
     <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${fullScreenView ? "is-home" : ""}`}>
@@ -219,8 +220,23 @@ function App() {
           <Collection onBack={() => setView("home")} />
         ) : !state && view === "account" ? (
           <AccountForm onBack={() => setView("home")} onSignedIn={signedIn} connected={connected} />
+        ) : !state && view === "friend" && friendAccount ? (
+          <Profile
+            account={friendAccount}
+            readOnly
+            onBack={() => setView("profile")}
+            onRemove={() => socket.request("friendRemove", { authToken, name: friendAccount.name }).finally(() => setView("profile"))}
+          />
         ) : !state && view === "profile" ? (
-          account ? <Profile account={account} onBack={() => setView("home")} onSignOut={signOut} /> : <AccountForm onBack={() => setView("home")} onSignedIn={signedIn} connected={connected} />
+          account ? (
+            <Profile
+              account={account}
+              authToken={authToken}
+              onBack={() => setView("home")}
+              onSignOut={signOut}
+              onOpenFriend={(friend) => { setFriendAccount(friend); setView("friend"); }}
+            />
+          ) : <AccountForm onBack={() => setView("home")} onSignedIn={signedIn} connected={connected} />
         ) : !state ? (
           <Welcome mode={view} onBack={() => setView("home")} onJoin={join} joining={joining} connected={connected} account={account} />
         ) : state.status === "lobby" ? (
@@ -1070,12 +1086,123 @@ function WinRateDonut({ wins, losses }) {
   );
 }
 
-function Profile({ account, onBack, onSignOut }) {
+function MiniRing({ wins, losses }) {
+  const total = wins + losses;
+  const winPart = total ? (100 * wins) / total : 0;
+  return (
+    <span className="mini-ring" aria-label={total ? `Siegquote ${Math.round(winPart)} Prozent` : "Noch keine Spiele"}>
+      <svg viewBox="0 0 42 42" aria-hidden="true">
+        <circle className="donut-track" cx="21" cy="21" r="15.9155" />
+        {total > 0 && <circle className="donut-loss" cx="21" cy="21" r="15.9155" strokeDasharray="100 0" strokeDashoffset="25" />}
+        {wins > 0 && <circle className="donut-win" cx="21" cy="21" r="15.9155" strokeDasharray={`${winPart} ${100 - winPart}`} strokeDashoffset="25" />}
+      </svg>
+      <b>{total ? `${Math.round(winPart)}%` : "–"}</b>
+    </span>
+  );
+}
+
+function FriendsPanel({ authToken, onOpenFriend }) {
+  const [data, setData] = useState(null);
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    socket.request("friends", { authToken }).then((result) => {
+      if (result.ok) setData(result);
+    }).catch(() => {});
+  }, [authToken]);
+
+  useEffect(() => {
+    load();
+    const timer = window.setInterval(load, 15_000); // neue Anfragen erscheinen von selbst
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  const act = (action, friendName) =>
+    socket.request(action, { authToken, name: friendName })
+      .then((result) => {
+        setMessage(result.message || "");
+        load();
+        return result;
+      })
+      .catch(() => setMessage("Keine Verbindung zum Server."));
+
+  const add = (event) => {
+    event.preventDefault();
+    if (!name.trim()) return;
+    setBusy(true);
+    act("friendAdd", name.trim()).then((result) => {
+      if (result?.ok) setName("");
+    }).finally(() => setBusy(false));
+  };
+
+  const openFriend = (friend) => onOpenFriend(friend);
+
+  return (
+    <div className="friends">
+      <h3>Freunde{data ? ` (${data.friends.length})` : ""}</h3>
+      <form className="friend-add" onSubmit={add}>
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value.slice(0, 20))}
+          placeholder="Spielername hinzufügen"
+          aria-label="Spielername des Freundes"
+          autoComplete="off"
+        />
+        <button className="friend-add-button" disabled={busy || !name.trim()}>Hinzufügen</button>
+      </form>
+      {message && <p className="friend-message" role="status">{message}</p>}
+
+      {data?.incoming.length > 0 && (
+        <div className="friend-group">
+          <h4>Anfragen an dich</h4>
+          {data.incoming.map((entry) => (
+            <div className="friend-row" key={entry.name}>
+              <div className="friend-copy"><strong>{entry.name}</strong> <LevelBadge level={entry.level} /></div>
+              <button type="button" className="friend-accept" onClick={() => act("friendAccept", entry.name)}>Annehmen</button>
+              <button type="button" className="friend-ghost" onClick={() => act("friendRemove", entry.name)} aria-label={`Anfrage von ${entry.name} ablehnen`}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="friend-group">
+        {data && data.friends.length === 0 && <p className="muted">Noch keine Freunde. Gib oben den Spielernamen eines Freundes ein.</p>}
+        {data?.friends.map((friend) => (
+          <button type="button" className="friend-row is-friend" key={friend.name} onClick={() => openFriend(friend)}>
+            <MiniRing wins={friend.wins} losses={friend.losses} />
+            <div className="friend-copy">
+              <strong>{friend.name}</strong>
+              <small>{friend.gamesPlayed} {friend.gamesPlayed === 1 ? "Spiel" : "Spiele"} · {friend.wins} Siege</small>
+            </div>
+            <LevelBadge level={friend.level} />
+          </button>
+        ))}
+      </div>
+
+      {data?.outgoing.length > 0 && (
+        <div className="friend-group">
+          <h4>Gesendete Anfragen</h4>
+          {data.outgoing.map((entry) => (
+            <div className="friend-row" key={entry.name}>
+              <div className="friend-copy"><strong>{entry.name}</strong> <small>wartet auf Antwort</small></div>
+              <button type="button" className="friend-ghost" onClick={() => act("friendRemove", entry.name)} aria-label={`Anfrage an ${entry.name} zurückziehen`}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Profile({ account, authToken, onBack, onSignOut, onOpenFriend, onRemove, readOnly = false }) {
+  const [confirmRemove, setConfirmRemove] = useState(false);
   return (
     <section className="welcome page-width">
       <div className="join-card panel profile-card">
         <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
-        <p className="eyebrow">SPIELERKONTO</p>
+        <p className="eyebrow">{readOnly ? "FREUND" : "SPIELERKONTO"}</p>
         <h2>{account.name}</h2>
         <div className="profile-level">
           <span className="profile-level-number">Level {account.level}</span>
@@ -1088,7 +1215,19 @@ function Profile({ account, onBack, onSignOut }) {
           <div><dt><i className="swatch is-win" />Siege</dt><dd>{account.wins}</dd></div>
           <div><dt><i className="swatch is-loss" />Niederlagen</dt><dd>{account.losses}</dd></div>
         </dl>
-        <button type="button" className="text-button" onClick={onSignOut}>Abmelden</button>
+        {!readOnly && <FriendsPanel authToken={authToken} onOpenFriend={onOpenFriend} />}
+        {!readOnly && <button type="button" className="text-button" onClick={onSignOut}>Abmelden</button>}
+        {readOnly && onRemove && (
+          confirmRemove ? (
+            <div className="friend-confirm">
+              <span>{account.name} wirklich entfernen?</span>
+              <button type="button" className="friend-accept" onClick={onRemove}>Ja, entfernen</button>
+              <button type="button" className="text-button" onClick={() => setConfirmRemove(false)}>Abbrechen</button>
+            </div>
+          ) : (
+            <button type="button" className="text-button" onClick={() => setConfirmRemove(true)}>Freund entfernen</button>
+          )
+        )}
       </div>
     </section>
   );
