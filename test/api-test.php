@@ -389,6 +389,22 @@ try {
     check($profile['ok'] && $profile['account']['gamesPlayed'] === 1 && $profile['account']['wins'] === 1 && $profile['account']['winRate'] === 100 && $profile['account']['xp'] === 130, 'Statistik wird genau einmal gespeichert');
     check(call($port, ['action' => 'profile', 'authToken' => str_repeat('a', 48)])['ok'] === false, 'unbekanntes Anmelde-Token');
 
+    // Gegen die KI auf Leicht gibt es keine XP, Hard gibt volle XP
+    foreach (['easy' => 0, 'hard' => 100] as $level => $expected) {
+        $acc = call($port, ['action' => 'register', 'name' => 'Xp' . $level, 'password' => 'pw']);
+        $g = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $acc['authToken'], 'create' => true, 'ai' => ['difficulty' => $level, 'opponents' => 1]]);
+        call($port, ['action' => 'start', 'token' => $g['token'], 'room' => $g['room']]);
+        $gameFile = "$dataDir/room_{$g['room']}.json";
+        $gameData = json_decode((string) file_get_contents($gameFile), true);
+        $gameData['status'] = 'finished';
+        $gameData['game']['phase'] = 'finished';
+        $gameData['game']['winnerId'] = $gameData['players'][0]['id'];
+        file_put_contents($gameFile, json_encode($gameData));
+        call($port, ['action' => 'state', 'token' => $g['token'], 'room' => $g['room']]);
+        $p = call($port, ['action' => 'profile', 'authToken' => $acc['authToken']])['account'];
+        check($p['xp'] === $expected && $p['gamesPlayed'] === 1 && $p['wins'] === 1, "KI $level: Sieg bringt $expected XP, das Spiel zählt trotzdem");
+    }
+
     // Freunde
     $cem = call($port, ['action' => 'register', 'name' => 'Cem', 'password' => 'pw']);
     check(call($port, ['action' => 'friendAdd', 'authToken' => $reg['authToken'], 'name' => 'Ana'])['ok'] === false, 'Freunde: sich selbst nicht addbar');
