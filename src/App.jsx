@@ -202,7 +202,7 @@ function App() {
   };
 
   const isPlaying = state && state.status !== "lobby";
-  const fullScreenView = !state && ["home", "new", "join", "account", "profile", "friend"].includes(view);
+  const fullScreenView = !state && ["home", "new", "join", "account", "profile", "friend", "leaderboard"].includes(view);
 
   return (
     <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${fullScreenView ? "is-home" : ""}`}>
@@ -213,11 +213,14 @@ function App() {
             onNew={() => setView("new")}
             onJoin={() => setView("join")}
             onCollection={() => setView("collection")}
+            onLeaderboard={() => setView("leaderboard")}
             account={account}
             onAccount={() => setView(account ? "profile" : "account")}
           />
         ) : !state && view === "collection" ? (
           <Collection onBack={() => setView("home")} />
+        ) : !state && view === "leaderboard" ? (
+          <Leaderboard onBack={() => setView("home")} selfName={account?.name} />
         ) : !state && view === "account" ? (
           <AccountForm onBack={() => setView("home")} onSignedIn={signedIn} connected={connected} />
         ) : !state && view === "friend" && friendAccount ? (
@@ -250,7 +253,7 @@ function App() {
   );
 }
 
-function Home({ onNew, onJoin, onCollection, account, onAccount }) {
+function Home({ onNew, onJoin, onCollection, onLeaderboard, account, onAccount }) {
   return (
     <section className="home">
       <button type="button" className="home-account" onClick={onAccount}>
@@ -269,7 +272,7 @@ function Home({ onNew, onJoin, onCollection, account, onAccount }) {
         <nav className="home-menu" aria-label="Hauptmenü">
           <button type="button" className="home-primary" onClick={onNew}>
             <CardsIcon />
-            <span><strong>Neues Spiel</strong><small>Lobby eröffnen</small></span>
+            <span><strong>Neues Spiel</strong><small>Mit Freunden oder gegen KI</small></span>
             <HomeArrow />
           </button>
           <button type="button" className="home-card" onClick={onJoin}>
@@ -280,6 +283,11 @@ function Home({ onNew, onJoin, onCollection, account, onAccount }) {
           <button type="button" className="home-card" onClick={onCollection}>
             <CollectionIcon />
             <span><strong>Sammlung</strong><small>Alle Autos im Überblick</small></span>
+            <HomeArrow />
+          </button>
+          <button type="button" className="home-card" onClick={onLeaderboard}>
+            <TrophyIcon />
+            <span><strong>Rangliste</strong><small>Die Top 10 Spieler</small></span>
             <HomeArrow />
           </button>
         </nav>
@@ -1267,6 +1275,10 @@ function Profile({ account, authToken, onBack, onSignOut, onOpenFriend, onRemove
           <div><dt><i className="swatch is-win" />Siege</dt><dd>{account.wins}</dd></div>
           <div><dt><i className="swatch is-loss" />Niederlagen</dt><dd>{account.losses}</dd></div>
         </dl>
+        <dl className="profile-stats profile-streaks">
+          <div><dt>Siegesserie</dt><dd>{account.currentStreak ?? 0}</dd><small>aktuell</small></div>
+          <div className="is-record"><dt>Rekord</dt><dd>{account.bestStreak ?? 0}</dd><small>Siege am Stück</small></div>
+        </dl>
         {!readOnly && <FriendsPanel authToken={authToken} onOpenFriend={onOpenFriend} />}
         {!readOnly && <button type="button" className="text-button" onClick={onSignOut}>Abmelden</button>}
         {readOnly && onRemove && (
@@ -1282,6 +1294,66 @@ function Profile({ account, authToken, onBack, onSignOut, onOpenFriend, onRemove
         )}
       </div>
     </section>
+  );
+}
+
+function Leaderboard({ onBack, selfName }) {
+  const [players, setPlayers] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    socket.request("leaderboard")
+      .then((result) => {
+        if (!alive) return;
+        if (result.ok) setPlayers(result.players);
+        else setError(result.message || "Die Rangliste ist gerade nicht verfügbar.");
+      })
+      .catch(() => alive && setError("Keine Verbindung zum Server."));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const self = selfName?.toLocaleLowerCase("de");
+
+  return (
+    <section className="welcome page-width">
+      <div className="join-card panel leaderboard-card">
+        <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
+        <p className="eyebrow">RANGLISTE</p>
+        <h2>Top 10</h2>
+        <p className="muted">Die Spieler mit den meisten XP.</p>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        {!players && !error && <p className="muted">Lädt …</p>}
+        {players && players.length === 0 && <p className="muted">Noch niemand hat XP gesammelt. Melde dich an und spiel eine Partie!</p>}
+        {players && players.length > 0 && (
+          <ol className="leaderboard">
+            {players.map((player, index) => (
+              <li key={player.name} className={`${index < 3 ? `is-top is-top-${index + 1}` : ""} ${player.name.toLocaleLowerCase("de") === self ? "is-self" : ""}`}>
+                <span className="leaderboard-rank">{index + 1}</span>
+                <div className="leaderboard-copy">
+                  <strong>{player.name} <LevelBadge level={player.level} /></strong>
+                  <small>{player.wins} {player.wins === 1 ? "Sieg" : "Siege"} · {player.gamesPlayed} {player.gamesPlayed === 1 ? "Spiel" : "Spiele"}{player.gamesPlayed ? ` · ${player.winRate} %` : ""}</small>
+                </div>
+                <span className="leaderboard-xp">{player.xp}<small>XP</small></span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function TrophyIcon() {
+  return (
+    <svg className="home-icon" viewBox="0 0 48 48" aria-hidden="true">
+      <path d="M14 8h20v8c0 6.6-4.5 12-10 12S14 22.6 14 16z" fill="currentColor" />
+      <path d="M14 11H7c0 6 3 9.500 7.500 10M34 11h7c0 6-3 9.500-7.500 10" fill="none" stroke="currentColor" strokeWidth="2.500" strokeLinecap="round" />
+      <path d="M21 28h6v6h-6z" fill="currentColor" opacity="0.8" />
+      <rect x="15" y="34" width="18" height="6" rx="2" fill="currentColor" />
+    </svg>
   );
 }
 
