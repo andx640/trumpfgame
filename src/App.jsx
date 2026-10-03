@@ -376,9 +376,9 @@ function Header({ connected, state }) {
 }
 
 const AI_LEVEL_INFO = [
-  { id: "easy", label: "Leicht", hint: "wählt oft zufällig" },
-  { id: "medium", label: "Mittel", hint: "spielt meist clever" },
-  { id: "hard", label: "Schwer", hint: "kennt die Karten im Spiel" }
+  { id: "easy", label: "Leicht" },
+  { id: "medium", label: "Mittel" },
+  { id: "hard", label: "Schwer" }
 ];
 
 function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) {
@@ -451,8 +451,7 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
                     key={level.id}
                     onClick={() => setDifficulty(level.id)}
                   >
-                    <strong>{level.label}</strong>
-                    <small>{level.hint}</small>
+                    {level.label}
                   </button>
                 ))}
               </div>
