@@ -4446,28 +4446,16 @@ body:has(.app-shell.is-playing) {
 }
 
 .ai-level {
-  display: grid;
-  gap: 3px;
-  align-content: start;
-  min-height: 74px;
-  padding: 10px 8px;
+  min-height: 48px;
   border: 2px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
   color: #d5dbe6;
   background: rgba(255, 255, 255, 0.04);
   font: inherit;
+  font-size: 15px;
+  font-weight: 800;
   text-align: center;
   cursor: pointer;
-}
-
-.ai-level strong {
-  font-size: 15px;
-}
-
-.ai-level small {
-  color: #9aa6ba;
-  font-size: 11px;
-  line-height: 1.25;
 }
 
 .ai-level[aria-checked="true"] {
@@ -4476,9 +4464,9 @@ body:has(.app-shell.is-playing) {
   background: rgba(249, 144, 42, 0.16);
 }
 
-.ai-level.is-easy strong { color: #7fd48a; }
-.ai-level.is-medium strong { color: #ffc23a; }
-.ai-level.is-hard strong { color: #ff6b57; }
+.ai-level.is-easy { color: #7fd48a; }
+.ai-level.is-medium { color: #ffc23a; }
+.ai-level.is-hard { color: #ff6b57; }
 
 .ai-opponents {
   display: grid;
