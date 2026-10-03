@@ -4506,3 +4506,8 @@ body:has(.app-shell.is-playing) {
 .finish-no-xp {
   margin: 8px 0 0;
 }
+
+.finish-xp-note {
+  color: #9aa6ba;
+  font-size: 12px;
+}

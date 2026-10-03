@@ -456,6 +456,7 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
                 ))}
               </div>
               {difficulty === "easy" && <p className="ai-note" role="status">Gegen „Leicht“ gibt es keine XP.</p>}
+              {difficulty === "medium" && <p className="ai-note" role="status">Gegen „Mittel“ gibt es nur 35 % der XP.</p>}
               <span className="field-label">Gegner</span>
               <div className="ai-opponents" role="radiogroup" aria-label="Anzahl der Gegner">
                 {[1, 2, 3].map((count) => (
@@ -1327,6 +1328,7 @@ function FinishPanel({ state }) {
             <strong>+{award.xp} XP</strong>
             {award.level > award.levelBefore && <span className="finish-levelup">Level {award.level} erreicht!</span>}
             <XpBar level={award.level} xpInLevel={award.xpInLevel} xpForLevel={award.xpForLevel} />
+            {state.solo && state.aiLevel === "medium" && <small className="finish-xp-note">Gegen „Mittel“ gibt es nur 35 % der XP.</small>}
           </div>
         )}
         {award && award.xp === 0 && state.solo && (
