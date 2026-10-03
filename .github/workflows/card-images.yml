@@ -1,0 +1,39 @@
+name: Kartenbilder laden
+
+# Lädt fehlende Fahrzeugfotos von Wikimedia Commons und committet sie in den Branch.
+on:
+  workflow_dispatch:
+    inputs:
+      refresh:
+        description: "Karten-IDs, die neu gesucht werden sollen (kommagetrennt)"
+        required: false
+        default: ""
+  push:
+    branches: ["claude/**"]
+    paths: [".github/workflows/card-images.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm run images:update
+        env:
+          REFRESH_IDS: ${{ inputs.refresh }}
+
+      - name: Bilder committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
+          git add cardimages card-images.json BILDQUELLEN.md
+          git diff --cached --quiet || git commit -m "Kartenbilder für neue Autos von Wikimedia Commons geladen"
+          git pull --rebase
+          git push

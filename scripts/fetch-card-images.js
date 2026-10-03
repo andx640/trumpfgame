@@ -6,79 +6,75 @@ const USER_AGENT = "PitlaneTrumpf/2.0 (educational card game; image metadata upd
 const OUTPUT_FILE = path.join(__dirname, "..", "card-images.json");
 const ATTRIBUTION_FILE = path.join(__dirname, "..", "BILDQUELLEN.md");
 const ARTICLE_TITLES = {
-  "0007": "Tesla Model S",
   "0008": "Porsche 911 (992)",
   "0011": "LaFerrari",
   "0012": "Ferrari F8",
   "0013": "Lamborghini Aventador",
   "0014": "Lamborghini Huracán",
   "0020": "Mercedes-AMG GT (C190)",
-  "0021": "BMW M5 (F90)",
   "0022": "Audi R8 (Type 4S)",
   "0023": "Nissan GT-R",
   "0024": "Chevrolet Corvette (C8)",
-  "0025": "Chevrolet Camaro (sixth generation)",
-  "0026": "Shelby Mustang",
-  "0027": "Dodge Challenger (2008)",
+  "0027": "Bugatti Chiron",
   "0029": "Pagani Zonda",
-  "0030": "Alfa Romeo Giulia (952)",
-  "0033": "Lotus Emira",
-  "0037": "Volkswagen Golf Mk8",
-  "0038": "Audi RS 6",
-  "0039": "Porsche Taycan",
-  "0040": "Tesla Roadster (second generation)",
-  "0042": "Jaguar F-Type",
-  "0044": "Subaru Impreza WRX STI",
-  "0045": "Mitsubishi Lancer Evolution X",
-  "0046": "Peugeot 508",
-  "0047": "Cupra Formentor",
-  "0048": "Hyundai i30 N",
-  "0049": "Kia EV6",
-  "0050": "Polestar 2",
-  "0051": "BMW i4",
-  "0052": "Lucid Air",
-  "0053": "Volkswagen I.D. R",
+  "0030": "Bugatti Veyron",
+  "0037": "Koenigsegg CCX",
+  "0038": "Koenigsegg Jesko",
+  "0039": "Koenigsegg Agera",
   "0061": "Aston Martin DBS Superleggera",
-  "0062": "Mercedes-Benz SL (R232)",
-  "0063": "BMW M3",
-  "0065": "Porsche 718 Cayman GT4",
+  "0063": "Ferrari Monza SP1 and SP2",
+  "0064": "Ferrari 812 Superfast",
+  "0065": "Ferrari 296",
   "0066": "Chevrolet Corvette (C8)",
-  "0067": "Ford Mustang (seventh generation)",
+  "0067": "Ferrari 488",
   "0069": "Honda NSX (second generation)",
-  "0075": "Renault Mégane RS",
-  "0076": "Volkswagen Golf Mk8",
-  "0077": "Cupra León",
-  "0078": "Hyundai Ioniq 5",
-  "0080": "Genesis G70",
-  "0083": "Tesla Model 3",
-  "0084": "Porsche Macan",
-  "0085": "Audi e-tron GT",
-  "0086": "BMW 5 Series (G60)",
-  "0087": "Mercedes-Benz EQE",
-  "0091": "Lotus Emeya",
-  "0093": "MG Cyberster",
-  "0094": "Caterham 7",
-  "0095": "Ariel Atom",
-  "0096": "BAC Mono",
-  "0097": "KTM X-Bow",
-  "0099": "Bentley Continental GT",
-  "0101": "Maserati GranTurismo",
-  "0103": "Jaguar XE",
-  "0105": "Subaru BRZ",
-  "0107": "Mitsubishi 3000GT",
-  "0108": "Mazda RX-7",
-  "0109": "Nissan Skyline GT-R",
-  "0110": "Honda NSX",
+  "0070": "Ferrari 458",
+  "0073": "Ferrari 599",
+  "0074": "Ferrari F12berlinetta",
+  "0076": "Ferrari SF90 Stradale",
+  "0080": "Lamborghini Huracán",
+  "0081": "Lamborghini Huracán",
+  "0083": "Lamborghini Aventador",
+  "0085": "Lamborghini Gallardo",
+  "0086": "Lamborghini Diablo",
+  "0096": "Mercedes-AMG GT",
+  "0097": "Porsche 911 GT2",
+  "0098": "Porsche 911 GT1",
+  "0099": "Gordon Murray Automotive T.50",
+  "0103": "Pagani Huayra",
+  "0104": "Pagani Zonda",
+  "0106": "Saleen S7",
+  "0109": "Chevrolet Corvette (C8)",
   "0112": "Mercedes-Benz SLS AMG",
-  "0118": "Bugatti EB 110"
+  "0113": "Lykan HyperSport",
+  "0118": "Bugatti EB 110",
+  "0121": "Rimac Nevera",
+  "0122": "Ruf CTR"
 };
 const FILE_OVERRIDES = {
   "0020": "Mercedes-AMG GT Black Series.jpg",
-  "0021": "BMW M5 CS.jpg",
   "0032": "2022 Lotus Evija Silver.jpg",
-  "0036": "2023 Mercedes AMG One 1.jpg",
-  "0096": "BAC Mono R 2.jpg"
+  "0036": "2023 Mercedes AMG One 1.jpg"
 };
+
+// Gezielte Commons-Suche für Varianten: Suchbegriff und Muster, das im Dateinamen vorkommen muss.
+const SEARCH_HINTS = {
+  "0034": ["Koenigsegg One:1", /one[ :_-]?1(?!.*(engine|motor|interior))/],
+  "0050": ["McLaren 675LT", /675/],
+  "0051": ["McLaren 600LT", /600 ?lt/],
+  "0064": ["Ferrari 812 Competizione", /competizione/],
+  "0067": ["Ferrari 488 Pista", /pista/],
+  "0070": ["Ferrari 458 Speciale", /speciale/],
+  "0073": ["Ferrari 599 GTO", /599 ?gto/],
+  "0074": ["Ferrari F12tdf", /tdf/],
+  "0086": ["Lamborghini Diablo GT", /diablo gt(?!r)/],
+  "0094": ["Aston Martin Vanquish 2025", /vanquish(?!.*\bs\b).*202[4-6]|202[4-6].*vanquish(?!.*\bs\b)/],
+  "0096": ["Mercedes-AMG GT R Pro", /r pro/],
+  "0101": ["Zenvo TSR-S", /tsr/],
+  "0109": ["Corvette E-Ray", /e-?ray/]
+};
+// Mit REFRESH_IDS=0001,0002 werden diese Karten neu gesucht, auch wenn schon ein Foto da ist.
+const REFRESH_IDS = new Set(String(process.env.REFRESH_IDS || "").split(",").map((id) => id.trim()).filter(Boolean));
 
 function apiUrl(host, parameters) {
   const url = new URL(`https://${host}/w/api.php`);
@@ -90,8 +86,9 @@ function apiUrl(host, parameters) {
 
 async function query(host, parameters, attempt = 0) {
   const response = await fetch(apiUrl(host, parameters), { headers: { "User-Agent": USER_AGENT } });
-  if (response.status === 429 && attempt < 4) {
-    await new Promise((resolve) => setTimeout(resolve, 1_500 * (attempt + 1)));
+  if (response.status === 429 && attempt < 8) {
+    const retryAfter = Number(response.headers.get("retry-after")) || 5 * (attempt + 1);
+    await new Promise((resolve) => setTimeout(resolve, retryAfter * 1_000));
     return query(host, parameters, attempt + 1);
   }
   if (!response.ok) throw new Error(`${host} antwortet mit HTTP ${response.status}`);
@@ -162,46 +159,81 @@ async function main() {
     group.forEach((card, index) => pageByCard.set(card.c_id, pageByTitle.get(titles[index])));
   }
 
-  const imageTitles = [...new Set(
-    cards
-      .map((card) => FILE_OVERRIDES[card.c_id] || pageByCard.get(card.c_id)?.pageimage)
-      .filter(Boolean)
-      .map((title) => `File:${title}`)
-  )];
-  const imageInfoByTitle = new Map();
-  for (const group of chunks(imageTitles, 40)) {
+  // Karten mit lokalem Foto bleiben unverändert, damit Bild und Urheberangabe zusammenpassen.
+  const result = {};
+  const usedFiles = new Set();
+  for (const card of cards) {
+    const existing = existingCatalog[card.c_id];
+    if (existing?.localImage && !REFRESH_IDS.has(card.c_id)) {
+      result[card.c_id] = existing;
+      usedFiles.add(normalizedTitle(decodeURIComponent(String(existing.pageUrl || "").split("/wiki/")[1] || "")));
+    }
+  }
+
+  async function imageInfoFor(fileTitle) {
     const data = await query("commons.wikimedia.org", {
       action: "query",
       prop: "imageinfo",
-      titles: group.join("|"),
+      titles: `File:${fileTitle}`,
       iiprop: "url|extmetadata",
       iiurlwidth: "1000"
     });
-    Object.values(data.query?.pages || {}).forEach((page) => {
-      imageInfoByTitle.set(normalizedTitle(page.title), page.imageinfo?.[0] || null);
-    });
+    return Object.values(data.query?.pages || {})[0]?.imageinfo?.[0] || null;
   }
 
-  const result = {};
+  // Varianten teilen sich oft einen Wikipedia-Artikel; dann wird auf Commons nach einem eigenen Foto gesucht.
+  async function searchFile(card) {
+    const [searchTerm, mustMatch] = SEARCH_HINTS[card.c_id] || [card.name, null];
+    const data = await query("commons.wikimedia.org", {
+      action: "query",
+      list: "search",
+      srsearch: `${searchTerm} filetype:bitmap`,
+      srnamespace: "6",
+      srlimit: "20"
+    });
+    const hit = (data.query?.search || []).find(
+      (entry) =>
+        /\.(jpe?g|png)$/i.test(entry.title) &&
+        !usedFiles.has(normalizedTitle(entry.title)) &&
+        (!mustMatch || mustMatch.test(normalizedTitle(entry.title)))
+    );
+    return hit ? hit.title.replace(/^File:/i, "") : null;
+  }
+
   for (const card of cards) {
+    if (result[card.c_id]) {
+      process.stdout.write(`• ${card.c_id} ${card.name} bereits lokal\n`);
+      continue;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
     const page = pageByCard.get(card.c_id);
-    const fileTitle = FILE_OVERRIDES[card.c_id] || page?.pageimage;
-    const imageInfo = imageInfoByTitle.get(normalizedTitle(fileTitle));
+    let fileTitle = FILE_OVERRIDES[card.c_id] || page?.pageimage;
+    if (!fileTitle || usedFiles.has(normalizedTitle(fileTitle)) || SEARCH_HINTS[card.c_id]) {
+      fileTitle = await searchFile(card);
+    }
+    const imageInfo = fileTitle ? await imageInfoFor(fileTitle) : null;
     const metadata = imageInfo?.extmetadata || {};
-    const image = imageInfo?.thumburl || page?.thumbnail?.source || null;
+    const image = imageInfo?.thumburl || null;
     if (image) {
+      usedFiles.add(normalizedTitle(fileTitle));
       result[card.c_id] = {
         image,
-        ...(existingCatalog[card.c_id]?.localImage
-          ? { localImage: existingCatalog[card.c_id].localImage }
-          : {}),
-        pageUrl: imageInfo?.descriptionurl || page.fullurl,
+        pageUrl: imageInfo.descriptionurl,
         source: "Wikimedia Commons",
         author: cleanHtml(metadata.Artist?.value) || "siehe Bildquelle",
         license: cleanHtml(metadata.LicenseShortName?.value) || "siehe Bildquelle",
-        licenseUrl: metadata.LicenseUrl?.value || imageInfo?.descriptionurl || page.fullurl
+        licenseUrl: metadata.LicenseUrl?.value || imageInfo.descriptionurl
       };
-      process.stdout.write(`✓ ${card.c_id} ${card.name}\n`);
+      process.stdout.write(`✓ ${card.c_id} ${card.name} (${fileTitle})\n`);
+      // Neues Foto für eine schon gespeicherte Karte: alte lokale Datei entfernen, damit sie neu geladen wird.
+      if (existingCatalog[card.c_id]?.localImage && existingCatalog[card.c_id].pageUrl !== imageInfo.descriptionurl) {
+        await fs.rm(path.join(__dirname, "..", existingCatalog[card.c_id].localImage), { force: true });
+      } else if (existingCatalog[card.c_id]?.localImage) {
+        result[card.c_id].localImage = existingCatalog[card.c_id].localImage;
+      }
+    } else if (existingCatalog[card.c_id]) {
+      result[card.c_id] = existingCatalog[card.c_id];
+      process.stdout.write(`• ${card.c_id} ${card.name}: kein passenderes Foto, altes bleibt\n`);
     } else {
       process.stdout.write(`– ${card.c_id} ${card.name}: kein Bild gefunden\n`);
     }
