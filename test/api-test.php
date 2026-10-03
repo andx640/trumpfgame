@@ -438,6 +438,13 @@ try {
         call($port, ['action' => 'register', 'name' => "Rang$i", 'password' => 'pw']);
     }
     check(count(call($port, ['action' => 'leaderboard'])['players']) === 10, 'Rangliste zeigt höchstens 10 Spieler');
+    $pp = call($port, ['action' => 'playerProfile', 'name' => 'ana']);
+    check($pp['ok'] && $pp['account']['name'] === 'Ana' && $pp['account']['rank'] === 2 && $pp['account']['players'] >= 16 && !isset($pp['account']['password']), 'Spielerprofil mit Rangplatz (Ana: Platz ' . ($pp['account']['rank'] ?? '?') . ')');
+    $last = call($port, ['action' => 'playerProfile', 'name' => 'Rang11']);
+    check($last['ok'] && $last['account']['rank'] === $last['account']['players'], 'Rangplatz: Spieler ohne XP, zuletzt angemeldet, ist Letzter');
+    check(call($port, ['action' => 'playerProfile', 'name' => 'Niemand'])['ok'] === false, 'Spielerprofil: unbekannter Name');
+    $own = call($port, ['action' => 'profile', 'authToken' => $reg['authToken']]);
+    check($own['account']['rank'] === 2, 'eigenes Profil enthält den Rangplatz');
 
     // Alte Tabelle ohne Serien-Spalten wird nachgerüstet
     require_once __DIR__ . '/../api/accounts.php';

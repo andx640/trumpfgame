@@ -586,7 +586,7 @@ if ($action === 'cards') {
     // Alle Fahrzeugkarten für die Sammlung (öffentlich, ohne Spielstand).
     respond(['ok' => true, 'categories' => TRUMPF_CATEGORIES, 'cards' => array_values(trumpf_load_deck())]);
 }
-if (in_array($action, ['register', 'login', 'profile', 'leaderboard', 'friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile'], true)) {
+if (in_array($action, ['register', 'login', 'profile', 'playerProfile', 'leaderboard', 'friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile'], true)) {
     trumpf_account_action($action, $input);
 }
 $token = is_string($input['token'] ?? null) ? $input['token'] : '';
