@@ -606,6 +606,9 @@ if (!is_file($guard)) {
 $roomCode = strtoupper(is_string($input['room'] ?? null) ? trim($input['room']) : '');
 $roomCode = preg_match('/^[A-Z0-9]{4,8}$/', $roomCode) ? $roomCode : '';
 $creating = $action === 'join' && !empty($input['create']);
+if ($roomCode === '123456') {
+    $roomCode = ''; // alte Test-Session: gibt es nicht mehr, auch wenn die Datei noch auf dem Server liegt
+}
 
 if ($creating) {
     // Neue Session: eindeutigen Code vergeben, alte Sessions (> 24 h) aufräumen.

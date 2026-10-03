@@ -324,6 +324,9 @@ try {
     $currentRoom = null;
     check(call($port, ['action' => 'join', 'name' => 'Dev', 'room' => '123456'])['ok'] === false, 'die alte Test-Session 123456 gibt es nicht mehr');
     check(!file_exists("$dataDir/room_123456.json"), 'es wird keine Datei für 123456 angelegt');
+    file_put_contents("$dataDir/room_123456.json", json_encode(['version' => 1, 'status' => 'lobby', 'players' => [], 'hostId' => null, 'cardsPerPlayer' => 8, 'game' => null, 'idleSince' => null]));
+    check(call($port, ['action' => 'join', 'name' => 'Dev', 'room' => '123456'])['ok'] === false, 'auch eine alte Datei room_123456.json wird ignoriert');
+    @unlink("$dataDir/room_123456.json");
     $solo = call($port, ['action' => 'join', 'name' => 'Andi', 'create' => true, 'ai' => ['difficulty' => 'hard', 'opponents' => 2]]);
     $currentRoom = $solo['room'];
     $names = array_map(fn($p) => $p['name'], $solo['state']['players']);
