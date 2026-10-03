@@ -4260,3 +4260,170 @@ body:has(.app-shell.is-playing) {
   color: #fff;
   font-weight: 800;
 }
+
+/* Freunde */
+.friends {
+  margin: 4px 0 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.friends h3 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+.friends h4 {
+  margin: 12px 0 6px;
+  color: #9aa6ba;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.friend-add {
+  display: flex;
+  gap: 8px;
+}
+
+.friend-add input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.friend-add-button,
+.friend-accept {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 12px;
+  color: #1a0f08;
+  background: var(--acid);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.friend-add-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.friend-message {
+  margin: 8px 0 0;
+  color: #d5dbe6;
+  font-size: 13px;
+}
+
+.friend-group {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.friend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 14px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.05);
+  font: inherit;
+  text-align: left;
+}
+
+.friend-row.is-friend {
+  cursor: pointer;
+}
+
+.friend-row.is-friend:hover {
+  background: rgba(249, 144, 42, 0.14);
+}
+
+.friend-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.friend-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-copy small {
+  color: #9aa6ba;
+  font-size: 12px;
+}
+
+.friend-accept {
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.friend-ghost {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  color: #9aa6ba;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.mini-ring {
+  position: relative;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+}
+
+.mini-ring svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mini-ring circle {
+  fill: none;
+  stroke-width: 6;
+}
+
+.mini-ring b {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.friend-confirm {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  color: #d5dbe6;
+  font-size: 14px;
+}
+
+.join-card .friend-add {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.join-card .friend-add input {
+  margin: 0;
+}

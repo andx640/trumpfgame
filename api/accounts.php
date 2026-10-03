@@ -30,24 +30,68 @@ function trumpf_db(): ?PDO
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
-        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
-            $pdo->exec('CREATE TABLE IF NOT EXISTS accounts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE COLLATE NOCASE,
-                password TEXT NOT NULL,
-                auth_token TEXT UNIQUE,
-                games_played INTEGER NOT NULL DEFAULT 0,
-                wins INTEGER NOT NULL DEFAULT 0,
-                losses INTEGER NOT NULL DEFAULT 0,
-                xp INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                last_login TEXT NULL
-            )');
-        }
     } catch (PDOException $error) {
         $pdo = null;
     }
     return $pdo;
+}
+
+/** Legt die Tabellen an, falls es sie noch nicht gibt (MySQL bei All-Inkl und SQLite für Tests). */
+function trumpf_ensure_schema(PDO $db): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+    if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+        $db->exec('CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            password TEXT NOT NULL,
+            auth_token TEXT UNIQUE,
+            games_played INTEGER NOT NULL DEFAULT 0,
+            wins INTEGER NOT NULL DEFAULT 0,
+            losses INTEGER NOT NULL DEFAULT 0,
+            xp INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_login TEXT NULL
+        )');
+        $db->exec("CREATE TABLE IF NOT EXISTS friendships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            friend_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (user_id, friend_id)
+        )");
+        return;
+    }
+    $db->exec('CREATE TABLE IF NOT EXISTS accounts (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(20) NOT NULL,
+        password VARCHAR(100) NOT NULL,
+        auth_token CHAR(48) NULL,
+        games_played INT UNSIGNED NOT NULL DEFAULT 0,
+        wins INT UNSIGNED NOT NULL DEFAULT 0,
+        losses INT UNSIGNED NOT NULL DEFAULT 0,
+        xp INT UNSIGNED NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_login DATETIME NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_name (name),
+        UNIQUE KEY uniq_auth_token (auth_token)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    $db->exec("CREATE TABLE IF NOT EXISTS friendships (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        user_id INT UNSIGNED NOT NULL,
+        friend_id INT UNSIGNED NOT NULL,
+        status VARCHAR(10) NOT NULL DEFAULT 'pending',
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_pair (user_id, friend_id),
+        KEY idx_friend (friend_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
 
 /** Level aus Gesamt-XP. Von Level L nach L+1 braucht man 100 + 50·(L−1) XP, jedes Level also 50 mehr. */
@@ -82,10 +126,14 @@ function trumpf_account_by_token(string $token): ?array
     if ($db === null || !preg_match('/^[a-f0-9]{48}$/', $token)) {
         return null;
     }
-    $query = $db->prepare('SELECT * FROM accounts WHERE auth_token = ?');
-    $query->execute([$token]);
-    $row = $query->fetch();
-    return $row ?: null;
+    try {
+        $query = $db->prepare('SELECT * FROM accounts WHERE auth_token = ?');
+        $query->execute([$token]);
+        $row = $query->fetch();
+        return $row ?: null;
+    } catch (PDOException $error) {
+        return null; // Tabelle fehlt noch
+    }
 }
 
 function trumpf_account_by_name(string $name): ?array
@@ -94,10 +142,14 @@ function trumpf_account_by_name(string $name): ?array
     if ($db === null) {
         return null;
     }
-    $query = $db->prepare('SELECT * FROM accounts WHERE LOWER(name) = LOWER(?)');
-    $query->execute([$name]);
-    $row = $query->fetch();
-    return $row ?: null;
+    try {
+        $query = $db->prepare('SELECT * FROM accounts WHERE LOWER(name) = LOWER(?)');
+        $query->execute([$name]);
+        $row = $query->fetch();
+        return $row ?: null;
+    } catch (PDOException $error) {
+        return null; // Tabelle fehlt noch
+    }
 }
 
 /** Aktionen register / login / profile. Antwortet direkt und beendet die Anfrage. */
@@ -108,9 +160,13 @@ function trumpf_account_action(string $action, array $input): void
         respond(['ok' => false, 'message' => 'Konten sind gerade nicht verfügbar (keine Datenbank).']);
     }
     try {
+        trumpf_ensure_schema($db);
         if ($action === 'profile') {
             $row = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
             respond($row ? ['ok' => true, 'account' => trumpf_account_public($row)] : ['ok' => false, 'code' => 'logged_out', 'message' => 'Bitte melde dich neu an.']);
+        }
+        if (in_array($action, ['friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile'], true)) {
+            trumpf_friend_action($db, $action, $input);
         }
 
         $name = cleanName($input['name'] ?? '');
@@ -192,4 +248,107 @@ function trumpf_record_results(TrumpfRoom $room): void
         // Statistik ist Zusatz: Fehler dürfen das Spiel nicht stören.
     }
     $room->data['game']['xpAwards'] = $awards;
+}
+
+/** Freundschaften: Anfrage per Name senden, annehmen, entfernen; Freundesliste mit Profilen. */
+function trumpf_friend_action(PDO $db, string $action, array $input): void
+{
+    $me = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
+    if ($me === null) {
+        respond(['ok' => false, 'code' => 'logged_out', 'message' => 'Bitte melde dich neu an.']);
+    }
+    $myId = (int) $me['id'];
+    $other = null;
+    if ($action !== 'friends') {
+        $other = trumpf_account_by_name(cleanName($input['name'] ?? ''));
+        if ($other === null) {
+            respond(['ok' => false, 'message' => 'Diesen Spieler gibt es nicht.']);
+        }
+        if ((int) $other['id'] === $myId) {
+            respond(['ok' => false, 'message' => 'Das bist du selbst.']);
+        }
+    }
+    $otherId = $other === null ? 0 : (int) $other['id'];
+    $relation = static function (int $from, int $to) use ($db): ?array {
+        $query = $db->prepare('SELECT * FROM friendships WHERE user_id = ? AND friend_id = ?');
+        $query->execute([$from, $to]);
+        $row = $query->fetch();
+        return $row ?: null;
+    };
+
+    if ($action === 'friendAdd') {
+        $mine = $relation($myId, $otherId);
+        $theirs = $relation($otherId, $myId);
+        if (($mine && $mine['status'] === 'accepted') || ($theirs && $theirs['status'] === 'accepted')) {
+            respond(['ok' => false, 'message' => $other['name'] . ' ist schon dein Freund.']);
+        }
+        if ($theirs) {
+            // Der andere hat dir schon eine Anfrage geschickt: gleich annehmen.
+            $db->prepare("UPDATE friendships SET status = 'accepted' WHERE id = ?")->execute([$theirs['id']]);
+            respond(['ok' => true, 'message' => 'Du und ' . $other['name'] . ' seid jetzt Freunde.']);
+        }
+        if ($mine) {
+            respond(['ok' => false, 'message' => 'Deine Anfrage an ' . $other['name'] . ' läuft schon.']);
+        }
+        $db->prepare("INSERT INTO friendships (user_id, friend_id, status) VALUES (?, ?, 'pending')")->execute([$myId, $otherId]);
+        respond(['ok' => true, 'message' => 'Anfrage an ' . $other['name'] . ' gesendet.']);
+    }
+
+    if ($action === 'friendAccept') {
+        $theirs = $relation($otherId, $myId);
+        if (!$theirs) {
+            respond(['ok' => false, 'message' => 'Es gibt keine Anfrage von ' . $other['name'] . '.']);
+        }
+        $db->prepare("UPDATE friendships SET status = 'accepted' WHERE id = ?")->execute([$theirs['id']]);
+        respond(['ok' => true, 'message' => 'Du und ' . $other['name'] . ' seid jetzt Freunde.']);
+    }
+
+    if ($action === 'friendRemove') {
+        // entfernt Freundschaft, offene Anfrage (gesendet oder erhalten)
+        $db->prepare('DELETE FROM friendships WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)')
+            ->execute([$myId, $otherId, $otherId, $myId]);
+        respond(['ok' => true]);
+    }
+
+    if ($action === 'friendProfile') {
+        $mine = $relation($myId, $otherId);
+        $theirs = $relation($otherId, $myId);
+        if (!(($mine && $mine['status'] === 'accepted') || ($theirs && $theirs['status'] === 'accepted'))) {
+            respond(['ok' => false, 'message' => 'Das Profil siehst du nur bei Freunden.']);
+        }
+        respond(['ok' => true, 'account' => trumpf_account_public($other)]);
+    }
+
+    // friends: Liste mit Profilen, erhaltene und gesendete Anfragen
+    $query = $db->prepare('SELECT * FROM friendships WHERE user_id = ? OR friend_id = ?');
+    $query->execute([$myId, $myId]);
+    $friends = [];
+    $incoming = [];
+    $outgoing = [];
+    $ids = [];
+    foreach ($query->fetchAll() as $row) {
+        $isMine = (int) $row['user_id'] === $myId;
+        $otherRowId = (int) ($isMine ? $row['friend_id'] : $row['user_id']);
+        $ids[$otherRowId] = [$row['status'], $isMine];
+    }
+    if ($ids) {
+        $marks = implode(',', array_fill(0, count($ids), '?'));
+        $accounts = $db->prepare("SELECT * FROM accounts WHERE id IN ($marks)");
+        $accounts->execute(array_keys($ids));
+        foreach ($accounts->fetchAll() as $account) {
+            [$status, $isMine] = $ids[(int) $account['id']];
+            $public = trumpf_account_public($account);
+            if ($status === 'accepted') {
+                $friends[] = $public;
+            } elseif ($isMine) {
+                $outgoing[] = ['name' => $public['name'], 'level' => $public['level']];
+            } else {
+                $incoming[] = ['name' => $public['name'], 'level' => $public['level']];
+            }
+        }
+    }
+    usort($friends, static function ($a, $b) {
+        return [$b['level'], $b['xp']] <=> [$a['level'], $a['xp']];
+    });
+    respond(['ok' => true, 'friends' => $friends, 'incoming' => $incoming, 'outgoing' => $outgoing]);
 }
