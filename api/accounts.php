@@ -8,7 +8,7 @@ const XP_WIN = 100;
 const XP_PLAYED = 25;
 const XP_PER_TRICK = 10;
 const XP_PER_OPPONENT = 25; // Sieg gegen mehr Gegner bringt mehr
-const XP_AI_FACTOR = ['easy' => 0.0, 'medium' => 0.7, 'hard' => 1.0]; // gegen Leicht gibt es keine XP
+const XP_AI_FACTOR = ['easy' => 0.0, 'medium' => 0.35, 'hard' => 1.0]; // gegen Leicht gibt es keine XP
 
 function trumpf_db(): ?PDO
 {

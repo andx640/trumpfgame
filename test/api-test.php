@@ -389,8 +389,8 @@ try {
     check($profile['ok'] && $profile['account']['gamesPlayed'] === 1 && $profile['account']['wins'] === 1 && $profile['account']['winRate'] === 100 && $profile['account']['xp'] === 130, 'Statistik wird genau einmal gespeichert');
     check(call($port, ['action' => 'profile', 'authToken' => str_repeat('a', 48)])['ok'] === false, 'unbekanntes Anmelde-Token');
 
-    // Gegen die KI auf Leicht gibt es keine XP, Hard gibt volle XP
-    foreach (['easy' => 0, 'hard' => 100] as $level => $expected) {
+    // Gegen die KI: Leicht keine XP, Mittel 35 %, Schwer volle XP
+    foreach (['easy' => 0, 'medium' => 35, 'hard' => 100] as $level => $expected) {
         $acc = call($port, ['action' => 'register', 'name' => 'Xp' . $level, 'password' => 'pw']);
         $g = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $acc['authToken'], 'create' => true, 'ai' => ['difficulty' => $level, 'opponents' => 1]]);
         call($port, ['action' => 'start', 'token' => $g['token'], 'room' => $g['room']]);
