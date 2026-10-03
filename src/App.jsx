@@ -97,7 +97,6 @@ function App() {
   const [view, setView] = useState("home"); // home | new | join | collection | account | profile
   const [authToken, setAuthToken] = useState(readAuthToken);
   const [account, setAccount] = useState(null);
-  const [friendAccount, setFriendAccount] = useState(null);
 
   const loadProfile = useCallback((token) => {
     if (!token) return;
@@ -202,7 +201,7 @@ function App() {
   };
 
   const isPlaying = state && state.status !== "lobby";
-  const fullScreenView = !state && ["home", "new", "join", "account", "profile", "friend", "leaderboard"].includes(view);
+  const fullScreenView = !state && ["home", "new", "join", "account", "profile", "leaderboard"].includes(view);
 
   return (
     <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${fullScreenView ? "is-home" : ""}`}>
@@ -223,13 +222,6 @@ function App() {
           <Leaderboard onBack={() => setView("home")} selfName={account?.name} />
         ) : !state && view === "account" ? (
           <AccountForm onBack={() => setView("home")} onSignedIn={signedIn} connected={connected} />
-        ) : !state && view === "friend" && friendAccount ? (
-          <Profile
-            account={friendAccount}
-            readOnly
-            onBack={() => setView("profile")}
-            onRemove={() => socket.request("friendRemove", { authToken, name: friendAccount.name }).finally(() => setView("profile"))}
-          />
         ) : !state && view === "profile" ? (
           account ? (
             <Profile
@@ -237,7 +229,6 @@ function App() {
               authToken={authToken}
               onBack={() => setView("home")}
               onSignOut={signOut}
-              onOpenFriend={(friend) => { setFriendAccount(friend); setView("friend"); }}
             />
           ) : <AccountForm onBack={() => setView("home")} onSignedIn={signedIn} connected={connected} />
         ) : !state ? (
@@ -1161,7 +1152,9 @@ function MiniRing({ wins, losses }) {
   );
 }
 
-function FriendsPanel({ authToken, onOpenFriend }) {
+function FriendsPanel({ authToken }) {
+  const [openName, setOpenName] = useState(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [data, setData] = useState(null);
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
@@ -1197,7 +1190,11 @@ function FriendsPanel({ authToken, onOpenFriend }) {
     }).finally(() => setBusy(false));
   };
 
-  const openFriend = (friend) => onOpenFriend(friend);
+  const openFriend = (friend) => {
+    setConfirmRemove(false);
+    setOpenName(friend.name);
+  };
+  const closeFriend = useCallback(() => setOpenName(null), []);
 
   return (
     <div className="friends">
@@ -1252,46 +1249,100 @@ function FriendsPanel({ authToken, onOpenFriend }) {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function Profile({ account, authToken, onBack, onSignOut, onOpenFriend, onRemove, readOnly = false }) {
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  return (
-    <section className="welcome page-width">
-      <div className="join-card panel profile-card">
-        <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
-        <p className="eyebrow">{readOnly ? "FREUND" : "SPIELERKONTO"}</p>
-        <h2>{account.name}</h2>
-        <div className="profile-level">
-          <span className="profile-level-number">Level {account.level}</span>
-          <span className="muted">{account.xp} XP gesamt</span>
-        </div>
-        <XpBar level={account.level} xpInLevel={account.xpInLevel} xpForLevel={account.xpForLevel} />
-        <WinRateDonut wins={account.wins} losses={account.losses} />
-        <dl className="profile-stats">
-          <div><dt>Spiele</dt><dd>{account.gamesPlayed}</dd></div>
-          <div><dt><i className="swatch is-win" />Siege</dt><dd>{account.wins}</dd></div>
-          <div><dt><i className="swatch is-loss" />Niederlagen</dt><dd>{account.losses}</dd></div>
-        </dl>
-        <dl className="profile-stats profile-streaks">
-          <div><dt>Siegesserie</dt><dd>{account.currentStreak ?? 0}</dd><small>aktuell</small></div>
-          <div className="is-record"><dt>Rekord</dt><dd>{account.bestStreak ?? 0}</dd><small>Siege am Stück</small></div>
-        </dl>
-        {!readOnly && <FriendsPanel authToken={authToken} onOpenFriend={onOpenFriend} />}
-        {!readOnly && <button type="button" className="text-button" onClick={onSignOut}>Abmelden</button>}
-        {readOnly && onRemove && (
-          confirmRemove ? (
+      {openName && (
+        <PlayerModal
+          name={openName}
+          onClose={closeFriend}
+          footer={confirmRemove ? (
             <div className="friend-confirm">
-              <span>{account.name} wirklich entfernen?</span>
-              <button type="button" className="friend-accept" onClick={onRemove}>Ja, entfernen</button>
+              <span>{openName} wirklich entfernen?</span>
+              <button type="button" className="friend-accept" onClick={() => act("friendRemove", openName).then(closeFriend)}>Ja, entfernen</button>
               <button type="button" className="text-button" onClick={() => setConfirmRemove(false)}>Abbrechen</button>
             </div>
           ) : (
             <button type="button" className="text-button" onClick={() => setConfirmRemove(true)}>Freund entfernen</button>
-          )
+          )}
+        />
+      )}
+    </div>
+  );
+}
+
+// Statistikblock eines Spielers: Level, XP, Siegquote-Ring, Spiele, Siegesserie (Profil und Spielerfenster)
+function ProfileStats({ account }) {
+  return (
+    <>
+      <div className="profile-level">
+        <span className="profile-level-number">Level {account.level}</span>
+        {account.rank ? (
+          <span className="profile-rank">Platz <b>{account.rank}</b>{account.players ? ` von ${account.players}` : ""}</span>
+        ) : (
+          <span className="muted">{account.xp} XP gesamt</span>
         )}
+      </div>
+      <XpBar level={account.level} xpInLevel={account.xpInLevel} xpForLevel={account.xpForLevel} />
+      <WinRateDonut wins={account.wins} losses={account.losses} />
+      <dl className="profile-stats">
+        <div><dt>Spiele</dt><dd>{account.gamesPlayed}</dd></div>
+        <div><dt><i className="swatch is-win" />Siege</dt><dd>{account.wins}</dd></div>
+        <div><dt><i className="swatch is-loss" />Niederlagen</dt><dd>{account.losses}</dd></div>
+      </dl>
+      <dl className="profile-stats profile-streaks">
+        <div><dt>Siegesserie</dt><dd>{account.currentStreak ?? 0}</dd><small>aktuell</small></div>
+        <div className="is-record"><dt>Rekord</dt><dd>{account.bestStreak ?? 0}</dd><small>Siege am Stück</small></div>
+      </dl>
+      <p className="profile-xp-total">{account.xp} XP gesamt</p>
+    </>
+  );
+}
+
+// Spielerfenster: öffnet sich über der Rangliste oder der Freundesliste
+function PlayerModal({ name, onClose, footer = null }) {
+  const [account, setAccount] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    socket.request("playerProfile", { name })
+      .then((result) => {
+        if (!alive) return;
+        if (result.ok) setAccount(result.account);
+        else setError(result.message || "Das Profil konnte nicht geladen werden.");
+      })
+      .catch(() => alive && setError("Keine Verbindung zum Server."));
+    const onKey = (event) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      alive = false;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [name, onClose]);
+
+  return (
+    <div className="player-modal-backdrop" onClick={onClose}>
+      <div className="player-modal panel" role="dialog" aria-modal="true" aria-label={`Profil von ${name}`} onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="player-modal-close" onClick={onClose} aria-label="Schließen">✕</button>
+        <p className="eyebrow">SPIELERPROFIL</p>
+        <h2>{name} {account && <LevelBadge level={account.level} />}</h2>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        {!account && !error && <p className="muted">Lädt …</p>}
+        {account && <ProfileStats account={account} />}
+        {account && footer}
+      </div>
+    </div>
+  );
+}
+
+function Profile({ account, authToken, onBack, onSignOut }) {
+  return (
+    <section className="welcome page-width">
+      <div className="join-card panel profile-card">
+        <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
+        <p className="eyebrow">SPIELERKONTO</p>
+        <h2>{account.name}</h2>
+        <ProfileStats account={account} />
+        <FriendsPanel authToken={authToken} />
+        <button type="button" className="text-button" onClick={onSignOut}>Abmelden</button>
       </div>
     </section>
   );
@@ -1299,6 +1350,8 @@ function Profile({ account, authToken, onBack, onSignOut, onOpenFriend, onRemove
 
 function Leaderboard({ onBack, selfName }) {
   const [players, setPlayers] = useState(null);
+  const [openName, setOpenName] = useState(null);
+  const closePlayer = useCallback(() => setOpenName(null), []);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -1331,17 +1384,20 @@ function Leaderboard({ onBack, selfName }) {
           <ol className="leaderboard">
             {players.map((player, index) => (
               <li key={player.name} className={`${index < 3 ? `is-top is-top-${index + 1}` : ""} ${player.name.toLocaleLowerCase("de") === self ? "is-self" : ""}`}>
+                <button type="button" className="leaderboard-row" onClick={() => setOpenName(player.name)} aria-label={`Profil von ${player.name} öffnen`}>
                 <span className="leaderboard-rank">{index + 1}</span>
                 <div className="leaderboard-copy">
                   <strong>{player.name} <LevelBadge level={player.level} /></strong>
                   <small>{player.wins} {player.wins === 1 ? "Sieg" : "Siege"} · {player.gamesPlayed} {player.gamesPlayed === 1 ? "Spiel" : "Spiele"}{player.gamesPlayed ? ` · ${player.winRate} %` : ""}</small>
                 </div>
                 <span className="leaderboard-xp">{player.xp}<small>XP</small></span>
+                </button>
               </li>
             ))}
           </ol>
         )}
       </div>
+      {openName && <PlayerModal name={openName} onClose={closePlayer} />}
     </section>
   );
 }

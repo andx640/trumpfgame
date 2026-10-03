@@ -173,6 +173,25 @@ function trumpf_account_by_name(string $name): ?array
     }
 }
 
+/** Rangplatz in der Gesamtrangliste (gleiche Sortierung wie die Top 10: XP, dann Siege, dann wer zuerst da war). */
+function trumpf_account_rank(PDO $db, array $row): int
+{
+    $query = $db->prepare('SELECT COUNT(*) FROM accounts WHERE xp > ? OR (xp = ? AND wins > ?) OR (xp = ? AND wins = ? AND id < ?)');
+    $xp = (int) $row['xp'];
+    $wins = (int) $row['wins'];
+    $query->execute([$xp, $xp, $wins, $xp, $wins, (int) $row['id']]);
+    return (int) $query->fetchColumn() + 1;
+}
+
+/** Öffentliches Profil mit Rangplatz und Zahl aller Spieler. */
+function trumpf_account_with_rank(PDO $db, array $row): array
+{
+    return trumpf_account_public($row) + [
+        'rank' => trumpf_account_rank($db, $row),
+        'players' => (int) $db->query('SELECT COUNT(*) FROM accounts')->fetchColumn(),
+    ];
+}
+
 /** Aktionen register / login / profile. Antwortet direkt und beendet die Anfrage. */
 function trumpf_account_action(string $action, array $input): void
 {
@@ -184,12 +203,21 @@ function trumpf_account_action(string $action, array $input): void
         trumpf_ensure_schema($db);
         if ($action === 'profile') {
             $row = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
-            respond($row ? ['ok' => true, 'account' => trumpf_account_public($row)] : ['ok' => false, 'code' => 'logged_out', 'message' => 'Bitte melde dich neu an.']);
+            respond($row ? ['ok' => true, 'account' => trumpf_account_with_rank($db, $row)] : ['ok' => false, 'code' => 'logged_out', 'message' => 'Bitte melde dich neu an.']);
+        }
+        if ($action === 'playerProfile') {
+            // Profil eines beliebigen Spielers (wie in der Rangliste öffentlich, ohne Passwort)
+            $row = trumpf_account_by_name(cleanName($input['name'] ?? ''));
+            respond($row ? ['ok' => true, 'account' => trumpf_account_with_rank($db, $row)] : ['ok' => false, 'message' => 'Diesen Spieler gibt es nicht.']);
         }
         if ($action === 'leaderboard') {
             // Top 10 nach XP (Level ergibt sich aus XP), bei Gleichstand mehr Siege zuerst
             $rows = $db->query('SELECT * FROM accounts ORDER BY xp DESC, wins DESC, id ASC LIMIT 10')->fetchAll();
-            respond(['ok' => true, 'players' => array_map('trumpf_account_public', $rows)]);
+            $players = [];
+            foreach ($rows as $index => $row) {
+                $players[] = trumpf_account_public($row) + ['rank' => $index + 1];
+            }
+            respond(['ok' => true, 'players' => $players]);
         }
         if (in_array($action, ['friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile'], true)) {
             trumpf_friend_action($db, $action, $input);
