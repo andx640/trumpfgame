@@ -405,6 +405,49 @@ try {
         check($p['xp'] === $expected && $p['gamesPlayed'] === 1 && $p['wins'] === 1, "KI $level: Sieg bringt $expected XP, das Spiel zählt trotzdem");
     }
 
+    // Siegesserie: aktuelle Serie und Rekord
+    $anaProfile = call($port, ['action' => 'profile', 'authToken' => $reg['authToken']])['account'];
+    check($anaProfile['currentStreak'] === 1 && $anaProfile['bestStreak'] === 1, 'Sieg startet eine Siegesserie');
+    $hardAcc = call($port, ['action' => 'login', 'name' => 'Xphard', 'password' => 'pw']);
+    $finish = function (string $winner) use ($port, $hardAcc, $dataDir) {
+        $g = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $hardAcc['authToken'], 'create' => true, 'ai' => ['difficulty' => 'hard', 'opponents' => 1]]);
+        call($port, ['action' => 'start', 'token' => $g['token'], 'room' => $g['room']]);
+        $file = "$dataDir/room_{$g['room']}.json";
+        $data = json_decode((string) file_get_contents($file), true);
+        $data['status'] = 'finished';
+        $data['game']['phase'] = 'finished';
+        $data['game']['winnerId'] = $data['players'][$winner === 'me' ? 0 : 1]['id'];
+        file_put_contents($file, json_encode($data));
+        call($port, ['action' => 'state', 'token' => $g['token'], 'room' => $g['room']]);
+        return call($port, ['action' => 'profile', 'authToken' => $hardAcc['authToken']])['account'];
+    };
+    $finish('me');
+    $streak = $finish('me');
+    check($streak['currentStreak'] === 3 && $streak['bestStreak'] === 3, 'drei Siege am Stück: Serie 3, Rekord 3');
+    $streak = $finish('bot');
+    check($streak['currentStreak'] === 0 && $streak['bestStreak'] === 3, 'Niederlage: Serie 0, Rekord bleibt 3');
+
+    // Rangliste: Top 10 nach XP
+    $board = call($port, ['action' => 'leaderboard']);
+    $xps = array_map(fn($p) => $p['xp'], $board['players'] ?? []);
+    $sorted = $xps;
+    rsort($sorted);
+    check($board['ok'] && count($board['players']) <= 10 && $xps === $sorted && $board['players'][0]['name'] === 'Xphard', 'Rangliste sortiert nach XP (' . implode(', ', array_map(fn($p) => $p['name'] . ' ' . $p['xp'], $board['players'])) . ')');
+    check(!isset($board['players'][0]['password']) && !isset($board['players'][0]['auth_token']), 'Rangliste ohne Passwörter');
+    for ($i = 0; $i < 12; $i++) {
+        call($port, ['action' => 'register', 'name' => "Rang$i", 'password' => 'pw']);
+    }
+    check(count(call($port, ['action' => 'leaderboard'])['players']) === 10, 'Rangliste zeigt höchstens 10 Spieler');
+
+    // Alte Tabelle ohne Serien-Spalten wird nachgerüstet
+    require_once __DIR__ . '/../api/accounts.php';
+    $old = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $old->exec('CREATE TABLE accounts (id INTEGER PRIMARY KEY, name TEXT, xp INTEGER)');
+    $old->exec("INSERT INTO accounts (name, xp) VALUES ('Alt', 5)");
+    trumpf_add_streak_columns($old);
+    $migrated = $old->query('SELECT current_streak, best_streak FROM accounts')->fetch(PDO::FETCH_ASSOC);
+    check($migrated === ['current_streak' => 0, 'best_streak' => 0], 'bestehende Tabelle bekommt die Serien-Spalten');
+
     // Freunde
     $cem = call($port, ['action' => 'register', 'name' => 'Cem', 'password' => 'pw']);
     check(call($port, ['action' => 'friendAdd', 'authToken' => $reg['authToken'], 'name' => 'Ana'])['ok'] === false, 'Freunde: sich selbst nicht addbar');

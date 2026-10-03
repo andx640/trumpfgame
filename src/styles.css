@@ -4511,3 +4511,109 @@ body:has(.app-shell.is-playing) {
   color: #9aa6ba;
   font-size: 12px;
 }
+
+/* Siegesserie im Profil */
+.profile-streaks {
+  grid-template-columns: 1fr 1fr;
+  margin-top: -8px;
+}
+
+.profile-streaks small {
+  display: block;
+  margin-top: 2px;
+  color: #9aa6ba;
+  font-size: 11px;
+}
+
+.profile-streaks .is-record {
+  background: linear-gradient(180deg, rgba(249, 144, 42, 0.2), rgba(249, 144, 42, 0.06));
+}
+
+.profile-streaks .is-record dd {
+  color: var(--acid);
+}
+
+/* Rangliste */
+.leaderboard {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.leaderboard li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 14px 8px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.leaderboard li.is-self {
+  outline: 2px solid var(--acid);
+  outline-offset: -2px;
+}
+
+.leaderboard-rank {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #c9d1dc;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 900;
+}
+
+.is-top-1 .leaderboard-rank { color: #1a0f08; background: linear-gradient(180deg, #ffe08a, #f5b82e); }
+.is-top-2 .leaderboard-rank { color: #1a0f08; background: linear-gradient(180deg, #eef1f5, #b8c0cc); }
+.is-top-3 .leaderboard-rank { color: #1a0f08; background: linear-gradient(180deg, #f0b48a, #c8794a); }
+
+.leaderboard-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.leaderboard-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard-copy small {
+  color: #9aa6ba;
+  font-size: 12px;
+}
+
+.leaderboard-xp {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: end;
+  color: var(--acid);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.leaderboard-xp small {
+  margin-top: 2px;
+  color: #9aa6ba;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+/* Startseite mit vier Knöpfen: oben Platz für den Konto-Knopf */
+.home {
+  padding-top: max(68px, env(safe-area-inset-top));
+}
+
+@media (max-height: 720px) {
+  .home-inner {
+    gap: 20px;
+  }
+}

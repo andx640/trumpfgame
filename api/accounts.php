@@ -55,6 +55,8 @@ function trumpf_ensure_schema(PDO $db): void
             wins INTEGER NOT NULL DEFAULT 0,
             losses INTEGER NOT NULL DEFAULT 0,
             xp INTEGER NOT NULL DEFAULT 0,
+            current_streak INTEGER NOT NULL DEFAULT 0,
+            best_streak INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             last_login TEXT NULL
         )');
@@ -66,6 +68,7 @@ function trumpf_ensure_schema(PDO $db): void
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE (user_id, friend_id)
         )");
+        trumpf_add_streak_columns($db);
         return;
     }
     $db->exec('CREATE TABLE IF NOT EXISTS accounts (
@@ -77,6 +80,8 @@ function trumpf_ensure_schema(PDO $db): void
         wins INT UNSIGNED NOT NULL DEFAULT 0,
         losses INT UNSIGNED NOT NULL DEFAULT 0,
         xp INT UNSIGNED NOT NULL DEFAULT 0,
+        current_streak INT UNSIGNED NOT NULL DEFAULT 0,
+        best_streak INT UNSIGNED NOT NULL DEFAULT 0,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_login DATETIME NULL,
         PRIMARY KEY (id),
@@ -93,6 +98,19 @@ function trumpf_ensure_schema(PDO $db): void
         UNIQUE KEY uniq_pair (user_id, friend_id),
         KEY idx_friend (friend_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    trumpf_add_streak_columns($db);
+}
+
+/** Ältere accounts-Tabellen ohne Siegesserie-Spalten nachrüsten. */
+function trumpf_add_streak_columns(PDO $db): void
+{
+    foreach (['current_streak', 'best_streak'] as $column) {
+        try {
+            $db->query("SELECT $column FROM accounts LIMIT 1");
+        } catch (PDOException $missing) {
+            $db->exec("ALTER TABLE accounts ADD COLUMN $column INT NOT NULL DEFAULT 0");
+        }
+    }
 }
 
 /** Level aus Gesamt-XP. Von Level L nach L+1 braucht man 100 + 50·(L−1) XP, jedes Level also 50 mehr. */
@@ -118,6 +136,8 @@ function trumpf_account_public(array $row): array
         'losses' => (int) $row['losses'],
         'winRate' => $played > 0 ? (int) round(100 * (int) $row['wins'] / $played) : 0,
         'xp' => (int) $row['xp'],
+        'currentStreak' => (int) ($row['current_streak'] ?? 0),
+        'bestStreak' => (int) ($row['best_streak'] ?? 0),
     ] + trumpf_level((int) $row['xp']);
 }
 
@@ -165,6 +185,11 @@ function trumpf_account_action(string $action, array $input): void
         if ($action === 'profile') {
             $row = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
             respond($row ? ['ok' => true, 'account' => trumpf_account_public($row)] : ['ok' => false, 'code' => 'logged_out', 'message' => 'Bitte melde dich neu an.']);
+        }
+        if ($action === 'leaderboard') {
+            // Top 10 nach XP (Level ergibt sich aus XP), bei Gleichstand mehr Siege zuerst
+            $rows = $db->query('SELECT * FROM accounts ORDER BY xp DESC, wins DESC, id ASC LIMIT 10')->fetchAll();
+            respond(['ok' => true, 'players' => array_map('trumpf_account_public', $rows)]);
         }
         if (in_array($action, ['friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile'], true)) {
             trumpf_friend_action($db, $action, $input);
@@ -225,6 +250,7 @@ function trumpf_record_results(TrumpfRoom $room): void
     $opponents = max(1, count($room->data['players']) - 1);
     $awards = [];
     try {
+        trumpf_ensure_schema($db);
         foreach ($room->data['players'] as $index => $player) {
             $accountId = $player['accountId'] ?? null;
             if ($accountId === null) {
@@ -238,11 +264,15 @@ function trumpf_record_results(TrumpfRoom $room): void
                 $xp = (int) round($xp * (XP_AI_FACTOR[$room->data['aiLevel'] ?? 'medium'] ?? 0.7));
             }
 
-            $query = $db->prepare('SELECT xp FROM accounts WHERE id = ?');
+            $query = $db->prepare('SELECT xp, current_streak, best_streak FROM accounts WHERE id = ?');
             $query->execute([$accountId]);
-            $before = (int) ($query->fetchColumn() ?: 0);
-            $db->prepare('UPDATE accounts SET games_played = games_played + 1, wins = wins + ?, losses = losses + ?, xp = xp + ? WHERE id = ?')
-                ->execute([$won ? 1 : 0, $won ? 0 : 1, $xp, $accountId]);
+            $row = $query->fetch() ?: ['xp' => 0, 'current_streak' => 0, 'best_streak' => 0];
+            $before = (int) $row['xp'];
+            // Siegesserie: gewonnene Partien am Stück, Rekord bleibt
+            $streak = $won ? (int) $row['current_streak'] + 1 : 0;
+            $best = max((int) $row['best_streak'], $streak);
+            $db->prepare('UPDATE accounts SET games_played = games_played + 1, wins = wins + ?, losses = losses + ?, xp = xp + ?, current_streak = ?, best_streak = ? WHERE id = ?')
+                ->execute([$won ? 1 : 0, $won ? 0 : 1, $xp, $streak, $best, $accountId]);
 
             $levelBefore = trumpf_level($before)['level'];
             $after = trumpf_level($before + $xp);
