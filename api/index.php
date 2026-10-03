@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/engine.php';
+require __DIR__ . '/accounts.php';
 
 const TURN_DURATION_MS = 45000;
 const REVEAL_DURATION_MS = 7000;
@@ -534,6 +535,7 @@ class TrumpfRoom
                 'isHost' => $entry['id'] === $data['hostId'],
                 'connected' => $entry['connected'],
                 'isBot' => !empty($entry['bot']),
+                'level' => $entry['accountLevel'] ?? null,
                 'cardCount' => $count,
                 'eliminated' => $data['status'] !== 'lobby' && $count === 0,
             ];
@@ -564,6 +566,7 @@ class TrumpfRoom
                 'revealEndsAt' => $game['revealEndsAt'],
                 'pausedUntil' => $game['pausedUntil'] ?? null,
                 'readyIds' => $game['readyIds'] ?? [],
+                'xpAwards' => $game['xpAwards'] ?? new stdClass(),
                 'turnDurationMs' => TURN_DURATION_MS,
                 'revealDurationMs' => REVEAL_DURATION_MS,
                 'ownCard' => $hand[0] ?? null,
@@ -611,6 +614,9 @@ if ($action === 'ping') {
 if ($action === 'cards') {
     // Alle Fahrzeugkarten für die Sammlung (öffentlich, ohne Spielstand).
     respond(['ok' => true, 'categories' => TRUMPF_CATEGORIES, 'cards' => array_values(trumpf_load_deck())]);
+}
+if (in_array($action, ['register', 'login', 'profile'], true)) {
+    trumpf_account_action($action, $input);
 }
 $token = is_string($input['token'] ?? null) ? $input['token'] : '';
 
@@ -694,6 +700,13 @@ try {
     switch ($action) {
         case 'join':
             $name = cleanName($input['name'] ?? '');
+            $account = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
+            if ($account !== null) {
+                $name = $account['name'];
+            } elseif ($name !== '' && $selfIndex === null && trumpf_account_by_name($name) !== null) {
+                $reply = $fail('Dieser Spielername ist registriert. Melde dich an oder nimm einen anderen Namen.');
+                break;
+            }
             if ($selfIndex !== null) {
                 if ($name !== '' && $room->data['status'] === 'lobby') {
                     $room->data['players'][$selfIndex]['name'] = $name;
@@ -739,6 +752,8 @@ try {
                     'connected' => true,
                     'lastSeen' => $room->now,
                     'hand' => [],
+                    'accountId' => $account === null ? null : (int) $account['id'],
+                    'accountLevel' => $account === null ? null : trumpf_level((int) $account['xp'])['level'],
                 ];
                 $selfIndex = count($room->data['players']) - 1;
                 if ($room->data['hostId'] === null) {
@@ -826,6 +841,8 @@ try {
 } catch (TrumpfError $error) {
     $reply = $fail($error->getMessage());
 }
+
+trumpf_record_results($room);
 
 if ($room->dirty) {
     $tmp = $roomFile . '.tmp';

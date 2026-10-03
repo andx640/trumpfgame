@@ -1,5 +1,5 @@
-# Die Spiellogik wird nur von index.php eingebunden, nicht direkt aufgerufen.
-<Files "engine.php">
+# Spiellogik, Konten und Zugangsdaten werden nur von index.php eingebunden, nicht direkt aufgerufen.
+<FilesMatch "^(engine|accounts|config)\.php$">
   <IfModule mod_authz_core.c>
     Require all denied
   </IfModule>
@@ -7,4 +7,4 @@
     Order deny,allow
     Deny from all
   </IfModule>
-</Files>
+</FilesMatch>

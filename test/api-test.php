@@ -120,7 +120,7 @@ $server = proc_open(
     [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
     $pipes,
     $root,
-    array_merge($_ENV, ['TRUMPF_DATA_DIR' => $dataDir, 'PATH' => getenv('PATH')])
+    array_merge($_ENV, ['TRUMPF_DATA_DIR' => $dataDir, 'TRUMPF_DB_DSN' => "sqlite:$dataDir/accounts.sqlite", 'PATH' => getenv('PATH')])
 );
 for ($i = 0; $i < 50; $i++) {
     if (@fsockopen('127.0.0.1', $port)) {
@@ -358,6 +358,33 @@ try {
 
     check(call($port, ['action' => 'state', 'token' => 'falsch'])['code'] === 'not_joined', 'unbekannter Token');
     check(call($port, ['action' => 'unsinn', 'token' => $a['token']])['ok'] === false, 'unbekannte Aktion');
+    // Konten: registrieren, anmelden, Statistik nach Spielende
+    $reg = call($port, ['action' => 'register', 'name' => 'Ana', 'password' => 'geheim']);
+    check($reg['ok'] && strlen($reg['authToken']) === 48 && $reg['account']['level'] === 1, 'Konto registrieren');
+    check(call($port, ['action' => 'register', 'name' => 'ana', 'password' => 'x'])['ok'] === false, 'Name nur einmal registrierbar');
+    check(call($port, ['action' => 'login', 'name' => 'Ana', 'password' => 'falsch'])['ok'] === false, 'falsches Passwort wird abgelehnt');
+    $login = call($port, ['action' => 'login', 'name' => 'ANA', 'password' => 'geheim']);
+    check($login['ok'] && $login['authToken'] === $reg['authToken'] && $login['account']['name'] === 'Ana', 'Anmelden (Groß-/Kleinschreibung egal)');
+    check(call($port, ['action' => 'join', 'name' => 'Ana', 'create' => true])['ok'] === false, 'Gast darf keinen registrierten Namen nehmen');
+    $ana = call($port, ['action' => 'join', 'name' => 'egal', 'authToken' => $reg['authToken'], 'create' => true]);
+    check($ana['ok'] && $ana['state']['players'][0]['name'] === 'Ana' && $ana['state']['players'][0]['level'] === 1, 'angemeldet beitreten: Kontoname und Level');
+    $bea = call($port, ['action' => 'join', 'name' => 'Bea', 'room' => $ana['room']]);
+    call($port, ['action' => 'start', 'token' => $ana['token'], 'room' => $ana['room']]);
+    $file = "$dataDir/room_{$ana['room']}.json";
+    $room = json_decode((string) file_get_contents($file), true);
+    $room['status'] = 'finished';
+    $room['game']['phase'] = 'finished';
+    $room['game']['winnerId'] = $room['players'][0]['id'];
+    $room['stats']['players'][$room['players'][0]['id']] = ['tricks' => 3, 'streak' => 0, 'best' => 2, 'outRound' => null];
+    file_put_contents($file, json_encode($room));
+    $done = call($port, ['action' => 'state', 'token' => $ana['token'], 'room' => $ana['room']]);
+    call($port, ['action' => 'state', 'token' => $bea['token'], 'room' => $ana['room']]);
+    $award = $done['state']['game']['xpAwards'][$done['state']['selfId']] ?? null;
+    check($award !== null && $award['xp'] === 130 && $award['level'] === 2, 'Sieg bringt XP (100 + 3 Stiche) und Levelaufstieg');
+    $profile = call($port, ['action' => 'profile', 'authToken' => $reg['authToken']]);
+    check($profile['ok'] && $profile['account']['gamesPlayed'] === 1 && $profile['account']['wins'] === 1 && $profile['account']['winRate'] === 100 && $profile['account']['xp'] === 130, 'Statistik wird genau einmal gespeichert');
+    check(call($port, ['action' => 'profile', 'authToken' => str_repeat('a', 48)])['ok'] === false, 'unbekanntes Anmelde-Token');
+
     $htaccess = file_exists("$dataDir/.htaccess");
     check($htaccess, 'Datenordner ist per .htaccess geschützt');
 } finally {

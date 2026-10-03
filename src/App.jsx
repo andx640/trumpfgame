@@ -5,6 +5,24 @@ import { playFlip, playLose, playTurn, playWin, setSoundEnabled, soundEnabled, u
 const SESSION_TOKEN = "pitlane-trumpf-token";
 const SESSION_NAME = "pitlane-trumpf-name";
 const SESSION_ROOM = "pitlane-trumpf-room";
+const AUTH_KEY = "andi-trumpf-auth";
+
+function readAuthToken() {
+  try {
+    return localStorage.getItem(AUTH_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeAuthToken(token) {
+  try {
+    if (token) localStorage.setItem(AUTH_KEY, token);
+    else localStorage.removeItem(AUTH_KEY);
+  } catch {
+    // ohne Speicher bleibt man nur bis zum Neuladen angemeldet
+  }
+}
 
 // Sekunden bis zu einem Zeitpunkt. Nur die kleinen Anzeige-Komponenten ticken, nicht das ganze Spiel.
 function useSeconds(target) {
@@ -76,7 +94,41 @@ function App() {
   const [connected, setConnected] = useState(socket.connected);
   const [joining, setJoining] = useState(false);
   const [notice, setNotice] = useState("");
-  const [view, setView] = useState("home"); // home | new | join | collection
+  const [view, setView] = useState("home"); // home | new | join | collection | account | profile
+  const [authToken, setAuthToken] = useState(readAuthToken);
+  const [account, setAccount] = useState(null);
+
+  const loadProfile = useCallback((token) => {
+    if (!token) return;
+    socket.request("profile", { authToken: token }).then((result) => {
+      if (result.ok) setAccount(result.account);
+      else if (result.code === "logged_out") {
+        storeAuthToken(null);
+        setAuthToken(null);
+        setAccount(null);
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => loadProfile(authToken), [authToken, loadProfile]);
+  // nach einer Partie die neue Statistik holen
+  useEffect(() => {
+    if (state?.status === "finished") loadProfile(authToken);
+  }, [state?.status, authToken, loadProfile]);
+
+  const signedIn = (token, data) => {
+    storeAuthToken(token);
+    setAuthToken(token);
+    setAccount(data);
+    setView("profile");
+  };
+
+  const signOut = () => {
+    storeAuthToken(null);
+    setAuthToken(null);
+    setAccount(null);
+    setView("home");
+  };
 
   useEffect(() => {
     window.addEventListener("pointerdown", unlockAudio, { once: true });
@@ -127,7 +179,7 @@ function App() {
 
   const join = (name, room) => {
     setJoining(true);
-    socket.emit("joinGame", { name, room, create: view === "new" }, (response) => {
+    socket.emit("joinGame", { name, room, create: view === "new", authToken: account ? authToken : undefined }, (response) => {
       setJoining(false);
       if (!response?.ok) {
         setNotice(response?.message || "Beitritt fehlgeschlagen.");
@@ -149,17 +201,28 @@ function App() {
   };
 
   const isPlaying = state && state.status !== "lobby";
+  const fullScreenView = !state && ["home", "new", "join", "account", "profile"].includes(view);
 
   return (
-    <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${!state && (view === "home" || view === "new" || view === "join") ? "is-home" : ""}`}>
-      {!isPlaying && !(!state && (view === "home" || view === "new" || view === "join")) && <Header connected={connected} state={state} />}
+    <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${fullScreenView ? "is-home" : ""}`}>
+      {!isPlaying && !fullScreenView && <Header connected={connected} state={state} />}
       <main>
         {!state && view === "home" ? (
-          <Home onNew={() => setView("new")} onJoin={() => setView("join")} onCollection={() => setView("collection")} />
+          <Home
+            onNew={() => setView("new")}
+            onJoin={() => setView("join")}
+            onCollection={() => setView("collection")}
+            account={account}
+            onAccount={() => setView(account ? "profile" : "account")}
+          />
         ) : !state && view === "collection" ? (
           <Collection onBack={() => setView("home")} />
+        ) : !state && view === "account" ? (
+          <AccountForm onBack={() => setView("home")} onSignedIn={signedIn} connected={connected} />
+        ) : !state && view === "profile" ? (
+          account ? <Profile account={account} onBack={() => setView("home")} onSignOut={signOut} /> : <AccountForm onBack={() => setView("home")} onSignedIn={signedIn} connected={connected} />
         ) : !state ? (
-          <Welcome mode={view} onBack={() => setView("home")} onJoin={join} joining={joining} connected={connected} />
+          <Welcome mode={view} onBack={() => setView("home")} onJoin={join} joining={joining} connected={connected} account={account} />
         ) : state.status === "lobby" ? (
           <Lobby state={state} onLeave={leave} />
         ) : (
@@ -171,9 +234,16 @@ function App() {
   );
 }
 
-function Home({ onNew, onJoin, onCollection }) {
+function Home({ onNew, onJoin, onCollection, account, onAccount }) {
   return (
     <section className="home">
+      <button type="button" className="home-account" onClick={onAccount}>
+        {account ? (
+          <><LevelBadge level={account.level} /><span>{account.name}</span></>
+        ) : (
+          <><UserIcon /><span>Anmelden</span></>
+        )}
+      </button>
       <div className="home-inner">
         <div className="home-logo" role="img" aria-label="Andi Trumpf">
           <div className="home-logo-top"><span>ANDI</span><FlagPattern /></div>
@@ -289,8 +359,9 @@ function Header({ connected, state }) {
   );
 }
 
-function Welcome({ mode = "new", onBack, onJoin, joining, connected }) {
-  const [name, setName] = useState(sessionStorage.getItem(SESSION_NAME) || "");
+function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) {
+  const [typedName, setName] = useState(sessionStorage.getItem(SESSION_NAME) || "");
+  const name = account ? account.name : typedName;
   const [sessionId, setSessionId] = useState("");
   const submit = (event) => {
     event.preventDefault();
@@ -315,6 +386,7 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected }) {
             id="player-name"
             value={name}
             onChange={(event) => setName(event.target.value.slice(0, 20))}
+            disabled={Boolean(account)}
             placeholder="z. B. Niki"
             autoComplete="nickname"
             autoFocus={typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches}
@@ -336,7 +408,10 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected }) {
             <ArrowIcon />
           </button>
         </form>
-        <div className="secure-note"><ShieldIcon /> Dein Kartenstapel bleibt nur für dich sichtbar.</div>
+        <div className="secure-note">
+          <ShieldIcon />
+          {account ? `Angemeldet als ${account.name}: Siege und XP werden gespeichert.` : "Als Gast spielen. Mit Anmeldung werden Siege und XP gespeichert."}
+        </div>
       </div>
     </section>
   );
@@ -372,7 +447,7 @@ function Lobby({ state, onLeave }) {
               <div className="seat is-filled" key={player.id}>
                 <div className="avatar">{initials(player.name)}</div>
                 <div className="seat-copy">
-                  <strong>{player.name} {player.id === state.selfId && <small>DU</small>}</strong>
+                  <strong>{player.name} {player.level && <LevelBadge level={player.level} />} {player.id === state.selfId && <small>DU</small>}</strong>
                   <span>{player.isHost ? "Rennleitung · Host" : `Startplatz ${index + 1}`}</span>
                 </div>
                 <i className="ready-light" aria-label="Bereit" />
@@ -899,6 +974,135 @@ function GtIcon({ type }) {
   return <svg className="gt-icon" viewBox="0 0 64 64" aria-hidden="true">{icons[type]}</svg>;
 }
 
+function LevelBadge({ level }) {
+  return <span className="level-badge" title={`Level ${level}`}>Lv {level}</span>;
+}
+
+function XpBar({ level, xpInLevel, xpForLevel }) {
+  const percent = Math.min(100, Math.round((100 * xpInLevel) / Math.max(1, xpForLevel)));
+  return (
+    <div className="xp-bar" aria-label={`Level ${level}: ${xpInLevel} von ${xpForLevel} XP`}>
+      <div className="xp-bar-track"><i style={{ width: `${percent}%` }} /></div>
+      <small>{xpInLevel} / {xpForLevel} XP bis Level {level + 1}</small>
+    </div>
+  );
+}
+
+function AccountForm({ onBack, onSignedIn, connected }) {
+  const [mode, setMode] = useState("login"); // login | register
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = (event) => {
+    event.preventDefault();
+    if (!name.trim() || !password) return;
+    setBusy(true);
+    setError("");
+    socket.request(mode, { name: name.trim(), password })
+      .then((result) => {
+        if (result.ok) onSignedIn(result.authToken, result.account);
+        else setError(result.message || "Das hat nicht geklappt.");
+      })
+      .catch(() => setError("Keine Verbindung zum Server."))
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <section className="welcome page-width">
+      <div className="join-card panel account-card">
+        <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
+        <p className="eyebrow">SPIELERKONTO</p>
+        <h2>{mode === "login" ? "Anmelden" : "Registrieren"}</h2>
+        <div className="account-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={mode === "login"} onClick={() => setMode("login")}>Anmelden</button>
+          <button type="button" role="tab" aria-selected={mode === "register"} onClick={() => setMode("register")}>Registrieren</button>
+        </div>
+        <p className="muted">Freiwillig: Mit Konto werden deine Spiele, Siege und XP gespeichert.</p>
+        <form onSubmit={submit}>
+          <label htmlFor="account-name">Spielername</label>
+          <input id="account-name" value={name} onChange={(event) => setName(event.target.value.slice(0, 20))} autoComplete="username" placeholder="z. B. Niki" />
+          <label htmlFor="account-password">Passwort</label>
+          <input id="account-password" type="password" value={password} onChange={(event) => setPassword(event.target.value.slice(0, 100))} autoComplete={mode === "login" ? "current-password" : "new-password"} />
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <button className="primary-button" disabled={!connected || busy || !name.trim() || !password}>
+            <span>{busy ? "Moment …" : mode === "login" ? "Anmelden" : "Konto erstellen"}</span>
+            <ArrowIcon />
+          </button>
+        </form>
+        {mode === "register" && (
+          <div className="secure-note"><ShieldIcon /> Nimm ein Passwort, das du sonst nirgends verwendest.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// Ringdiagramm: Anteil Siege (orange) und Niederlagen (grau), Siegquote in der Mitte
+function WinRateDonut({ wins, losses }) {
+  const total = wins + losses;
+  const gap = wins > 0 && losses > 0 ? 1.2 : 0;
+  const winPart = total ? (100 * wins) / total : 0;
+  const lossPart = total ? 100 - winPart : 0;
+  const winLength = Math.max(0, winPart - gap);
+  const lossLength = Math.max(0, lossPart - gap);
+  return (
+    <div className="donut" role="img" aria-label={total ? `Siegquote ${Math.round(winPart)} Prozent: ${wins} Siege, ${losses} Niederlagen` : "Noch keine Spiele"}>
+      <svg viewBox="0 0 42 42">
+        <circle className="donut-track" cx="21" cy="21" r="15.9155" />
+        {wins > 0 && (
+          <circle className="donut-win" cx="21" cy="21" r="15.9155" strokeDasharray={`${winLength} ${100 - winLength}`} strokeDashoffset="25">
+            <title>{wins} Siege</title>
+          </circle>
+        )}
+        {losses > 0 && (
+          <circle className="donut-loss" cx="21" cy="21" r="15.9155" strokeDasharray={`${lossLength} ${100 - lossLength}`} strokeDashoffset={25 - winPart}>
+            <title>{losses} Niederlagen</title>
+          </circle>
+        )}
+      </svg>
+      <div className="donut-center">
+        <strong>{total ? `${Math.round(winPart)}%` : "–"}</strong>
+        <span>Siegquote</span>
+      </div>
+    </div>
+  );
+}
+
+function Profile({ account, onBack, onSignOut }) {
+  return (
+    <section className="welcome page-width">
+      <div className="join-card panel profile-card">
+        <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
+        <p className="eyebrow">SPIELERKONTO</p>
+        <h2>{account.name}</h2>
+        <div className="profile-level">
+          <span className="profile-level-number">Level {account.level}</span>
+          <span className="muted">{account.xp} XP gesamt</span>
+        </div>
+        <XpBar level={account.level} xpInLevel={account.xpInLevel} xpForLevel={account.xpForLevel} />
+        <WinRateDonut wins={account.wins} losses={account.losses} />
+        <dl className="profile-stats">
+          <div><dt>Spiele</dt><dd>{account.gamesPlayed}</dd></div>
+          <div><dt><i className="swatch is-win" />Siege</dt><dd>{account.wins}</dd></div>
+          <div><dt><i className="swatch is-loss" />Niederlagen</dt><dd>{account.losses}</dd></div>
+        </dl>
+        <button type="button" className="text-button" onClick={onSignOut}>Abmelden</button>
+      </div>
+    </section>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="user-icon">
+      <circle cx="12" cy="8" r="4" fill="currentColor" />
+      <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" fill="currentColor" />
+    </svg>
+  );
+}
+
 function FinishPanel({ state }) {
   const { players, game, selfId } = state;
   const stats = state.stats || {};
@@ -917,6 +1121,7 @@ function FinishPanel({ state }) {
   const votes = state.rematchIds || [];
   const voters = players.filter((player) => player.connected && !player.isBot);
   const voted = votes.includes(selfId);
+  const award = game.xpAwards?.[selfId];
 
   return (
     <div className="finish-overlay">
@@ -927,13 +1132,20 @@ function FinishPanel({ state }) {
         {game.result?.reason === "abandoned" && (
           <p className="muted">Die Partie wurde beendet, weil zu viele Mitspieler gegangen sind.</p>
         )}
+        {award && (
+          <div className="finish-xp">
+            <strong>+{award.xp} XP</strong>
+            {award.level > award.levelBefore && <span className="finish-levelup">Level {award.level} erreicht!</span>}
+            <XpBar level={award.level} xpInLevel={award.xpInLevel} xpForLevel={award.xpForLevel} />
+          </div>
+        )}
         <ol className="finish-ranking">
           {ranked.map((player, index) => {
             const entry = statOf(player);
             return (
               <li key={player.id} className={player.id === selfId ? "is-self" : ""}>
                 <span className="finish-rank">{index + 1}.</span>
-                <b>{player.name}</b>
+                <b>{player.name} {(game.xpAwards?.[player.id]?.level || player.level) && <LevelBadge level={game.xpAwards?.[player.id]?.level || player.level} />}</b>
                 <small>
                   {entry.tricks} {entry.tricks === 1 ? "Stich" : "Stiche"}
                   {entry.outRound ? ` · raus in Runde ${entry.outRound}` : ` · ${player.cardCount} Karten`}

@@ -23,8 +23,22 @@ jobs:
       - name: Spiel-API und Kartenbilder zur Seite legen
         run: |
           mkdir -p dist/api
-          cp api/index.php api/engine.php api/.htaccess cards.json card-images.json dist/api/
+          cp api/index.php api/engine.php api/accounts.php api/.htaccess cards.json card-images.json dist/api/
           cp -r cardimages dist/cardimages
+
+      - name: Datenbank-Zugang aus Secrets schreiben (nicht im Repository)
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          if [ -n "$DB_NAME" ]; then
+            php -r 'echo "<?php\nreturn " . var_export(["dsn" => "mysql:host=" . (getenv("DB_HOST") ?: "localhost") . ";dbname=" . getenv("DB_NAME") . ";charset=utf8mb4", "user" => getenv("DB_USER") ?: getenv("DB_NAME"), "password" => getenv("DB_PASSWORD")], true) . ";\n";' > dist/api/config.php
+            echo "config.php geschrieben"
+          else
+            echo "Keine DB-Secrets gesetzt: Konten bleiben aus"
+          fi
 
       - name: Upload via lftp
         env:

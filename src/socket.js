@@ -93,7 +93,7 @@ class PollingSocket {
     let body = {};
     if (event === "joinGame") {
       if (payload?.room) this.room = payload.room;
-      body = { name: payload?.name, token: payload?.token ?? this.token, room: payload?.room ?? this.room, create: payload?.create };
+      body = { name: payload?.name, token: payload?.token ?? this.token, room: payload?.room ?? this.room, create: payload?.create, authToken: payload?.authToken };
     }
     if (event === "chooseCategory") body = { category: payload };
     if (event === "setCardsPerPlayer") body = { count: payload };
