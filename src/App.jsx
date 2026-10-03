@@ -455,6 +455,7 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
                   </button>
                 ))}
               </div>
+              {difficulty === "easy" && <p className="ai-note" role="status">Gegen „Leicht“ gibt es keine XP.</p>}
               <span className="field-label">Gegner</span>
               <div className="ai-opponents" role="radiogroup" aria-label="Anzahl der Gegner">
                 {[1, 2, 3].map((count) => (
@@ -1321,12 +1322,15 @@ function FinishPanel({ state }) {
         {game.result?.reason === "abandoned" && (
           <p className="muted">Die Partie wurde beendet, weil zu viele Mitspieler gegangen sind.</p>
         )}
-        {award && (
+        {award && award.xp > 0 && (
           <div className="finish-xp">
             <strong>+{award.xp} XP</strong>
             {award.level > award.levelBefore && <span className="finish-levelup">Level {award.level} erreicht!</span>}
             <XpBar level={award.level} xpInLevel={award.xpInLevel} xpForLevel={award.xpForLevel} />
           </div>
+        )}
+        {award && award.xp === 0 && state.solo && (
+          <p className="muted finish-no-xp">Gegen „Leicht“ gibt es keine XP.</p>
         )}
         <ol className="finish-ranking">
           {ranked.map((player, index) => {

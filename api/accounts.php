@@ -8,7 +8,7 @@ const XP_WIN = 100;
 const XP_PLAYED = 25;
 const XP_PER_TRICK = 10;
 const XP_PER_OPPONENT = 25; // Sieg gegen mehr Gegner bringt mehr
-const XP_AI_FACTOR = ['easy' => 0.4, 'medium' => 0.7, 'hard' => 1.0];
+const XP_AI_FACTOR = ['easy' => 0.0, 'medium' => 0.7, 'hard' => 1.0]; // gegen Leicht gibt es keine XP
 
 function trumpf_db(): ?PDO
 {
@@ -234,7 +234,7 @@ function trumpf_record_results(TrumpfRoom $room): void
             $tricks = (int) ($room->data['stats']['players'][$player['id']]['tricks'] ?? 0);
             $xp = ($won ? XP_WIN + XP_PER_OPPONENT * ($opponents - 1) : XP_PLAYED) + XP_PER_TRICK * $tricks;
             if (!empty($room->data['solo'])) {
-                // Gegen die KI gibt es je nach Stufe weniger XP, damit Leicht nicht zum schnellen Aufleveln taugt.
+                // Gegen die KI gibt es je nach Stufe weniger XP, gegen Leicht gar keine.
                 $xp = (int) round($xp * (XP_AI_FACTOR[$room->data['aiLevel'] ?? 'medium'] ?? 0.7));
             }
 
