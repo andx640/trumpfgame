@@ -1,6 +1,6 @@
 # Startseite nie zwischenspeichern, damit neue Versionen sofort ankommen.
 <IfModule mod_headers.c>
-  <FilesMatch "\.html$">
+  <FilesMatch "(\.html|sw\.js)$">
     Header set Cache-Control "no-cache"
   </FilesMatch>
 </IfModule>

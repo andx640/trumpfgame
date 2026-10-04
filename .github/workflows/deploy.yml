@@ -23,7 +23,7 @@ jobs:
       - name: Spiel-API und Kartenbilder zur Seite legen
         run: |
           mkdir -p dist/api
-          cp api/index.php api/engine.php api/accounts.php api/.htaccess cards.json card-images.json dist/api/
+          cp api/index.php api/engine.php api/accounts.php api/push.php api/.htaccess cards.json card-images.json dist/api/
           cp -r cardimages dist/cardimages
 
       - name: Datenbank-Zugang aus Secrets schreiben (nicht im Repository)

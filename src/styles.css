@@ -4962,3 +4962,157 @@ body:has(.app-shell.is-playing) {
   width: 17px;
   height: 17px;
 }
+
+/* Online-Status */
+.presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #9aa6ba;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.presence i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e5484d;
+  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.2);
+}
+
+.presence.is-on {
+  color: #7fd48a;
+}
+
+.presence.is-on i {
+  background: #34c759;
+  box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.25);
+}
+
+.player-modal h2 + .presence {
+  margin-bottom: 6px;
+}
+
+/* Einladungen */
+.invite-banner {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(calc(100vw - 20px), 440px);
+  padding: 12px 12px 12px 16px;
+  border: 1px solid var(--acid);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #232d40, #141b28);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.65);
+  transform: translateX(-50%);
+  animation: banner-drop 420ms cubic-bezier(0.2, 0.9, 0.25, 1.1) both;
+}
+
+.invite-banner-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.invite-banner-copy strong {
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invite-banner-copy span {
+  color: #9aa6ba;
+  font-size: 12px;
+}
+
+@keyframes banner-drop {
+  from { opacity: 0; transform: translate(-50%, -120%); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.home-account-badge {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: #1a0f08;
+  background: var(--acid);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.inbox {
+  margin: 4px 0 6px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.inbox h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.inbox .friend-row {
+  margin-top: 6px;
+}
+
+.push-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.push-toggle {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  color: #1a0f08;
+  background: var(--acid);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.push-toggle.is-on {
+  color: #c9d1dc;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.push-toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.push-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
+.invite-open {
+  margin: 0 0 12px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--acid);
+  border-radius: 12px;
+  color: var(--acid);
+  background: rgba(249, 144, 42, 0.1);
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
