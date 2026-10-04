@@ -5116,3 +5116,95 @@ body:has(.app-shell.is-playing) {
   font-weight: 900;
   cursor: pointer;
 }
+
+/* Fünf Zeilen: Foto und Felder rücken zusammen, damit unten Platz für Rarität und Performance ist */
+.gt-photo {
+  height: 566px;
+}
+
+.gt-plate {
+  top: 588px;
+}
+
+.gt-stats {
+  top: 746px;
+  gap: 12px 9px;
+  height: 598px;
+}
+
+.stat-label {
+  top: 8px;
+  font-size: 25px;
+}
+
+.gt-icon {
+  bottom: 8px;
+  width: 70px;
+  height: 70px;
+}
+
+.portrait-stat > strong {
+  bottom: 9px;
+  font-size: 56px;
+}
+
+.portrait-stat > strong small {
+  font-size: 25px;
+}
+
+.portrait-stat > i {
+  top: 12px;
+}
+
+/* Rarität (Diamanten) und Performance (Zielflaggen) */
+.rating {
+  position: absolute;
+  right: 26px;
+  bottom: 18px;
+  display: flex;
+  gap: 5px;
+}
+
+.rating-symbol {
+  width: 40px;
+  height: 40px;
+  overflow: visible;
+}
+
+.rating-symbol path {
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: rgba(255, 255, 255, 0.28);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.rating-symbol .rating-facets,
+.rating-symbol .rating-pole {
+  fill: none;
+}
+
+.rating-symbol .rating-checks {
+  fill: rgba(0, 0, 0, 0.35);
+  stroke: none;
+}
+
+.rating-symbol.is-filled path {
+  fill: #ffbd14;
+  stroke: #8a5600;
+}
+
+.rating-symbol.is-filled .rating-facets {
+  fill: none;
+  stroke: rgba(138, 86, 0, 0.7);
+}
+
+.rating-symbol.is-filled .rating-pole {
+  fill: none;
+  stroke: #c98a1d;
+  stroke-width: 2.4;
+}
+
+.rating-symbol.is-filled .rating-checks {
+  fill: #2a1c00;
+  stroke: none;
+}

@@ -20,6 +20,8 @@ const TRUMPF_CATEGORIES = [
     'gewicht' => ['label' => 'Gewicht', 'unit' => 'kg', 'direction' => 'low', 'icon' => 'weight'],
     'drehzahl' => ['label' => 'Drehzahl', 'unit' => 'U/min', 'direction' => 'high', 'icon' => 'rpm'],
     'preis' => ['label' => 'Preis', 'unit' => '€', 'direction' => 'high', 'icon' => 'price'],
+    'raritaet' => ['label' => 'Rarität', 'unit' => '', 'direction' => 'high', 'icon' => 'gem', 'rating' => true],
+    'performance' => ['label' => 'Performance', 'unit' => '', 'direction' => 'high', 'icon' => 'flag', 'rating' => true],
 ];
 
 const TRUMPF_LOCAL_CARD_IMAGES = [

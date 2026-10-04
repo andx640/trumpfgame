@@ -9,7 +9,9 @@
     "beschleunigung": 2.4,
     "gewicht": 1995,
     "drehzahl": 6700,
-    "drehmoment": 1600
+    "drehmoment": 1600,
+    "raritaet": 4,
+    "performance": 3
   },
   {
     "c_id": "0002",
@@ -21,7 +23,9 @@
     "beschleunigung": 2.5,
     "gewicht": 1888,
     "drehmoment": 1250,
-    "drehzahl": 6400
+    "drehzahl": 6400,
+    "raritaet": 4,
+    "performance": 2
   },
   {
     "c_id": "0003",
@@ -33,7 +37,9 @@
     "beschleunigung": 2.5,
     "gewicht": 1420,
     "drehmoment": 1500,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 4,
+    "performance": 5
   },
   {
     "c_id": "0004",
@@ -45,7 +51,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1395,
     "drehmoment": 1370,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0005",
@@ -57,7 +65,9 @@
     "beschleunigung": 2.6,
     "gewicht": 1385,
     "drehmoment": 1617,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0006",
@@ -69,7 +79,9 @@
     "beschleunigung": 1.9,
     "gewicht": 2150,
     "drehmoment": 2360,
-    "drehzahl": 0
+    "drehzahl": 0,
+    "raritaet": 4,
+    "performance": 4
   },
   {
     "c_id": "0007",
@@ -81,7 +93,9 @@
     "beschleunigung": 2.4,
     "gewicht": 1960,
     "drehmoment": 1600,
-    "drehzahl": 6700
+    "drehzahl": 6700,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0008",
@@ -93,7 +107,9 @@
     "beschleunigung": 2.7,
     "gewicht": 1640,
     "drehmoment": 800,
-    "drehzahl": 7200
+    "drehzahl": 7200,
+    "raritaet": 1,
+    "performance": 3
   },
   {
     "c_id": "0009",
@@ -105,7 +121,9 @@
     "beschleunigung": 2.6,
     "gewicht": 1675,
     "drehmoment": 1280,
-    "drehzahl": 9150
+    "drehzahl": 9150,
+    "raritaet": 3,
+    "performance": 5
   },
   {
     "c_id": "0010",
@@ -117,7 +135,9 @@
     "beschleunigung": 2.5,
     "gewicht": 1570,
     "drehmoment": 800,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 2,
+    "performance": 4
   },
   {
     "c_id": "0011",
@@ -129,7 +149,9 @@
     "beschleunigung": 2.6,
     "gewicht": 1585,
     "drehmoment": 900,
-    "drehzahl": 9250
+    "drehzahl": 9250,
+    "raritaet": 4,
+    "performance": 5
   },
   {
     "c_id": "0012",
@@ -141,7 +163,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1435,
     "drehmoment": 770,
-    "drehzahl": 7900
+    "drehzahl": 7900,
+    "raritaet": 2,
+    "performance": 4
   },
   {
     "c_id": "0013",
@@ -153,7 +177,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1525,
     "drehmoment": 720,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 3,
+    "performance": 5
   },
   {
     "c_id": "0014",
@@ -165,7 +191,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1422,
     "drehmoment": 600,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 1,
+    "performance": 3
   },
   {
     "c_id": "0015",
@@ -177,7 +205,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1490,
     "drehmoment": 900,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 4,
+    "performance": 5
   },
   {
     "c_id": "0016",
@@ -189,7 +219,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1419,
     "drehmoment": 770,
-    "drehzahl": 8200
+    "drehzahl": 8200,
+    "raritaet": 2,
+    "performance": 4
   },
   {
     "c_id": "0017",
@@ -201,7 +233,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1198,
     "drehmoment": 800,
-    "drehzahl": 8250
+    "drehzahl": 8250,
+    "raritaet": 4,
+    "performance": 5
   },
   {
     "c_id": "0018",
@@ -213,7 +247,9 @@
     "beschleunigung": 2.5,
     "gewicht": 1030,
     "drehmoment": 900,
-    "drehzahl": 11100
+    "drehzahl": 11100,
+    "raritaet": 4,
+    "performance": 5
   },
   {
     "c_id": "0019",
@@ -225,7 +261,9 @@
     "beschleunigung": 3.4,
     "gewicht": 1693,
     "drehmoment": 900,
-    "drehzahl": 7000
+    "drehzahl": 7000,
+    "raritaet": 2,
+    "performance": 2
   },
   {
     "c_id": "0020",
@@ -237,7 +275,9 @@
     "beschleunigung": 3.2,
     "gewicht": 1520,
     "drehmoment": 800,
-    "drehzahl": 7200
+    "drehzahl": 7200,
+    "raritaet": 3,
+    "performance": 5
   },
   {
     "c_id": "0021",
@@ -249,7 +289,9 @@
     "beschleunigung": 2.2,
     "gewicht": 1450,
     "drehmoment": 1850,
-    "drehzahl": 7000
+    "drehzahl": 7000,
+    "raritaet": 5,
+    "performance": 5
   },
   {
     "c_id": "0022",
@@ -261,7 +303,9 @@
     "beschleunigung": 3.1,
     "gewicht": 1595,
     "drehmoment": 580,
-    "drehzahl": 8700
+    "drehzahl": 8700,
+    "raritaet": 2,
+    "performance": 3
   },
   {
     "c_id": "0023",
@@ -273,7 +317,9 @@
     "beschleunigung": 2.7,
     "gewicht": 1720,
     "drehmoment": 652,
-    "drehzahl": 7100
+    "drehzahl": 7100,
+    "raritaet": 2,
+    "performance": 4
   },
   {
     "c_id": "0024",
@@ -285,7 +331,9 @@
     "beschleunigung": 2.6,
     "gewicht": 1560,
     "drehmoment": 623,
-    "drehzahl": 8600
+    "drehzahl": 8600,
+    "raritaet": 1,
+    "performance": 4
   },
   {
     "c_id": "0025",
@@ -297,7 +345,9 @@
     "beschleunigung": 2.0,
     "gewicht": 1995,
     "drehmoment": 900,
-    "drehzahl": 9000
+    "drehzahl": 9000,
+    "raritaet": 4,
+    "performance": 4
   },
   {
     "c_id": "0026",
@@ -309,7 +359,9 @@
     "beschleunigung": 2.4,
     "gewicht": 1976,
     "drehmoment": 1600,
-    "drehzahl": 7000
+    "drehzahl": 7000,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0027",
@@ -321,7 +373,9 @@
     "beschleunigung": 2.4,
     "gewicht": 1978,
     "drehmoment": 1600,
-    "drehzahl": 7050
+    "drehzahl": 7050,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0028",
@@ -333,7 +387,9 @@
     "beschleunigung": 3,
     "gewicht": 1350,
     "drehmoment": 1000,
-    "drehzahl": 6700
+    "drehzahl": 6700,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0029",
@@ -345,7 +401,9 @@
     "beschleunigung": 3.6,
     "gewicht": 1230,
     "drehmoment": 760,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0030",
@@ -357,7 +415,9 @@
     "beschleunigung": 2.5,
     "gewicht": 1838,
     "drehmoment": 1500,
-    "drehzahl": 6400
+    "drehzahl": 6400,
+    "raritaet": 5,
+    "performance": 2
   },
   {
     "c_id": "0031",
@@ -369,7 +429,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1475,
     "drehmoment": 730,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 2,
+    "performance": 3
   },
   {
     "c_id": "0032",
@@ -381,7 +443,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1680,
     "drehmoment": 1700,
-    "drehzahl": 0
+    "drehzahl": 0,
+    "raritaet": 4,
+    "performance": 4
   },
   {
     "c_id": "0033",
@@ -393,7 +457,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1590,
     "drehmoment": 2000,
-    "drehzahl": 8250
+    "drehzahl": 8250,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0034",
@@ -405,7 +471,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1360,
     "drehmoment": 1371,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 5,
+    "performance": 5
   },
   {
     "c_id": "0035",
@@ -417,7 +485,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1385,
     "drehmoment": 1385,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0036",
@@ -429,7 +499,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1695,
     "drehmoment": 1400,
-    "drehzahl": 11000
+    "drehzahl": 11000,
+    "raritaet": 4,
+    "performance": 5
   },
   {
     "c_id": "0037",
@@ -441,7 +513,9 @@
     "beschleunigung": 3.1,
     "gewicht": 1280,
     "drehmoment": 1060,
-    "drehzahl": 7000
+    "drehzahl": 7000,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0038",
@@ -453,7 +527,9 @@
     "beschleunigung": 2.5,
     "gewicht": 1390,
     "drehmoment": 1500,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 4,
+    "performance": 3
   },
   {
     "c_id": "0039",
@@ -465,7 +541,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1435,
     "drehmoment": 1200,
-    "drehzahl": 7250
+    "drehzahl": 7250,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0040",
@@ -477,7 +555,9 @@
     "beschleunigung": 2.7,
     "gewicht": 1244,
     "drehmoment": 1566,
-    "drehzahl": 6600
+    "drehzahl": 6600,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0041",
@@ -489,7 +569,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1385,
     "drehmoment": 746,
-    "drehzahl": 6800
+    "drehzahl": 6800,
+    "raritaet": 3,
+    "performance": 4
   },
   {
     "c_id": "0042",
@@ -501,7 +583,9 @@
     "beschleunigung": 2.5,
     "gewicht": 1247,
     "drehmoment": 1735,
-    "drehzahl": 8800
+    "drehzahl": 8800,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0043",
@@ -513,7 +597,9 @@
     "beschleunigung": 3.7,
     "gewicht": 1480,
     "drehmoment": 480,
-    "drehzahl": 9000
+    "drehzahl": 9000,
+    "raritaet": 4,
+    "performance": 4
   },
   {
     "c_id": "0044",
@@ -525,7 +611,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1247,
     "drehmoment": 1508,
-    "drehzahl": 6950
+    "drehzahl": 6950,
+    "raritaet": 5,
+    "performance": 2
   },
   {
     "c_id": "0045",
@@ -537,7 +625,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1430,
     "drehmoment": 1150,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 4,
+    "performance": 3
   },
   {
     "c_id": "0046",
@@ -549,7 +639,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1269,
     "drehmoment": 800,
-    "drehzahl": 8200
+    "drehzahl": 8200,
+    "raritaet": 4,
+    "performance": 3
   },
   {
     "c_id": "0047",
@@ -561,7 +653,9 @@
     "beschleunigung": 2.7,
     "gewicht": 1399,
     "drehmoment": 1340,
-    "drehzahl": 9200
+    "drehzahl": 9200,
+    "raritaet": 4,
+    "performance": 5
   },
   {
     "c_id": "0048",
@@ -573,7 +667,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1389,
     "drehmoment": 800,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 2,
+    "performance": 4
   },
   {
     "c_id": "0049",
@@ -585,7 +681,9 @@
     "beschleunigung": 3.0,
     "gewicht": 1498,
     "drehmoment": 720,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 2,
+    "performance": 3
   },
   {
     "c_id": "0050",
@@ -597,7 +695,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1230,
     "drehmoment": 700,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 3,
+    "performance": 4
   },
   {
     "c_id": "0051",
@@ -609,7 +709,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1356,
     "drehmoment": 620,
-    "drehzahl": 8100
+    "drehzahl": 8100,
+    "raritaet": 3,
+    "performance": 4
   },
   {
     "c_id": "0052",
@@ -621,7 +723,9 @@
     "beschleunigung": 3.3,
     "gewicht": 1434,
     "drehmoment": 600,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 2,
+    "performance": 3
   },
   {
     "c_id": "0053",
@@ -633,7 +737,9 @@
     "beschleunigung": 2.2,
     "gewicht": 1525,
     "drehmoment": 850,
-    "drehzahl": 9000
+    "drehzahl": 9000,
+    "raritaet": 3,
+    "performance": 5
   },
   {
     "c_id": "0054",
@@ -645,7 +751,9 @@
     "beschleunigung": 3.2,
     "gewicht": 1450,
     "drehmoment": 465,
-    "drehzahl": 9000
+    "drehzahl": 9000,
+    "raritaet": 2,
+    "performance": 5
   },
   {
     "c_id": "0055",
@@ -657,7 +765,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1630,
     "drehmoment": 718,
-    "drehzahl": 8900
+    "drehzahl": 8900,
+    "raritaet": 2,
+    "performance": 3
   },
   {
     "c_id": "0056",
@@ -669,7 +779,9 @@
     "beschleunigung": 2.5,
     "gewicht": 1772,
     "drehmoment": 725,
-    "drehzahl": 9500
+    "drehzahl": 9500,
+    "raritaet": 2,
+    "performance": 4
   },
   {
     "c_id": "0057",
@@ -681,7 +793,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1339,
     "drehmoment": 800,
-    "drehzahl": 8200
+    "drehzahl": 8200,
+    "raritaet": 3,
+    "performance": 5
   },
   {
     "c_id": "0058",
@@ -693,7 +807,9 @@
     "beschleunigung": 2.4,
     "gewicht": 1977,
     "drehmoment": 1600,
-    "drehzahl": 6700
+    "drehzahl": 6700,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0059",
@@ -705,7 +821,9 @@
     "beschleunigung": 1.9,
     "gewicht": 1880,
     "drehmoment": 2750,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 4,
+    "performance": 3
   },
   {
     "c_id": "0060",
@@ -717,7 +835,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1280,
     "drehmoment": 1100,
-    "drehzahl": 6700
+    "drehzahl": 6700,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0061",
@@ -729,7 +849,9 @@
     "beschleunigung": 3.4,
     "gewicht": 1845,
     "drehmoment": 900,
-    "drehzahl": 7000
+    "drehzahl": 7000,
+    "raritaet": 4,
+    "performance": 2
   },
   {
     "c_id": "0062",
@@ -741,7 +863,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1485,
     "drehmoment": 697,
-    "drehzahl": 9500
+    "drehzahl": 9500,
+    "raritaet": 3,
+    "performance": 4
   },
   {
     "c_id": "0063",
@@ -753,7 +877,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1520,
     "drehmoment": 719,
-    "drehzahl": 8900
+    "drehzahl": 8900,
+    "raritaet": 4,
+    "performance": 3
   },
   {
     "c_id": "0064",
@@ -765,7 +891,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1487,
     "drehmoment": 692,
-    "drehzahl": 9500
+    "drehzahl": 9500,
+    "raritaet": 3,
+    "performance": 4
   },
   {
     "c_id": "0065",
@@ -777,7 +905,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1470,
     "drehmoment": 740,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 2,
+    "performance": 4
   },
   {
     "c_id": "0066",
@@ -789,7 +919,9 @@
     "beschleunigung": 2.5,
     "gewicht": 1665,
     "drehmoment": 1123,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 2,
+    "performance": 5
   },
   {
     "c_id": "0067",
@@ -801,7 +933,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1385,
     "drehmoment": 770,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 2,
+    "performance": 4
   },
   {
     "c_id": "0068",
@@ -813,7 +947,9 @@
     "beschleunigung": 3.5,
     "gewicht": 1530,
     "drehmoment": 814,
-    "drehzahl": 6200
+    "drehzahl": 6200,
+    "raritaet": 3,
+    "performance": 5
   },
   {
     "c_id": "0069",
@@ -825,7 +961,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1725,
     "drehmoment": 667,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 4,
+    "performance": 4
   },
   {
     "c_id": "0070",
@@ -837,7 +975,9 @@
     "beschleunigung": 3.0,
     "gewicht": 1395,
     "drehmoment": 540,
-    "drehzahl": 9000
+    "drehzahl": 9000,
+    "raritaet": 2,
+    "performance": 4
   },
   {
     "c_id": "0071",
@@ -849,7 +989,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1560,
     "drehmoment": 678,
-    "drehzahl": 9500
+    "drehzahl": 9500,
+    "raritaet": 2,
+    "performance": 3
   },
   {
     "c_id": "0072",
@@ -861,7 +1003,9 @@
     "beschleunigung": 3.8,
     "gewicht": 1230,
     "drehmoment": 471,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 4,
+    "performance": 3
   },
   {
     "c_id": "0073",
@@ -873,7 +1017,9 @@
     "beschleunigung": 3.4,
     "gewicht": 1605,
     "drehmoment": 620,
-    "drehzahl": 8250
+    "drehzahl": 8250,
+    "raritaet": 3,
+    "performance": 4
   },
   {
     "c_id": "0074",
@@ -885,7 +1031,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1520,
     "drehmoment": 705,
-    "drehzahl": 8900
+    "drehzahl": 8900,
+    "raritaet": 3,
+    "performance": 4
   },
   {
     "c_id": "0075",
@@ -897,7 +1045,9 @@
     "beschleunigung": 4.9,
     "gewicht": 1160,
     "drehmoment": 496,
-    "drehzahl": 7700
+    "drehzahl": 7700,
+    "raritaet": 4,
+    "performance": 2
   },
   {
     "c_id": "0076",
@@ -909,7 +1059,9 @@
     "beschleunigung": 2.3,
     "gewicht": 1560,
     "drehmoment": 800,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 3,
+    "performance": 5
   },
   {
     "c_id": "0077",
@@ -921,7 +1073,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1595,
     "drehmoment": 720,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0078",
@@ -933,7 +1087,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1450,
     "drehmoment": 690,
-    "drehzahl": 8400
+    "drehzahl": 8400,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0079",
@@ -945,7 +1101,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1520,
     "drehmoment": 690,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0080",
@@ -957,7 +1115,9 @@
     "beschleunigung": 3.0,
     "gewicht": 1339,
     "drehmoment": 565,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 2,
+    "performance": 5
   },
   {
     "c_id": "0081",
@@ -969,7 +1129,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1382,
     "drehmoment": 600,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 2,
+    "performance": 5
   },
   {
     "c_id": "0082",
@@ -981,7 +1143,9 @@
     "beschleunigung": 2.7,
     "gewicht": 1690,
     "drehmoment": 800,
-    "drehzahl": 10000
+    "drehzahl": 10000,
+    "raritaet": 2,
+    "performance": 4
   },
   {
     "c_id": "0083",
@@ -993,7 +1157,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1550,
     "drehmoment": 720,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 3,
+    "performance": 3
   },
   {
     "c_id": "0084",
@@ -1005,7 +1171,9 @@
     "beschleunigung": 3.4,
     "gewicht": 1665,
     "drehmoment": 660,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 5,
+    "performance": 2
   },
   {
     "c_id": "0085",
@@ -1017,7 +1185,9 @@
     "beschleunigung": 3.4,
     "gewicht": 1340,
     "drehmoment": 540,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 3,
+    "performance": 3
   },
   {
     "c_id": "0086",
@@ -1029,7 +1199,9 @@
     "beschleunigung": 3.4,
     "gewicht": 1460,
     "drehmoment": 630,
-    "drehzahl": 7300
+    "drehzahl": 7300,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0087",
@@ -1041,7 +1213,9 @@
     "beschleunigung": 2.5,
     "gewicht": 1655,
     "drehmoment": 1100,
-    "drehzahl": 7200
+    "drehzahl": 7200,
+    "raritaet": 3,
+    "performance": 4
   },
   {
     "c_id": "0088",
@@ -1053,7 +1227,9 @@
     "beschleunigung": 2.5,
     "gewicht": 1850,
     "drehmoment": 1600,
-    "drehzahl": 0
+    "drehzahl": 0,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0089",
@@ -1065,7 +1241,9 @@
     "beschleunigung": 1.9,
     "gewicht": 2200,
     "drehmoment": 2340,
-    "drehzahl": 0
+    "drehzahl": 0,
+    "raritaet": 4,
+    "performance": 3
   },
   {
     "c_id": "0090",
@@ -1077,7 +1255,9 @@
     "beschleunigung": 1.7,
     "gewicht": 2000,
     "drehmoment": 2000,
-    "drehzahl": 0
+    "drehzahl": 0,
+    "raritaet": 5,
+    "performance": 2
   },
   {
     "c_id": "0091",
@@ -1089,7 +1269,9 @@
     "beschleunigung": 3.7,
     "gewicht": 1630,
     "drehmoment": 750,
-    "drehzahl": 7600
+    "drehzahl": 7600,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0092",
@@ -1101,7 +1283,9 @@
     "beschleunigung": 2.7,
     "gewicht": 1735,
     "drehmoment": 1480,
-    "drehzahl": 0
+    "drehzahl": 0,
+    "raritaet": 5,
+    "performance": 5
   },
   {
     "c_id": "0093",
@@ -1113,7 +1297,9 @@
     "beschleunigung": 2.9,
     "gewicht": 1350,
     "drehmoment": 780,
-    "drehzahl": 7750
+    "drehzahl": 7750,
+    "raritaet": 5,
+    "performance": 5
   },
   {
     "c_id": "0094",
@@ -1125,7 +1311,9 @@
     "beschleunigung": 3.3,
     "gewicht": 1774,
     "drehmoment": 1000,
-    "drehzahl": 7000
+    "drehzahl": 7000,
+    "raritaet": 2,
+    "performance": 2
   },
   {
     "c_id": "0095",
@@ -1137,7 +1325,9 @@
     "beschleunigung": 3.8,
     "gewicht": 1768,
     "drehmoment": 780,
-    "drehzahl": 6500
+    "drehzahl": 6500,
+    "raritaet": 2,
+    "performance": 2
   },
   {
     "c_id": "0096",
@@ -1149,7 +1339,9 @@
     "beschleunigung": 3.6,
     "gewicht": 1575,
     "drehmoment": 700,
-    "drehzahl": 7200
+    "drehzahl": 7200,
+    "raritaet": 3,
+    "performance": 5
   },
   {
     "c_id": "0097",
@@ -1161,7 +1353,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1470,
     "drehmoment": 750,
-    "drehzahl": 7200
+    "drehzahl": 7200,
+    "raritaet": 3,
+    "performance": 5
   },
   {
     "c_id": "0098",
@@ -1173,7 +1367,9 @@
     "beschleunigung": 3.9,
     "gewicht": 1150,
     "drehmoment": 600,
-    "drehzahl": 7200
+    "drehzahl": 7200,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0099",
@@ -1185,7 +1381,9 @@
     "beschleunigung": 2.8,
     "gewicht": 986,
     "drehmoment": 467,
-    "drehzahl": 12100
+    "drehzahl": 12100,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0100",
@@ -1197,7 +1395,9 @@
     "beschleunigung": 1.9,
     "gewicht": 1240,
     "drehmoment": 1000,
-    "drehzahl": 11000
+    "drehzahl": 11000,
+    "raritaet": 5,
+    "performance": 5
   },
   {
     "c_id": "0101",
@@ -1209,7 +1409,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1495,
     "drehmoment": 1100,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0102",
@@ -1221,7 +1423,9 @@
     "beschleunigung": 3.3,
     "gewicht": 1300,
     "drehmoment": 820,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 5,
+    "performance": 2
   },
   {
     "c_id": "0103",
@@ -1233,7 +1437,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1218,
     "drehmoment": 1100,
-    "drehzahl": 6200
+    "drehzahl": 6200,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0104",
@@ -1245,7 +1451,9 @@
     "beschleunigung": 3.4,
     "gewicht": 1210,
     "drehmoment": 780,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0105",
@@ -1257,7 +1465,9 @@
     "beschleunigung": 3.8,
     "gewicht": 1335,
     "drehmoment": 652,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0106",
@@ -1269,7 +1479,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1247,
     "drehmoment": 1000,
-    "drehzahl": 6400
+    "drehzahl": 6400,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0107",
@@ -1281,7 +1493,9 @@
     "beschleunigung": 3.0,
     "gewicht": 1198,
     "drehmoment": 819,
-    "drehzahl": 6800
+    "drehzahl": 6800,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0108",
@@ -1293,7 +1507,9 @@
     "beschleunigung": 4.2,
     "gewicht": 1500,
     "drehmoment": 881,
-    "drehzahl": 6000
+    "drehzahl": 6000,
+    "raritaet": 5,
+    "performance": 1
   },
   {
     "c_id": "0109",
@@ -1305,7 +1521,9 @@
     "beschleunigung": 2.6,
     "gewicht": 1720,
     "drehmoment": 806,
-    "drehzahl": 6600
+    "drehzahl": 6600,
+    "raritaet": 1,
+    "performance": 3
   },
   {
     "c_id": "0110",
@@ -1317,7 +1535,9 @@
     "beschleunigung": 2.9,
     "gewicht": 972,
     "drehmoment": 667,
-    "drehzahl": 7400
+    "drehzahl": 7400,
+    "raritaet": 5,
+    "performance": 5
   },
   {
     "c_id": "0111",
@@ -1329,7 +1549,9 @@
     "beschleunigung": 2.7,
     "gewicht": 1250,
     "drehmoment": 760,
-    "drehzahl": 9000
+    "drehzahl": 9000,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0112",
@@ -1341,7 +1563,9 @@
     "beschleunigung": 3.6,
     "gewicht": 1550,
     "drehmoment": 635,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 4,
+    "performance": 4
   },
   {
     "c_id": "0113",
@@ -1353,7 +1577,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1380,
     "drehmoment": 960,
-    "drehzahl": 7100
+    "drehzahl": 7100,
+    "raritaet": 5,
+    "performance": 1
   },
   {
     "c_id": "0114",
@@ -1365,7 +1591,9 @@
     "beschleunigung": 3.9,
     "gewicht": 1380,
     "drehmoment": 590,
-    "drehzahl": 8400
+    "drehzahl": 8400,
+    "raritaet": 3,
+    "performance": 3
   },
   {
     "c_id": "0115",
@@ -1377,7 +1605,9 @@
     "beschleunigung": 3.6,
     "gewicht": 1365,
     "drehmoment": 657,
-    "drehzahl": 8200
+    "drehzahl": 8200,
+    "raritaet": 4,
+    "performance": 3
   },
   {
     "c_id": "0116",
@@ -1389,7 +1619,9 @@
     "beschleunigung": 3.2,
     "gewicht": 1565,
     "drehmoment": 660,
-    "drehzahl": 8000
+    "drehzahl": 8000,
+    "raritaet": 4,
+    "performance": 2
   },
   {
     "c_id": "0117",
@@ -1401,7 +1633,9 @@
     "beschleunigung": 3.2,
     "gewicht": 1138,
     "drehmoment": 651,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 4,
+    "performance": 3
   },
   {
     "c_id": "0118",
@@ -1413,7 +1647,9 @@
     "beschleunigung": 3.3,
     "gewicht": 1418,
     "drehmoment": 650,
-    "drehzahl": 8200
+    "drehzahl": 8200,
+    "raritaet": 5,
+    "performance": 2
   },
   {
     "c_id": "0119",
@@ -1425,7 +1661,9 @@
     "beschleunigung": 3.6,
     "gewicht": 1470,
     "drehmoment": 644,
-    "drehzahl": 7200
+    "drehzahl": 7200,
+    "raritaet": 4,
+    "performance": 2
   },
   {
     "c_id": "0120",
@@ -1437,7 +1675,9 @@
     "beschleunigung": 3.1,
     "gewicht": 1200,
     "drehmoment": 850,
-    "drehzahl": 7200
+    "drehzahl": 7200,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0121",
@@ -1449,7 +1689,9 @@
     "beschleunigung": 1.8,
     "gewicht": 2190,
     "drehmoment": 2360,
-    "drehzahl": 0
+    "drehzahl": 0,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0122",
@@ -1461,7 +1703,9 @@
     "beschleunigung": 4.0,
     "gewicht": 1150,
     "drehmoment": 553,
-    "drehzahl": 6800
+    "drehzahl": 6800,
+    "raritaet": 5,
+    "performance": 2
   },
   {
     "c_id": "0123",
@@ -1473,7 +1717,9 @@
     "beschleunigung": 2.8,
     "gewicht": 1280,
     "drehmoment": 560,
-    "drehzahl": 7500
+    "drehzahl": 7500,
+    "raritaet": 5,
+    "performance": 3
   },
   {
     "c_id": "0124",
@@ -1485,7 +1731,9 @@
     "beschleunigung": 3.5,
     "gewicht": 1200,
     "drehmoment": 620,
-    "drehzahl": 6500
+    "drehzahl": 6500,
+    "raritaet": 5,
+    "performance": 2
   },
   {
     "c_id": "0125",
@@ -1497,7 +1745,9 @@
     "beschleunigung": 3.8,
     "gewicht": 1440,
     "drehmoment": 775,
-    "drehzahl": 7000
+    "drehzahl": 7000,
+    "raritaet": 5,
+    "performance": 4
   },
   {
     "c_id": "0126",
@@ -1509,7 +1759,9 @@
     "beschleunigung": 3.7,
     "gewicht": 1450,
     "drehmoment": 500,
-    "drehzahl": 7000
+    "drehzahl": 7000,
+    "raritaet": 4,
+    "performance": 2
   },
   {
     "c_id": "0127",
@@ -1521,7 +1773,9 @@
     "beschleunigung": 4.1,
     "gewicht": 1254,
     "drehmoment": 577,
-    "drehzahl": 7800
+    "drehzahl": 7800,
+    "raritaet": 3,
+    "performance": 2
   },
   {
     "c_id": "0128",
@@ -1533,6 +1787,8 @@
     "beschleunigung": 2.8,
     "gewicht": 1595,
     "drehmoment": 720,
-    "drehzahl": 8500
+    "drehzahl": 8500,
+    "raritaet": 4,
+    "performance": 2
   }
 ]
