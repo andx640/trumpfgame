@@ -4725,3 +4725,17 @@ body:has(.app-shell.is-playing) {
   background: linear-gradient(180deg, #1b2434, #111823);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
 }
+
+.signed-in-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+}
+
+.signed-in-profile .user-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+}

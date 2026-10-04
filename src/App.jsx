@@ -409,22 +409,36 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
         )}
         <p className="muted">
           {mode === "join"
-            ? "Gib einen Spielernamen und die Session-ID ein."
+            ? (account ? "Gib die Session-ID ein." : "Gib einen Spielernamen und die Session-ID ein.")
             : ai
               ? "Wähle die Stärke und die Zahl der Gegner."
-              : "Gib einen Spielernamen ein, danach schickst du Freunden die Session-ID."}
+              : account
+                ? "Danach schickst du Freunden die Session-ID."
+                : "Gib einen Spielernamen ein, danach schickst du Freunden die Session-ID."}
         </p>
         <form onSubmit={submit}>
-          <label htmlFor="player-name">Fahrername</label>
-          <input
-            id="player-name"
-            value={name}
-            onChange={(event) => setName(event.target.value.slice(0, 20))}
-            disabled={Boolean(account)}
-            placeholder="z. B. Niki"
-            autoComplete="nickname"
-            autoFocus={typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches}
-          />
+          {account ? (
+            <>
+              <span className="field-label">Angemeldet als</span>
+              <div className="signed-in-profile">
+                <UserIcon />
+                <b>{account.name}</b>
+                <span className="muted">Level {account.level}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <label htmlFor="player-name">Fahrername</label>
+              <input
+                id="player-name"
+                value={name}
+                onChange={(event) => setName(event.target.value.slice(0, 20))}
+                placeholder="z. B. Niki"
+                autoComplete="nickname"
+                autoFocus={typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches}
+              />
+            </>
+          )}
           {mode === "join" && (
             <>
               <label htmlFor="session-id">Session-ID</label>
