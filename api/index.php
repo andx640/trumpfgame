@@ -15,6 +15,9 @@ const LOBBY_TIMEOUT_MS = 20000;    // in der Lobby fliegen inaktive Spieler raus
 const IDLE_RESET_MS = 300000;      // laufende Partie ohne jeden Spieler wird nach 5 Minuten zurückgesetzt
 const LAST_SEEN_REFRESH_MS = 3000;
 const PAUSE_END_MS = 60000;        // weniger als 2 Spieler online: nach 1 Minute endet die Partie
+const CHAT_MAX_LENGTH = 200;
+const CHAT_HISTORY = 60;          // so viele Nachrichten bleiben im Raum gespeichert
+const CHAT_MIN_GAP_MS = 700;      // mindestens so lange zwischen zwei Nachrichten desselben Spielers
 const AI_LEVELS = ['easy', 'medium', 'hard'];
 const AI_NAMES = ['easy' => 'KI Leicht', 'medium' => 'KI Mittel', 'hard' => 'KI Schwer'];
 
@@ -432,6 +435,34 @@ class TrumpfRoom
     }
 
     /** Spieler hat beim Ergebnis auf „Weiter“ getippt. Sind alle Menschen bereit, wird das Ergebnis verkürzt. */
+    /** Chatnachricht eines Spielers speichern. Gibt eine Fehlermeldung zurück oder null. */
+    public function addChat(int $playerIndex, string $text): ?string
+    {
+        $text = trim((string) preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $text));
+        $text = trim((string) preg_replace('/\s+/u', ' ', $text));
+        if ($text === '') {
+            return 'Die Nachricht ist leer.';
+        }
+        $text = function_exists('mb_substr') ? mb_substr($text, 0, CHAT_MAX_LENGTH, 'UTF-8') : substr($text, 0, CHAT_MAX_LENGTH);
+        $player = $this->data['players'][$playerIndex];
+        if ($this->now - (int) ($player['lastChatAt'] ?? 0) < CHAT_MIN_GAP_MS) {
+            return 'Nicht so schnell, warte kurz.';
+        }
+        $this->data['players'][$playerIndex]['lastChatAt'] = $this->now;
+        $this->data['chatSeq'] = (int) ($this->data['chatSeq'] ?? 0) + 1;
+        $chat = $this->data['chat'] ?? [];
+        $chat[] = [
+            'id' => $this->data['chatSeq'],
+            'playerId' => $player['id'],
+            'name' => $player['name'],
+            'text' => $text,
+            'at' => $this->now,
+        ];
+        $this->data['chat'] = array_slice($chat, -CHAT_HISTORY);
+        $this->touch();
+        return null;
+    }
+
     public function markReady(string $playerId): void
     {
         $game = $this->data['game'];
@@ -557,6 +588,7 @@ class TrumpfRoom
             'topCard' => $this->topCard(),
             'rematchIds' => $data['rematch'] ?? [],
             'solo' => !empty($data['solo']),
+            'chat' => array_values(array_slice($data['chat'] ?? [], -50)),
             'aiLevel' => $data['aiLevel'] ?? null,
         ];
     }
@@ -789,6 +821,19 @@ try {
             } else {
                 $category = is_string($input['category'] ?? null) ? $input['category'] : '';
                 $room->revealCards($room->data['players'][$selfIndex]['id'], $category);
+            }
+            break;
+
+        case 'chat':
+            if ($selfIndex === null) {
+                $reply = $fail('Du bist in keiner Session.');
+            } elseif (!empty($room->data['solo'])) {
+                $reply = $fail('Im Spiel gegen die KI gibt es keinen Chat.');
+            } else {
+                $problem = $room->addChat($selfIndex, is_string($input['text'] ?? null) ? $input['text'] : '');
+                if ($problem !== null) {
+                    $reply = $fail($problem);
+                }
             }
             break;
 

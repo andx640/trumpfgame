@@ -204,7 +204,7 @@ function App() {
   const fullScreenView = !state && ["home", "new", "join", "account", "profile", "leaderboard"].includes(view);
 
   return (
-    <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${fullScreenView ? "is-home" : ""}`}>
+    <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${fullScreenView ? "is-home" : ""} ${state && !state.solo ? "has-chat" : ""}`}>
       {!isPlaying && !fullScreenView && <Header connected={connected} state={state} />}
       <main>
         {!state && view === "home" ? (
@@ -239,6 +239,7 @@ function App() {
           <Game state={state} />
         )}
       </main>
+      {state && !state.solo && <ChatWidget chat={state.chat || []} selfId={state.selfId} sessionId={state.sessionId} />}
       {notice && <div className="toast" role="alert">{notice}</div>}
     </div>
   );
@@ -1053,6 +1054,96 @@ function GtIcon({ type }) {
     )
   };
   return <svg className="gt-icon" viewBox="0 0 64 64" aria-hidden="true">{icons[type]}</svg>;
+}
+
+// Session-Chat: Symbol oben rechts, Klick öffnet das Chatfenster (Lobby und Spiel)
+function ChatWidget({ chat, selfId, sessionId }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+  const [seenId, setSeenId] = useState(() => (chat.length ? chat[chat.length - 1].id : 0));
+  const listRef = useRef(null);
+  const lastId = chat.length ? chat[chat.length - 1].id : 0;
+  const unread = open ? 0 : chat.filter((message) => message.id > seenId && message.playerId !== selfId).length;
+
+  // geöffnet: alles gilt als gelesen, Liste bleibt unten
+  useEffect(() => {
+    if (open) setSeenId(lastId);
+  }, [open, lastId]);
+  useEffect(() => {
+    if (open && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [open, lastId]);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (event) => event.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const send = (event) => {
+    event.preventDefault();
+    const message = text.trim();
+    if (!message) return;
+    setText("");
+    setError("");
+    socket.request("chat", { text: message })
+      .then((result) => {
+        if (!result.ok) {
+          setError(result.message || "Nachricht nicht gesendet.");
+          setText(message);
+        } else if (result.state) {
+          socket.applyResult(result);
+        }
+      })
+      .catch(() => {
+        setError("Keine Verbindung zum Server.");
+        setText(message);
+      });
+  };
+
+  const time = (at) => new Date(at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <>
+      <button type="button" className={`chat-button ${unread ? "has-unread" : ""}`} onClick={() => setOpen((value) => !value)} aria-label={unread ? `Chat öffnen, ${unread} neue Nachrichten` : "Chat öffnen"} aria-expanded={open}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-8l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="currentColor" />
+        </svg>
+        {unread > 0 && <b>{unread > 9 ? "9+" : unread}</b>}
+      </button>
+      {open && (
+        <div className="chat-window" role="dialog" aria-label="Session-Chat">
+          <div className="chat-head">
+            <strong>Chat</strong>
+            {sessionId && <small>Session {sessionId}</small>}
+            <button type="button" className="chat-close" onClick={() => setOpen(false)} aria-label="Chat schließen">✕</button>
+          </div>
+          <div className="chat-list" ref={listRef} aria-live="polite">
+            {chat.length === 0 && <p className="chat-empty">Noch keine Nachrichten. Schreib den anderen Spielern etwas!</p>}
+            {chat.map((message) => (
+              <div className={`chat-message ${message.playerId === selfId ? "is-own" : ""}`} key={message.id}>
+                {message.playerId !== selfId && <span className="chat-author">{message.name}</span>}
+                <p>{message.text}</p>
+                <small>{time(message.at)}</small>
+              </div>
+            ))}
+          </div>
+          {error && <p className="chat-error" role="alert">{error}</p>}
+          <form className="chat-form" onSubmit={send}>
+            <input
+              value={text}
+              onChange={(event) => setText(event.target.value.slice(0, 200))}
+              placeholder="Nachricht schreiben …"
+              aria-label="Nachricht"
+              maxLength={200}
+              autoComplete="off"
+            />
+            <button type="submit" disabled={!text.trim()} aria-label="Senden">➤</button>
+          </form>
+        </div>
+      )}
+    </>
+  );
 }
 
 function LevelBadge({ level }) {
