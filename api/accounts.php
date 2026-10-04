@@ -4,10 +4,14 @@
 // oder in den Umgebungsvariablen TRUMPF_DB_DSN / TRUMPF_DB_USER / TRUMPF_DB_PASSWORD (für Tests).
 declare(strict_types=1);
 
+require_once __DIR__ . '/push.php';
+
 const XP_WIN = 100;
 const XP_PLAYED = 25;
 const XP_PER_TRICK = 10;
 const XP_PER_OPPONENT = 25; // Sieg gegen mehr Gegner bringt mehr
+const ONLINE_WINDOW_S = 75;   // so lange nach dem letzten Lebenszeichen gilt ein Spieler als online
+const INVITE_TTL_S = 1800;    // Einladungen verfallen nach 30 Minuten
 const XP_AI_FACTOR = ['easy' => 0.0, 'medium' => 0.35, 'hard' => 1.0]; // gegen Leicht gibt es keine XP
 
 function trumpf_db(): ?PDO
@@ -68,6 +72,22 @@ function trumpf_ensure_schema(PDO $db): void
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE (user_id, friend_id)
         )");
+        $db->exec("CREATE TABLE IF NOT EXISTS invites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_id INTEGER NOT NULL,
+            to_id INTEGER NOT NULL,
+            room TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE (from_id, to_id, room)
+        )");
+        $db->exec('CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            endpoint TEXT NOT NULL UNIQUE,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )');
         trumpf_add_streak_columns($db);
         return;
     }
@@ -98,13 +118,34 @@ function trumpf_ensure_schema(PDO $db): void
         UNIQUE KEY uniq_pair (user_id, friend_id),
         KEY idx_friend (friend_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS invites (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        from_id INT UNSIGNED NOT NULL,
+        to_id INT UNSIGNED NOT NULL,
+        room VARCHAR(8) NOT NULL,
+        created_at INT UNSIGNED NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_invite (from_id, to_id, room),
+        KEY idx_to (to_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        account_id INT UNSIGNED NOT NULL,
+        endpoint VARCHAR(500) NOT NULL,
+        p256dh VARCHAR(200) NOT NULL,
+        auth VARCHAR(100) NOT NULL,
+        created_at INT UNSIGNED NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_endpoint (endpoint(255)),
+        KEY idx_account (account_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     trumpf_add_streak_columns($db);
 }
 
 /** Ältere accounts-Tabellen ohne Siegesserie-Spalten nachrüsten. */
 function trumpf_add_streak_columns(PDO $db): void
 {
-    foreach (['current_streak', 'best_streak'] as $column) {
+    foreach (['current_streak', 'best_streak', 'last_seen'] as $column) {
         try {
             $db->query("SELECT $column FROM accounts LIMIT 1");
         } catch (PDOException $missing) {
@@ -173,6 +214,98 @@ function trumpf_account_by_name(string $name): ?array
     }
 }
 
+function trumpf_data_dir(): string
+{
+    return getenv('TRUMPF_DATA_DIR') ?: __DIR__ . '/data';
+}
+
+function trumpf_is_online(array $row): bool
+{
+    return time() - (int) ($row['last_seen'] ?? 0) <= ONLINE_WINDOW_S;
+}
+
+/** Offene Einladungen für ein Konto. Einladungen zu Räumen, die nicht mehr in der Lobby sind, werden dabei aufgeräumt. */
+function trumpf_pending_invites(PDO $db, int $accountId): array
+{
+    $db->prepare('DELETE FROM invites WHERE created_at < ?')->execute([time() - INVITE_TTL_S]);
+    $query = $db->prepare('SELECT invites.id, invites.room, invites.created_at, accounts.name AS from_name FROM invites JOIN accounts ON accounts.id = invites.from_id WHERE invites.to_id = ? ORDER BY invites.id DESC');
+    $query->execute([$accountId]);
+    $result = [];
+    foreach ($query->fetchAll() as $row) {
+        $file = trumpf_data_dir() . '/room_' . $row['room'] . '.json';
+        $room = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
+        $open = is_array($room) && ($room['status'] ?? '') === 'lobby' && count($room['players'] ?? []) < MAX_PLAYERS && empty($room['solo']);
+        if (!$open) {
+            $db->prepare('DELETE FROM invites WHERE id = ?')->execute([$row['id']]);
+            continue;
+        }
+        $result[] = ['id' => (int) $row['id'], 'from' => $row['from_name'], 'room' => $row['room'], 'at' => (int) $row['created_at'] * 1000];
+    }
+    return $result;
+}
+
+/** Einladung in die Lobby, in der der Absender sitzt. Gibt eine Antwort für den Browser zurück. */
+function trumpf_send_invite(PDO $db, TrumpfRoom $room, int $selfIndex, string $roomCode, string $targetName): array
+{
+    trumpf_ensure_schema($db);
+    $self = $room->data['players'][$selfIndex];
+    if (($self['accountId'] ?? null) === null) {
+        return ['ok' => false, 'message' => 'Zum Einladen musst du angemeldet sein.'];
+    }
+    if ($room->data['status'] !== 'lobby' || !empty($room->data['solo'])) {
+        return ['ok' => false, 'message' => 'Eingeladen wird nur in einer offenen Lobby.'];
+    }
+    if (count($room->data['players']) >= MAX_PLAYERS) {
+        return ['ok' => false, 'message' => 'Die Lobby ist schon voll.'];
+    }
+    $target = trumpf_account_by_name(cleanName($targetName));
+    if ($target === null) {
+        return ['ok' => false, 'message' => 'Diesen Spieler gibt es nicht.'];
+    }
+    $myId = (int) $self['accountId'];
+    $targetId = (int) $target['id'];
+    foreach ($room->data['players'] as $player) {
+        if ((int) ($player['accountId'] ?? 0) === $targetId) {
+            return ['ok' => false, 'message' => $target['name'] . ' ist schon in der Lobby.'];
+        }
+    }
+    $friendship = $db->prepare("SELECT COUNT(*) FROM friendships WHERE status = 'accepted' AND ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))");
+    $friendship->execute([$myId, $targetId, $targetId, $myId]);
+    if ((int) $friendship->fetchColumn() === 0) {
+        return ['ok' => false, 'message' => 'Du kannst nur Freunde einladen.'];
+    }
+    $existing = $db->prepare('SELECT COUNT(*) FROM invites WHERE from_id = ? AND to_id = ? AND room = ?');
+    $existing->execute([$myId, $targetId, $roomCode]);
+    if ((int) $existing->fetchColumn() > 0) {
+        return ['ok' => false, 'message' => $target['name'] . ' wurde schon eingeladen.'];
+    }
+    $db->prepare('INSERT INTO invites (from_id, to_id, room, created_at) VALUES (?, ?, ?, ?)')->execute([$myId, $targetId, $roomCode, time()]);
+    $pushed = trumpf_push_to_account($db, $targetId, [
+        'title' => 'Einladung von ' . $self['name'],
+        'body' => $self['name'] . ' lädt dich zu einem Spiel ein.',
+        'url' => '/',
+        'tag' => 'invite-' . $roomCode,
+    ]);
+    return ['ok' => true, 'message' => $target['name'] . ' wurde eingeladen.', 'pushed' => $pushed];
+}
+
+/** Push an alle Geräte eines Kontos. Gibt die Zahl der zugestellten Nachrichten zurück; tote Abos werden gelöscht. */
+function trumpf_push_to_account(PDO $db, int $accountId, array $message): int
+{
+    $query = $db->prepare('SELECT * FROM push_subscriptions WHERE account_id = ? ORDER BY id DESC LIMIT 5');
+    $query->execute([$accountId]);
+    $delivered = 0;
+    foreach ($query->fetchAll() as $subscription) {
+        $status = push_send(trumpf_data_dir(), $subscription, $message);
+        if ($status !== null && $status >= 200 && $status < 300) {
+            $delivered++;
+        } elseif ($status === 404 || $status === 410) {
+            $db->prepare('DELETE FROM push_subscriptions WHERE id = ?')->execute([$subscription['id']]);
+        }
+    }
+    return $delivered;
+}
+
 /** Rangplatz in der Gesamtrangliste (gleiche Sortierung wie die Top 10: XP, dann Siege, dann wer zuerst da war). */
 function trumpf_account_rank(PDO $db, array $row): int
 {
@@ -204,6 +337,40 @@ function trumpf_account_action(string $action, array $input): void
         if ($action === 'profile') {
             $row = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
             respond($row ? ['ok' => true, 'account' => trumpf_account_with_rank($db, $row)] : ['ok' => false, 'code' => 'logged_out', 'message' => 'Bitte melde dich neu an.']);
+        }
+        if (in_array($action, ['heartbeat', 'inviteDecline', 'pushKey', 'pushSubscribe', 'pushUnsubscribe'], true)) {
+            $me = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
+            if ($me === null) {
+                respond(['ok' => false, 'code' => 'logged_out', 'message' => 'Bitte melde dich neu an.']);
+            }
+            $myId = (int) $me['id'];
+            if ($action === 'heartbeat') {
+                // Lebenszeichen der App: macht den Spieler für Freunde „on“ und liefert offene Einladungen
+                $db->prepare('UPDATE accounts SET last_seen = ? WHERE id = ?')->execute([time(), $myId]);
+                respond(['ok' => true, 'invites' => trumpf_pending_invites($db, $myId)]);
+            }
+            if ($action === 'inviteDecline') {
+                $db->prepare('DELETE FROM invites WHERE id = ? AND to_id = ?')->execute([(int) ($input['id'] ?? 0), $myId]);
+                respond(['ok' => true, 'invites' => trumpf_pending_invites($db, $myId)]);
+            }
+            if ($action === 'pushKey') {
+                $keys = push_vapid_keys(trumpf_data_dir());
+                respond($keys === null ? ['ok' => false, 'message' => 'Push ist auf diesem Server nicht verfügbar.'] : ['ok' => true, 'key' => push_b64url($keys['public'])]);
+            }
+            $sub = is_array($input['subscription'] ?? null) ? $input['subscription'] : [];
+            $endpoint = is_string($sub['endpoint'] ?? null) ? $sub['endpoint'] : (is_string($input['endpoint'] ?? null) ? $input['endpoint'] : '');
+            if ($action === 'pushUnsubscribe') {
+                $db->prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND account_id = ?')->execute([$endpoint, $myId]);
+                respond(['ok' => true]);
+            }
+            $p256dh = is_string($sub['keys']['p256dh'] ?? null) ? $sub['keys']['p256dh'] : '';
+            $authKey = is_string($sub['keys']['auth'] ?? null) ? $sub['keys']['auth'] : '';
+            if (!push_endpoint_ok($endpoint) || strlen(push_b64url_decode($p256dh)) !== 65 || strlen(push_b64url_decode($authKey)) !== 16) {
+                respond(['ok' => false, 'message' => 'Ungültiges Push-Abo.']);
+            }
+            $db->prepare('DELETE FROM push_subscriptions WHERE endpoint = ?')->execute([$endpoint]);
+            $db->prepare('INSERT INTO push_subscriptions (account_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)')->execute([$myId, $endpoint, $p256dh, $authKey, time()]);
+            respond(['ok' => true]);
         }
         if ($action === 'playerProfile') {
             // Profil eines beliebigen Spielers (wie in der Rangliste öffentlich, ohne Passwort)
@@ -402,7 +569,7 @@ function trumpf_friend_action(PDO $db, string $action, array $input): void
             [$status, $isMine] = $ids[(int) $account['id']];
             $public = trumpf_account_public($account);
             if ($status === 'accepted') {
-                $friends[] = $public;
+                $friends[] = $public + ['online' => trumpf_is_online($account)];
             } elseif ($isMine) {
                 $outgoing[] = ['name' => $public['name'], 'level' => $public['level']];
             } else {
@@ -411,7 +578,7 @@ function trumpf_friend_action(PDO $db, string $action, array $input): void
         }
     }
     usort($friends, static function ($a, $b) {
-        return [$b['level'], $b['xp']] <=> [$a['level'], $a['xp']];
+        return [(int) $b['online'], $b['level'], $b['xp']] <=> [(int) $a['online'], $a['level'], $a['xp']];
     });
     respond(['ok' => true, 'friends' => $friends, 'incoming' => $incoming, 'outgoing' => $outgoing]);
 }

@@ -618,7 +618,7 @@ if ($action === 'cards') {
     // Alle Fahrzeugkarten für die Sammlung (öffentlich, ohne Spielstand).
     respond(['ok' => true, 'categories' => TRUMPF_CATEGORIES, 'cards' => array_values(trumpf_load_deck())]);
 }
-if (in_array($action, ['register', 'login', 'profile', 'playerProfile', 'leaderboard', 'friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile'], true)) {
+if (in_array($action, ['register', 'login', 'profile', 'playerProfile', 'leaderboard', 'heartbeat', 'inviteDecline', 'pushKey', 'pushSubscribe', 'pushUnsubscribe', 'friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile'], true)) {
     trumpf_account_action($action, $input);
 }
 $token = is_string($input['token'] ?? null) ? $input['token'] : '';
@@ -762,6 +762,14 @@ try {
                     'accountLevel' => $account === null ? null : trumpf_level((int) $account['xp'])['level'],
                 ];
                 $selfIndex = count($room->data['players']) - 1;
+                if ($account !== null) {
+                    // Wer beigetreten ist, braucht die Einladungen zu diesem Raum nicht mehr.
+                    try {
+                        trumpf_db()->prepare('DELETE FROM invites WHERE to_id = ? AND room = ?')->execute([(int) $account['id'], $roomCode]);
+                    } catch (PDOException $error) {
+                        // Einladungen sind Zusatz
+                    }
+                }
                 if ($room->data['hostId'] === null) {
                     $room->data['hostId'] = $room->data['players'][$selfIndex]['id'];
                 }
@@ -821,6 +829,20 @@ try {
             } else {
                 $category = is_string($input['category'] ?? null) ? $input['category'] : '';
                 $room->revealCards($room->data['players'][$selfIndex]['id'], $category);
+            }
+            break;
+
+        case 'invite':
+            if ($selfIndex === null) {
+                $reply = $fail('Du bist in keiner Session.');
+            } elseif (trumpf_db() === null) {
+                $reply = $fail('Einladungen sind gerade nicht verfügbar.');
+            } else {
+                try {
+                    $reply = trumpf_send_invite(trumpf_db(), $room, $selfIndex, $roomCode, is_string($input['name'] ?? null) ? $input['name'] : '');
+                } catch (PDOException $error) {
+                    $reply = $fail('Datenbankfehler, bitte später nochmal versuchen.');
+                }
             }
             break;
 

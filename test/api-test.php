@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/../api/engine.php';
+require_once __DIR__ . '/../api/push.php';
 
 $failures = 0;
 function check(bool $condition, string $label): void
@@ -120,7 +121,7 @@ $server = proc_open(
     [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
     $pipes,
     $root,
-    array_merge($_ENV, ['TRUMPF_DATA_DIR' => $dataDir, 'TRUMPF_DB_DSN' => "sqlite:$dataDir/accounts.sqlite", 'PATH' => getenv('PATH')])
+    array_merge($_ENV, ['TRUMPF_DATA_DIR' => $dataDir, 'TRUMPF_DB_DSN' => "sqlite:$dataDir/accounts.sqlite", 'TRUMPF_PUSH_ALLOW_HTTP' => '1', 'PATH' => getenv('PATH')])
 );
 for ($i = 0; $i < 50; $i++) {
     if (@fsockopen('127.0.0.1', $port)) {
@@ -144,6 +145,18 @@ function call(int $port, array $body): array
     ]]);
     $response = file_get_contents("http://127.0.0.1:$port/api/index.php", false, $context);
     return json_decode((string) $response, true) ?? ['ok' => false, 'raw' => $response];
+}
+
+$mockPort = $port + 2;
+$mock = proc_open(
+    ['php', '-S', "127.0.0.1:$mockPort", __DIR__ . '/push-mock.php'],
+    [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
+    $mockPipes,
+    $root,
+    array_merge($_ENV, ['TRUMPF_DATA_DIR' => $dataDir, 'PATH' => getenv('PATH')])
+);
+for ($i = 0; $i < 50 && !@fsockopen('127.0.0.1', $mockPort); $i++) {
+    usleep(100000);
 }
 
 try {
@@ -476,6 +489,94 @@ try {
     $own = call($port, ['action' => 'profile', 'authToken' => $reg['authToken']]);
     check($own['account']['rank'] === 2, 'eigenes Profil enthält den Rangplatz');
 
+    // Online-Status, Einladungen und Push
+    $inv1 = call($port, ['action' => 'register', 'name' => 'Gastgeber', 'password' => 'pw']);
+    $inv2 = call($port, ['action' => 'register', 'name' => 'Eingeladene', 'password' => 'pw']);
+    $inv3 = call($port, ['action' => 'register', 'name' => 'Fremde', 'password' => 'pw']);
+    call($port, ['action' => 'friendAdd', 'authToken' => $inv1['authToken'], 'name' => 'Eingeladene']);
+    call($port, ['action' => 'friendAccept', 'authToken' => $inv2['authToken'], 'name' => 'Gastgeber']);
+    $friendRows = call($port, ['action' => 'friends', 'authToken' => $inv1['authToken']])['friends'];
+    check($friendRows[0]['online'] === false, 'Freund ohne Lebenszeichen ist off');
+    check(call($port, ['action' => 'heartbeat', 'authToken' => $inv2['authToken']])['ok'] === true, 'Heartbeat funktioniert');
+    $friendRows = call($port, ['action' => 'friends', 'authToken' => $inv1['authToken']])['friends'];
+    check($friendRows[0]['online'] === true, 'Freund mit Heartbeat ist on');
+    check(call($port, ['action' => 'heartbeat', 'authToken' => 'zzz'])['code'] === 'logged_out', 'Heartbeat ohne Anmeldung');
+
+    $currentRoom = null;
+    $host = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $inv1['authToken'], 'create' => true]);
+    $currentRoom = $host['room'];
+    check(call($port, ['action' => 'invite', 'token' => $host['token'], 'name' => 'Fremde'])['ok'] === false, 'Einladen: nur Freunde');
+    check(call($port, ['action' => 'invite', 'token' => $host['token'], 'name' => 'Niemand'])['ok'] === false, 'Einladen: unbekannter Spieler');
+    $guest = call($port, ['action' => 'join', 'name' => 'Gast', 'room' => $host['room']]);
+    check(call($port, ['action' => 'invite', 'token' => $guest['token'], 'name' => 'Eingeladene'])['ok'] === false, 'Einladen: Gäste ohne Konto dürfen nicht einladen');
+
+    // Push-Abo der Eingeladenen (Gerät im Test: eigenes Schlüsselpaar)
+    $device = push_new_key_pair();
+    $authSecret = random_bytes(16);
+    $keyReply = call($port, ['action' => 'pushKey', 'authToken' => $inv2['authToken']]);
+    check($keyReply['ok'] && strlen(push_b64url_decode($keyReply['key'])) === 65, 'Push: Server liefert seinen öffentlichen Schlüssel');
+    $subscribe = fn(string $endpoint) => call($port, ['action' => 'pushSubscribe', 'authToken' => $inv2['authToken'], 'subscription' => ['endpoint' => $endpoint, 'keys' => ['p256dh' => push_b64url($device['public']), 'auth' => push_b64url($authSecret)]]]);
+    check($subscribe('ftp://evil')['ok'] === false, 'Push: ungültiger Endpunkt wird abgelehnt');
+    check($subscribe("http://127.0.0.1:$mockPort/ok")['ok'] === true, 'Push: Abo speichern');
+
+    $sent = call($port, ['action' => 'invite', 'token' => $host['token'], 'name' => 'Eingeladene']);
+    check($sent['ok'] === true && $sent['pushed'] === 1, 'Einladen: Freund wird eingeladen und Push zugestellt');
+    check(call($port, ['action' => 'invite', 'token' => $host['token'], 'name' => 'Eingeladene'])['ok'] === false, 'Einladen: nicht doppelt');
+
+    // Push beim „Gerät“ entschlüsseln (Gegenseite nach RFC 8291) und VAPID prüfen
+    $last = json_decode((string) file_get_contents("$dataDir/push-last.json"), true);
+    $raw = base64_decode($last['body']);
+    $salt = substr($raw, 0, 16);
+    $idLen = ord($raw[20]);
+    $serverPublic = substr($raw, 21, $idLen);
+    $encrypted = substr($raw, 21 + $idLen);
+    $deviceKey = openssl_pkey_get_private($device['pem']);
+    $shared = openssl_pkey_derive(push_public_key_resource($serverPublic), $deviceKey, 32);
+    $ikm = hash_hkdf('sha256', $shared, 32, "WebPush: info\0" . $device['public'] . $serverPublic, $authSecret);
+    $cek = hash_hkdf('sha256', $ikm, 16, "Content-Encoding: aes128gcm\0", $salt);
+    $nonce = hash_hkdf('sha256', $ikm, 12, "Content-Encoding: nonce\0", $salt);
+    $plain = openssl_decrypt(substr($encrypted, 0, -16), 'aes-128-gcm', $cek, OPENSSL_RAW_DATA, $nonce, substr($encrypted, -16));
+    $message = $plain === false ? [] : json_decode(rtrim($plain, "\x02"), true);
+    check(($message['title'] ?? '') === 'Einladung von Gastgeber' && ($message['url'] ?? '') === '/', 'Push: Nachricht lässt sich beim Gerät entschlüsseln (' . ($message['title'] ?? 'Fehler') . ')');
+    check($last['encoding'] === 'aes128gcm' && substr($raw, 16, 4) === pack('N', 4096), 'Push: aes128gcm-Kopf stimmt');
+    preg_match('/^vapid t=([^,]+), k=(.+)$/', $last['authorization'], $vapid);
+    [$jwtHead, $jwtClaims, $jwtSig] = explode('.', $vapid[1]);
+    $rawSig = push_b64url_decode($jwtSig);
+    $derInt = fn(string $n) => "\x02" . chr(strlen(ltrim($n, "\0") . '') + ((ord(ltrim($n, "\0")[0] ?? "\0") & 0x80) ? 1 : 0)) . ((ord(ltrim($n, "\0")[0] ?? "\0") & 0x80) ? "\0" : '') . ltrim($n, "\0");
+    $derBody = $derInt(substr($rawSig, 0, 32)) . $derInt(substr($rawSig, 32));
+    $derSig = "\x30" . chr(strlen($derBody)) . $derBody;
+    $claims = json_decode(push_b64url_decode($jwtClaims), true);
+    check(openssl_verify("$jwtHead.$jwtClaims", $derSig, push_public_key_resource(push_b64url_decode($vapid[2])), OPENSSL_ALGO_SHA256) === 1 && $claims['aud'] === "http://127.0.0.1:$mockPort" && $claims['exp'] > time(), 'Push: VAPID-Signatur ist gültig');
+    check(push_b64url_decode($vapid[2]) === push_b64url_decode($keyReply['key']), 'Push: VAPID-Schlüssel passt zum ausgelieferten Schlüssel');
+
+    // Posteingang, Ablehnen, Beitreten
+    $box = call($port, ['action' => 'heartbeat', 'authToken' => $inv2['authToken']]);
+    check(count($box['invites']) === 1 && $box['invites'][0]['from'] === 'Gastgeber' && $box['invites'][0]['room'] === $host['room'], 'Einladung erscheint im Postfach');
+    check(call($port, ['action' => 'heartbeat', 'authToken' => $inv3['authToken']])['invites'] === [], 'andere sehen die Einladung nicht');
+    $declined = call($port, ['action' => 'inviteDecline', 'authToken' => $inv2['authToken'], 'id' => $box['invites'][0]['id']]);
+    check($declined['ok'] && $declined['invites'] === [], 'Einladung ablehnen');
+    call($port, ['action' => 'invite', 'token' => $host['token'], 'name' => 'Eingeladene']);
+    $box = call($port, ['action' => 'heartbeat', 'authToken' => $inv2['authToken']]);
+    check(count($box['invites']) === 1, 'neu einladen nach dem Ablehnen');
+    $joined = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $inv2['authToken'], 'room' => $host['room']]);
+    check($joined['ok'] && count($joined['state']['players']) === 3, 'Per Einladung beitreten');
+    check(call($port, ['action' => 'heartbeat', 'authToken' => $inv2['authToken']])['invites'] === [], 'Einladung verschwindet nach dem Beitritt');
+    call($port, ['action' => 'invite', 'token' => $host['token'], 'name' => 'Fremde']);
+
+    // Einladung zu gestarteter Lobby verfällt; totes Push-Abo wird gelöscht
+    $inv4 = call($port, ['action' => 'register', 'name' => 'Vierte', 'password' => 'pw']);
+    call($port, ['action' => 'friendAdd', 'authToken' => $inv1['authToken'], 'name' => 'Vierte']);
+    call($port, ['action' => 'friendAccept', 'authToken' => $inv4['authToken'], 'name' => 'Gastgeber']);
+    call($port, ['action' => 'pushSubscribe', 'authToken' => $inv4['authToken'], 'subscription' => ['endpoint' => "http://127.0.0.1:$mockPort/gone", 'keys' => ['p256dh' => push_b64url($device['public']), 'auth' => push_b64url($authSecret)]]]);
+    $goneDb = new PDO("sqlite:$dataDir/accounts.sqlite");
+    check((int) $goneDb->query("SELECT COUNT(*) FROM push_subscriptions WHERE endpoint LIKE '%/gone'")->fetchColumn() === 1, 'Push: Abo mit Endpunkt /gone liegt vor');
+    $invite4 = call($port, ['action' => 'invite', 'token' => $host['token'], 'name' => 'Vierte']);
+    check($invite4['ok'] === true && $invite4['pushed'] === 0, 'Einladen klappt auch, wenn der Push-Dienst das Abo als abgelaufen meldet (nur Postfach)');
+    check((int) $goneDb->query("SELECT COUNT(*) FROM push_subscriptions WHERE endpoint LIKE '%/gone'")->fetchColumn() === 0, 'Push: abgelaufenes Abo (HTTP 410) wird gelöscht');
+    call($port, ['action' => 'start', 'token' => $host['token']]);
+    check(call($port, ['action' => 'heartbeat', 'authToken' => $inv4['authToken']])['invites'] === [], 'Einladung zu einem gestarteten Spiel verfällt');
+    $currentRoom = $a['room'];
+
     // Alte Tabelle ohne Serien-Spalten wird nachgerüstet
     require_once __DIR__ . '/../api/accounts.php';
     $old = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
@@ -513,6 +614,7 @@ try {
     check($htaccess, 'Datenordner ist per .htaccess geschützt');
 } finally {
     proc_terminate($server);
+    proc_terminate($mock);
     foreach (glob("$dataDir/{,.}*", GLOB_BRACE) ?: [] as $file) {
         if (is_file($file)) {
             unlink($file);

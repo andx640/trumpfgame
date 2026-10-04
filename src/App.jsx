@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
-import { playFlip, playLose, playTurn, playWin, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
+import { disablePush, enablePush, pushPermission, pushSupported, syncPush } from "./push";
+import { chatSoundEnabled, playChat, playFlip, playLose, playTurn, playWin, setChatSoundEnabled, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
 const SESSION_NAME = "pitlane-trumpf-name";
@@ -97,6 +98,9 @@ function App() {
   const [view, setView] = useState("home"); // home | new | join | collection | account | profile
   const [authToken, setAuthToken] = useState(readAuthToken);
   const [account, setAccount] = useState(null);
+  const [invites, setInvites] = useState([]);
+  const [banner, setBanner] = useState(null);
+  const notifiedInvites = useRef(new Set());
 
   const loadProfile = useCallback((token) => {
     if (!token) return;
@@ -115,6 +119,46 @@ function App() {
   useEffect(() => {
     if (state?.status === "finished") loadProfile(authToken);
   }, [state?.status, authToken, loadProfile]);
+
+  // Lebenszeichen: macht mich für Freunde „on“ und holt offene Einladungen
+  useEffect(() => {
+    if (!authToken) {
+      setInvites([]);
+      return undefined;
+    }
+    let alive = true;
+    const beat = () => {
+      socket.request("heartbeat", { authToken })
+        .then((result) => {
+          if (!alive || !result.ok) return;
+          setInvites(result.invites);
+          const fresh = result.invites.filter((invite) => !notifiedInvites.current.has(invite.id));
+          result.invites.forEach((invite) => notifiedInvites.current.add(invite.id));
+          if (fresh.length && !document.hidden) {
+            setBanner(fresh[0]);
+            playTurn();
+            vibrate([80, 50, 80]);
+          }
+        })
+        .catch(() => {});
+    };
+    beat();
+    const timer = window.setInterval(beat, 6_000);
+    const onVisible = () => !document.hidden && beat();
+    document.addEventListener("visibilitychange", onVisible);
+    syncPush(authToken).catch(() => {});
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!banner) return undefined;
+    const timer = window.setTimeout(() => setBanner(null), 12_000);
+    return () => window.clearTimeout(timer);
+  }, [banner]);
 
   const signedIn = (token, data) => {
     storeAuthToken(token);
@@ -177,9 +221,9 @@ function App() {
     };
   }, []);
 
-  const join = (name, room, ai) => {
+  const doJoin = (name, room, ai, create) => {
     setJoining(true);
-    socket.emit("joinGame", { name, room, create: view === "new", authToken: account ? authToken : undefined, ai }, (response) => {
+    socket.emit("joinGame", { name, room, create, authToken: account ? authToken : undefined, ai }, (response) => {
       setJoining(false);
       if (!response?.ok) {
         setNotice(response?.message || "Beitritt fehlgeschlagen.");
@@ -189,6 +233,32 @@ function App() {
       sessionStorage.setItem(SESSION_ROOM, response.room);
       sessionStorage.setItem(SESSION_NAME, name.trim());
     });
+  };
+  const join = (name, room, ai) => doJoin(name, room, ai, view === "new");
+
+  const declineInvite = (invite) => {
+    setBanner((current) => (current?.id === invite.id ? null : current));
+    setInvites((list) => list.filter((entry) => entry.id !== invite.id));
+    socket.request("inviteDecline", { authToken, id: invite.id }).then((result) => result.ok && setInvites(result.invites)).catch(() => {});
+  };
+
+  const acceptInvite = (invite) => {
+    setBanner(null);
+    if (state && state.status !== "lobby") {
+      setNotice("Beende erst die laufende Partie, dann kannst du der Einladung folgen.");
+      return;
+    }
+    const go = () => doJoin(account.name, invite.room, undefined, false);
+    if (state) {
+      // aus der aktuellen Lobby wechseln
+      socket.emit("leaveLobby", undefined, () => {
+        sessionStorage.removeItem(SESSION_TOKEN);
+        sessionStorage.removeItem(SESSION_ROOM);
+        go();
+      });
+    } else {
+      go();
+    }
   };
 
   const leave = () => {
@@ -214,6 +284,7 @@ function App() {
             onCollection={() => setView("collection")}
             onLeaderboard={() => setView("leaderboard")}
             account={account}
+            inviteCount={invites.length}
             onAccount={() => setView(account ? "profile" : "account")}
           />
         ) : !state && view === "collection" ? (
@@ -227,6 +298,9 @@ function App() {
             <Profile
               account={account}
               authToken={authToken}
+              invites={invites}
+              onAcceptInvite={acceptInvite}
+              onDeclineInvite={declineInvite}
               onBack={() => setView("home")}
               onSignOut={signOut}
             />
@@ -234,23 +308,24 @@ function App() {
         ) : !state ? (
           <Welcome mode={view} onBack={() => setView("home")} onJoin={join} joining={joining} connected={connected} account={account} />
         ) : state.status === "lobby" ? (
-          <Lobby state={state} onLeave={leave} />
+          <Lobby state={state} onLeave={leave} account={account} />
         ) : (
           <Game state={state} />
         )}
       </main>
+      {banner && <InviteBanner invite={banner} canJoin={!state || state.status === "lobby"} onAccept={() => acceptInvite(banner)} onDecline={() => declineInvite(banner)} onClose={() => setBanner(null)} />}
       {state && !state.solo && <ChatWidget chat={state.chat || []} selfId={state.selfId} sessionId={state.sessionId} />}
       {notice && <div className="toast" role="alert">{notice}</div>}
     </div>
   );
 }
 
-function Home({ onNew, onJoin, onCollection, onLeaderboard, account, onAccount }) {
+function Home({ onNew, onJoin, onCollection, onLeaderboard, account, onAccount, inviteCount = 0 }) {
   return (
     <section className="home">
       <button type="button" className="home-account" onClick={onAccount}>
         {account ? (
-          <><LevelBadge level={account.level} /><span>{account.name}</span></>
+          <><LevelBadge level={account.level} /><span>{account.name}</span>{inviteCount > 0 && <b className="home-account-badge" aria-label={`${inviteCount} Einladungen`}>{inviteCount}</b>}</>
         ) : (
           <><UserIcon /><span>Anmelden</span></>
         )}
@@ -495,7 +570,8 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
   );
 }
 
-function Lobby({ state, onLeave }) {
+function Lobby({ state, onLeave, account }) {
+  const [inviting, setInviting] = useState(false);
   const selfIsHost = state.selfId === state.hostId;
   const canStart = state.players.length >= 2;
   const openSeats = state.solo ? [] : Array.from({ length: state.maxPlayers - state.players.length });
@@ -517,6 +593,10 @@ function Lobby({ state, onLeave }) {
       ) : (
         <p className="muted session-code">Session-ID zum Beitreten: <b>{state.sessionId}</b></p>
       )}
+      {account && !state.solo && state.players.length < state.maxPlayers && (
+        <button type="button" className="invite-open" onClick={() => setInviting(true)}>Freunde einladen</button>
+      )}
+      {inviting && <InviteModal players={state.players} onClose={() => setInviting(false)} />}
 
       <div className="lobby-grid">
         <div className="players-panel panel">
@@ -1062,9 +1142,25 @@ function ChatWidget({ chat, selfId, sessionId }) {
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const [seenId, setSeenId] = useState(() => (chat.length ? chat[chat.length - 1].id : 0));
+  const [soundOn, setSoundOn] = useState(chatSoundEnabled);
+  const notifiedId = useRef(chat.length ? chat[chat.length - 1].id : 0);
   const listRef = useRef(null);
   const lastId = chat.length ? chat[chat.length - 1].id : 0;
   const unread = open ? 0 : chat.filter((message) => message.id > seenId && message.playerId !== selfId).length;
+
+  // neue Nachricht eines anderen Spielers: Ton (nicht für den Verlauf beim Öffnen der Seite)
+  useEffect(() => {
+    const fresh = chat.filter((message) => message.id > notifiedId.current);
+    if (!fresh.length) return;
+    notifiedId.current = fresh[fresh.length - 1].id;
+    if (fresh.some((message) => message.playerId !== selfId)) playChat();
+  }, [chat, selfId]);
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setChatSoundEnabled(next);
+  };
 
   // geöffnet: alles gilt als gelesen, Liste bleibt unten
   useEffect(() => {
@@ -1116,6 +1212,16 @@ function ChatWidget({ chat, selfId, sessionId }) {
           <div className="chat-head">
             <strong>Chat</strong>
             {sessionId && <small>Session {sessionId}</small>}
+            <button
+              type="button"
+              className={`chat-sound ${soundOn ? "is-on" : ""}`}
+              onClick={toggleSound}
+              aria-pressed={soundOn}
+              aria-label={soundOn ? "Chat-Ton ausschalten" : "Chat-Ton einschalten"}
+              title={soundOn ? "Ton an" : "Ton aus"}
+            >
+              <SoundIcon on={soundOn} />
+            </button>
             <button type="button" className="chat-close" onClick={() => setOpen(false)} aria-label="Chat schließen">✕</button>
           </div>
           <div className="chat-list" ref={listRef} aria-live="polite">
@@ -1143,6 +1249,150 @@ function ChatWidget({ chat, selfId, sessionId }) {
         </div>
       )}
     </>
+  );
+}
+
+function PresenceDot({ online }) {
+  return (
+    <span className={`presence ${online ? "is-on" : "is-off"}`} aria-label={online ? "online" : "offline"}>
+      <i />
+      {online ? "on" : "off"}
+    </span>
+  );
+}
+
+// Meldung von oben, wenn ein Freund einlädt
+function InviteBanner({ invite, canJoin, onAccept, onDecline, onClose }) {
+  return (
+    <div className="invite-banner" role="alert">
+      <div className="invite-banner-copy">
+        <strong>{invite.from} lädt dich ein</strong>
+        <span>{canJoin ? "Komm in die Lobby und spiel mit." : "Du kannst nach der Partie beitreten (siehe Postfach)."}</span>
+      </div>
+      {canJoin && <button type="button" className="friend-accept" onClick={onAccept}>Beitreten</button>}
+      <button type="button" className="friend-ghost" onClick={canJoin ? onDecline : onClose} aria-label={canJoin ? "Einladung ablehnen" : "Meldung schließen"}>✕</button>
+    </div>
+  );
+}
+
+// Posteingang für Einladungen und Schalter für Push-Nachrichten aufs Handy
+function Inbox({ invites, authToken, onAccept, onDecline }) {
+  const [permission, setPermission] = useState(pushPermission);
+  const [pushOn, setPushOn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    syncPush(authToken).then((on) => alive && setPushOn(on)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [authToken]);
+
+  const togglePush = () => {
+    setBusy(true);
+    setMessage("");
+    const work = pushOn ? disablePush(authToken).then(() => false) : enablePush(authToken).then(() => true);
+    work
+      .then((on) => setPushOn(on))
+      .catch((error) => setMessage(error.message || "Das hat nicht geklappt."))
+      .finally(() => {
+        setBusy(false);
+        setPermission(pushPermission());
+      });
+  };
+
+  return (
+    <div className="inbox">
+      <h3>Einladungen{invites.length > 0 ? ` (${invites.length})` : ""}</h3>
+      {invites.length === 0 && <p className="muted">Keine Einladungen. Wenn ein Freund dich einlädt, erscheint sie hier.</p>}
+      {invites.map((invite) => (
+        <div className="friend-row" key={invite.id}>
+          <div className="friend-copy"><strong>{invite.from}</strong><small>lädt dich zu einem Spiel ein</small></div>
+          <button type="button" className="friend-accept" onClick={() => onAccept(invite)}>Beitreten</button>
+          <button type="button" className="friend-ghost" onClick={() => onDecline(invite)} aria-label={`Einladung von ${invite.from} ablehnen`}>✕</button>
+        </div>
+      ))}
+      {pushSupported() ? (
+        <div className="push-row">
+          <div className="friend-copy">
+            <strong>Benachrichtigungen aufs Handy</strong>
+            <small>{pushOn ? "An: Einladungen kommen auch, wenn die App zu ist." : permission === "denied" ? "Im Browser blockiert." : "Aus"}</small>
+          </div>
+          <button type="button" className={`push-toggle ${pushOn ? "is-on" : ""}`} onClick={togglePush} disabled={busy || permission === "denied"} aria-pressed={pushOn}>
+            {pushOn ? "Ausschalten" : "Einschalten"}
+          </button>
+        </div>
+      ) : (
+        <p className="muted push-note">Push-Benachrichtigungen gibt es auf diesem Gerät nicht. Auf dem iPhone: App zum Home-Bildschirm hinzufügen.</p>
+      )}
+      {message && <p className="form-error" role="alert">{message}</p>}
+    </div>
+  );
+}
+
+// Freunde in die Lobby einladen
+function InviteModal({ players, onClose }) {
+  const [data, setData] = useState(null);
+  const [message, setMessage] = useState("");
+  const [invited, setInvited] = useState(() => new Set());
+
+  const load = useCallback(() => {
+    socket.request("friends", { authToken: readAuthToken() }).then((result) => result.ok && setData(result)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    load();
+    const timer = window.setInterval(load, 8_000);
+    const onKey = (event) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [load, onClose]);
+
+  const invite = (name) => {
+    setMessage("");
+    socket.request("invite", { name })
+      .then((result) => {
+        setMessage(result.message || "");
+        if (result.ok) setInvited((set) => new Set(set).add(name));
+      })
+      .catch(() => setMessage("Keine Verbindung zum Server."));
+  };
+
+  const inLobby = new Set(players.map((player) => player.name.toLocaleLowerCase("de")));
+
+  return (
+    <div className="player-modal-backdrop" onClick={onClose}>
+      <div className="player-modal panel" role="dialog" aria-modal="true" aria-label="Freunde einladen" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="player-modal-close" onClick={onClose} aria-label="Schließen">✕</button>
+        <p className="eyebrow">EINLADEN</p>
+        <h2>Freunde einladen</h2>
+        {!data && <p className="muted">Lädt …</p>}
+        {data && data.friends.length === 0 && <p className="muted">Du hast noch keine Freunde. Füge sie im Profil hinzu.</p>}
+        <div className="friend-group">
+          {data?.friends.map((friend) => {
+            const there = inLobby.has(friend.name.toLocaleLowerCase("de"));
+            const done = invited.has(friend.name);
+            return (
+              <div className="friend-row" key={friend.name}>
+                <div className="friend-copy">
+                  <strong>{friend.name} <LevelBadge level={friend.level} /></strong>
+                  <PresenceDot online={friend.online} />
+                </div>
+                <button type="button" className="friend-accept" disabled={there || done} onClick={() => invite(friend.name)}>
+                  {there ? "In der Lobby" : done ? "Eingeladen" : "Einladen"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        {message && <p className="friend-message" role="status">{message}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -1336,7 +1586,7 @@ function FriendsPanel({ authToken }) {
             <MiniRing wins={friend.wins} losses={friend.losses} />
             <div className="friend-copy">
               <strong>{friend.name}</strong>
-              <small>{friend.gamesPlayed} {friend.gamesPlayed === 1 ? "Spiel" : "Spiele"} · {friend.wins} Siege</small>
+              <PresenceDot online={friend.online} />
             </div>
             <LevelBadge level={friend.level} />
           </button>
@@ -1357,6 +1607,7 @@ function FriendsPanel({ authToken }) {
       {openName && (
         <PlayerModal
           name={openName}
+          online={data?.friends.find((friend) => friend.name === openName)?.online}
           onClose={closeFriend}
           footer={confirmRemove ? (
             <div className="friend-confirm">
@@ -1402,7 +1653,7 @@ function ProfileStats({ account }) {
 }
 
 // Spielerfenster: öffnet sich über der Rangliste oder der Freundesliste
-function PlayerModal({ name, onClose, footer = null }) {
+function PlayerModal({ name, online, onClose, footer = null }) {
   const [account, setAccount] = useState(null);
   const [error, setError] = useState("");
 
@@ -1429,6 +1680,7 @@ function PlayerModal({ name, onClose, footer = null }) {
         <button type="button" className="player-modal-close" onClick={onClose} aria-label="Schließen">✕</button>
         <p className="eyebrow">SPIELERPROFIL</p>
         <h2>{name} {account && <LevelBadge level={account.level} />}</h2>
+        {online !== undefined && <PresenceDot online={online} />}
         {error && <p className="form-error" role="alert">{error}</p>}
         {!account && !error && <p className="muted">Lädt …</p>}
         {account && <ProfileStats account={account} />}
@@ -1438,7 +1690,7 @@ function PlayerModal({ name, onClose, footer = null }) {
   );
 }
 
-function Profile({ account, authToken, onBack, onSignOut }) {
+function Profile({ account, authToken, invites = [], onAcceptInvite, onDeclineInvite, onBack, onSignOut }) {
   return (
     <section className="welcome page-width">
       <div className="join-card panel profile-card">
@@ -1446,6 +1698,7 @@ function Profile({ account, authToken, onBack, onSignOut }) {
         <p className="eyebrow">SPIELERKONTO</p>
         <h2>{account.name}</h2>
         <ProfileStats account={account} />
+        <Inbox invites={invites} authToken={authToken} onAccept={onAcceptInvite} onDecline={onDeclineInvite} />
         <FriendsPanel authToken={authToken} />
         <button type="button" className="text-button" onClick={onSignOut}>Abmelden</button>
       </div>
