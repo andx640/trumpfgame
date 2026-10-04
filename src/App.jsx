@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
-import { playFlip, playLose, playTurn, playWin, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
+import { chatSoundEnabled, playChat, playFlip, playLose, playTurn, playWin, setChatSoundEnabled, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
 const SESSION_NAME = "pitlane-trumpf-name";
@@ -1062,9 +1062,25 @@ function ChatWidget({ chat, selfId, sessionId }) {
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const [seenId, setSeenId] = useState(() => (chat.length ? chat[chat.length - 1].id : 0));
+  const [soundOn, setSoundOn] = useState(chatSoundEnabled);
+  const notifiedId = useRef(chat.length ? chat[chat.length - 1].id : 0);
   const listRef = useRef(null);
   const lastId = chat.length ? chat[chat.length - 1].id : 0;
   const unread = open ? 0 : chat.filter((message) => message.id > seenId && message.playerId !== selfId).length;
+
+  // neue Nachricht eines anderen Spielers: Ton (nicht für den Verlauf beim Öffnen der Seite)
+  useEffect(() => {
+    const fresh = chat.filter((message) => message.id > notifiedId.current);
+    if (!fresh.length) return;
+    notifiedId.current = fresh[fresh.length - 1].id;
+    if (fresh.some((message) => message.playerId !== selfId)) playChat();
+  }, [chat, selfId]);
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setChatSoundEnabled(next);
+  };
 
   // geöffnet: alles gilt als gelesen, Liste bleibt unten
   useEffect(() => {
@@ -1116,6 +1132,16 @@ function ChatWidget({ chat, selfId, sessionId }) {
           <div className="chat-head">
             <strong>Chat</strong>
             {sessionId && <small>Session {sessionId}</small>}
+            <button
+              type="button"
+              className={`chat-sound ${soundOn ? "is-on" : ""}`}
+              onClick={toggleSound}
+              aria-pressed={soundOn}
+              aria-label={soundOn ? "Chat-Ton ausschalten" : "Chat-Ton einschalten"}
+              title={soundOn ? "Ton an" : "Ton aus"}
+            >
+              <SoundIcon on={soundOn} />
+            </button>
             <button type="button" className="chat-close" onClick={() => setOpen(false)} aria-label="Chat schließen">✕</button>
           </div>
           <div className="chat-list" ref={listRef} aria-live="polite">

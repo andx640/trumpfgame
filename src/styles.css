@@ -4940,3 +4940,25 @@ body:has(.app-shell.is-playing) {
 .has-chat .site-header {
   padding-right: 64px;
 }
+
+.chat-sound {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #6b7686;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.chat-sound.is-on {
+  color: var(--acid);
+}
+
+.chat-sound svg {
+  width: 17px;
+  height: 17px;
+}

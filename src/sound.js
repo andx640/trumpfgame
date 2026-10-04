@@ -22,8 +22,31 @@ export function setSoundEnabled(value) {
   if (value) unlockAudio();
 }
 
-function audio() {
-  if (!enabled) return null;
+// Der Chat-Ton hat einen eigenen Schalter im Chatfenster, unabhängig vom Spielton.
+const CHAT_KEY = "andi-trumpf-chat-sound";
+let chatEnabled = true;
+try {
+  chatEnabled = localStorage.getItem(CHAT_KEY) !== "off";
+} catch {
+  chatEnabled = true;
+}
+
+export function chatSoundEnabled() {
+  return chatEnabled;
+}
+
+export function setChatSoundEnabled(value) {
+  chatEnabled = value;
+  try {
+    localStorage.setItem(CHAT_KEY, value ? "on" : "off");
+  } catch {
+    // ohne Speicher gilt die Einstellung nur bis zum Neuladen
+  }
+  if (value) playChat();
+}
+
+function audio(force = false) {
+  if (!enabled && !force) return null;
   if (!context) {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return null;
@@ -96,4 +119,13 @@ export function playTurn() {
   if (!ctx) return;
   tone(ctx, 740, 0, 0.12);
   tone(ctx, 988, 0.13, 0.18);
+}
+
+/** neue Chatnachricht: kurzes, helles „Plip“ (nur mit Chat-Ton an) */
+export function playChat() {
+  if (!chatEnabled) return;
+  const ctx = audio(true);
+  if (!ctx) return;
+  tone(ctx, 1046, 0, 0.09, { gain: 0.09 });
+  tone(ctx, 1568, 0.08, 0.14, { gain: 0.08 });
 }
