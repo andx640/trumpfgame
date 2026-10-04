@@ -990,7 +990,9 @@ const CARD_FIELDS = [
   { key: "beschleunigung", label: "Beschleunigung", unit: "s", icon: "timer" },
   { key: "hoechstgeschwindigkeit", label: "Geschwindigkeit", unit: "km/h", icon: "speed" },
   { key: "gewicht", label: "Gewicht", unit: "kg", icon: "weight" },
-  { key: "preis", label: "Preis", unit: "€", icon: "price" }
+  { key: "preis", label: "Preis", unit: "€", icon: "price" },
+  { key: "raritaet", label: "Rarität", icon: "gem", rating: "gem" },
+  { key: "performance", label: "Performance", icon: "flag", rating: "flag" }
 ];
 
 function cardValue(card, key) {
@@ -1035,7 +1037,11 @@ const VehicleCard = memo(function VehicleCard({ card, categories, selectable = f
             >
               <span className="stat-label">{field.label}</span>
               <GtIcon type={field.icon} />
-              <strong>{value ?? "–"}{value && <small>{field.unit}</small>}</strong>
+              {field.rating ? (
+                <RatingSymbols kind={field.rating} value={Number(card[field.key]) || 0} />
+              ) : (
+                <strong>{value ?? "–"}{value && <small>{field.unit}</small>}</strong>
+              )}
               {rule && <i>{rule.direction === "low" ? "▼" : "▲"}</i>}
             </Tag>
           );
@@ -1044,6 +1050,30 @@ const VehicleCard = memo(function VehicleCard({ card, categories, selectable = f
     </article>
   );
 });
+
+// Rarität (Diamanten) und Performance (Zielflaggen): 1 bis 5, gefüllte Symbole leuchten gold
+function RatingSymbols({ kind, value }) {
+  return (
+    <span className="rating" role="img" aria-label={`${value} von 5`}>
+      {[1, 2, 3, 4, 5].map((index) => (
+        <svg className={`rating-symbol ${index <= value ? "is-filled" : ""}`} viewBox="0 0 24 24" key={index} aria-hidden="true">
+          {kind === "gem" ? (
+            <>
+              <path d="M6 3h12l4 6-10 12L2 9z" />
+              <path d="M2 9h20M9 3l-2 6 5 12 5-12-2-6" className="rating-facets" />
+            </>
+          ) : (
+            <>
+              <path d="M5 2v21" className="rating-pole" />
+              <path d="M6 3h14v11H6z" />
+              <path d="M6 3h3.500v3.670H6zM13 3h3.500v3.670H13zM9.500 6.670H13v3.660H9.500zM16.500 6.670H20v3.660h-3.500zM6 10.330h3.500V14H6zM13 10.330h3.500V14H13z" className="rating-checks" />
+            </>
+          )}
+        </svg>
+      ))}
+    </span>
+  );
+}
 
 // Bronze-Symbole der Kartenfelder, flach gezeichnet in vier Tönen.
 function GtIcon({ type }) {
@@ -1117,6 +1147,19 @@ function GtIcon({ type }) {
         <path d="M18 24h28l7 30H11z" fill="#7d7a78" stroke="#2c2a29" strokeWidth="2.500" strokeLinejoin="round" />
         <path d="M21 28h6l-4 22h-6z" fill="#a8a5a2" opacity=".55" />
         <text x="32" y="46" textAnchor="middle" fontSize="15" fontWeight="800" fill="#2c2a29" fontFamily="Barlow, sans-serif">kg</text>
+      </>
+    ),
+    gem: (
+      <>
+        <path d="M16 10h32l12 16-28 30L4 26z" fill={B} stroke={D} strokeWidth="2.500" strokeLinejoin="round" />
+        <path d="M4 26h56M24 10l-8 16 16 30 16-30-8-16" fill="none" stroke={L} strokeWidth="2" strokeLinejoin="round" />
+      </>
+    ),
+    flag: (
+      <>
+        <path d="M14 6v52" stroke={D} strokeWidth="5" strokeLinecap="round" />
+        <path d="M14 8h38v28H14z" fill="#f4f1ee" stroke={D} strokeWidth="2.500" />
+        {[0, 1, 2, 3].flatMap((col) => [0, 1, 2].map((row) => (col + row) % 2 === 0 ? <rect key={`${col}${row}`} x={14 + col * 9.500} y={8 + row * 9.330} width="9.500" height="9.330" fill="#1d1511" /> : null))}
       </>
     ),
     price: (
