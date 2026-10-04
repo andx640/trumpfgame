@@ -5212,3 +5212,25 @@ body:has(.app-shell.is-playing) {
   fill: #2a1c00;
   stroke: none;
 }
+
+/* Textbuttons ohne Unterstrich, Zurück rechts */
+.text-button,
+.text-button:hover {
+  border: 0;
+  border-bottom: 0;
+}
+
+.join-back {
+  display: block;
+  margin-left: auto;
+}
+
+.collection-head .text-button {
+  justify-self: end;
+}
+
+@media (max-width: 650px) {
+  .lobby-heading .text-button {
+    justify-self: end;
+  }
+}
