@@ -360,6 +360,36 @@ try {
         check($played['ok'] && $played['state']['game']['phase'] === 'revealed', 'Mensch wählt, KI-Karten werden aufgedeckt');
     }
 
+    // Chat
+    $chatA = call($port, ['action' => 'join', 'name' => 'ChatA', 'create' => true]);
+    $chatB = call($port, ['action' => 'join', 'name' => 'ChatB', 'room' => $chatA['room']]);
+    $currentRoom = $chatA['room'];
+    $sent = call($port, ['action' => 'chat', 'token' => $chatA['token'], 'text' => "  Hallo   zusammen \n "]);
+    check($sent['ok'] && count($sent['state']['chat']) === 1 && $sent['state']['chat'][0]['text'] === 'Hallo zusammen' && $sent['state']['chat'][0]['name'] === 'ChatA', 'Chat: Nachricht wird gespeichert und bereinigt');
+    $seen = call($port, ['action' => 'state', 'token' => $chatB['token']]);
+    check(count($seen['state']['chat']) === 1 && $seen['state']['chat'][0]['playerId'] === $sent['state']['selfId'], 'Chat: der andere Spieler sieht die Nachricht');
+    check(call($port, ['action' => 'chat', 'token' => $chatA['token'], 'text' => 'zu schnell'])['ok'] === false, 'Chat: Schnellfeuer wird gebremst');
+    usleep(800000);
+    check(call($port, ['action' => 'chat', 'token' => $chatB['token'], 'text' => '   '])['ok'] === false, 'Chat: leere Nachricht wird abgelehnt');
+    $long = call($port, ['action' => 'chat', 'token' => $chatB['token'], 'text' => str_repeat('ä', 500)]);
+    check($long['ok'] && mb_strlen(end($long['state']['chat'])['text']) === 200, 'Chat: Nachricht auf 200 Zeichen gekürzt');
+    check(call($port, ['action' => 'chat', 'token' => 'falsch', 'text' => 'hi'])['ok'] === false, 'Chat: ohne Teilnahme nicht möglich');
+    $roomFile = "$dataDir/room_{$chatA['room']}.json";
+    $chatRoom = json_decode((string) file_get_contents($roomFile), true);
+    for ($i = 0; $i < 80; $i++) {
+        $chatRoom['chat'][] = ['id' => 1000 + $i, 'playerId' => 'x', 'name' => 'x', 'text' => 'y', 'at' => 0];
+    }
+    $chatRoom['chatSeq'] = 2000;
+    file_put_contents($roomFile, json_encode($chatRoom));
+    usleep(800000);
+    $capped = call($port, ['action' => 'chat', 'token' => $chatA['token'], 'text' => 'letzte']);
+    $storedChat = json_decode((string) file_get_contents($roomFile), true)['chat'];
+    check(count($storedChat) === 60 && count($capped['state']['chat']) === 50 && end($capped['state']['chat'])['text'] === 'letzte', 'Chat: Verlauf ist begrenzt (60 gespeichert, 50 ausgeliefert)');
+    $soloChat = call($port, ['action' => 'join', 'name' => 'Solo', 'create' => true, 'ai' => ['difficulty' => 'hard', 'opponents' => 1]]);
+    $currentRoom = $soloChat['room'];
+    check(call($port, ['action' => 'chat', 'token' => $soloChat['token'], 'text' => 'hallo?'])['ok'] === false, 'Chat: im Spiel gegen die KI gibt es keinen Chat');
+    $currentRoom = $a['room'];
+
     check(call($port, ['action' => 'state', 'token' => 'falsch'])['code'] === 'not_joined', 'unbekannter Token');
     check(call($port, ['action' => 'unsinn', 'token' => $a['token']])['ok'] === false, 'unbekannte Aktion');
     // Konten: registrieren, anmelden, Statistik nach Spielende
