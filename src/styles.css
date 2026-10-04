@@ -4534,6 +4534,10 @@ body:has(.app-shell.is-playing) {
 }
 
 /* Rangliste */
+.leaderboard-card::before {
+  display: none;
+}
+
 .leaderboard {
   display: grid;
   gap: 6px;
