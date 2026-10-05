@@ -110,6 +110,81 @@ foreach ([2, 3, 4] as $playerCount) {
 check($allFinished, 'Simulation: jede Partie (2-4 Spieler, 8-32 Karten) endet mit Sieger');
 check($cardsKept, 'Simulation: es gehen keine Karten verloren');
 
+// 2 gegen 2: Teamwert, Verteilung an das Team, Zugreihenfolge A-B-A-B
+echo "Teammodus\n";
+$mk = static function (array $hands): array {
+    $ids = ['a', 'b', 'c', 'd'];
+    $players = [];
+    foreach ($hands as $i => $hand) {
+        $players[] = ['id' => $ids[$i], 'hand' => $hand];
+    }
+    return $players;
+};
+$players = $mk([['0001', '0005'], ['0002', '0006'], ['0003', '0007'], ['0004', '0008']]);
+$teams = trumpf_team_map($players, 0);
+check($teams === ['a' => 0, 'b' => 1, 'c' => 0, 'd' => 1], 'Teams: 1+3 gegen 2+4');
+check(trumpf_team_map($players, 1) === ['a' => 0, 'b' => 0, 'c' => 1, 'd' => 1], 'Teams: Aufstellung 1+2 gegen 3+4');
+$game = trumpf_start_game($players, 8, $teams);
+check($game['teams'] === $teams, 'Spiel kennt die Teams');
+$players = $mk([['0001', '0005'], ['0002', '0006'], ['0003', '0007'], ['0004', '0008']]);
+$game['activePlayerId'] = 'a';
+$game['lastChooser'] = [null, null];
+$game['pot'] = [];
+trumpf_choose_category($game, $players, 'a', 'leistung');
+$vals = [];
+foreach (['0001', '0002', '0003', '0004'] as $n => $id) {
+    $vals[['a', 'b', 'c', 'd'][$n]] = $deck[$id]['leistung'];
+}
+$teamA = max($vals['a'], $vals['c']);
+$teamB = max($vals['b'], $vals['d']);
+if ($teamA !== $teamB) {
+    $winTeam = $teamA > $teamB ? 0 : 1;
+    check($game['result']['type'] === 'winner' && $game['result']['winnerTeam'] === $winTeam && (float) $game['result']['value'] === (float) max($teamA, $teamB), 'Teamwert: beste Karte des Teams entscheidet');
+    $members = $winTeam === 0 ? [0, 2] : [1, 3];
+    check(count($players[$members[0]]['hand']) === 3 && count($players[$members[1]]['hand']) === 3, 'Stichkarten werden auf beide im Siegerteam verteilt');
+    check(($game['teams'][$game['activePlayerId']] ?? null) === 1, 'Zug wechselt zum anderen Team (A, B)');
+    $first = $game['activePlayerId'];
+    $game['phase'] = 'choosing';
+    trumpf_choose_category($game, $players, $first, 'leistung');
+    check($game['result']['type'] !== 'winner' || $game['teams'][$game['activePlayerId']] === 0 || $game['phase'] === 'finished', 'danach wieder Team A');
+}
+// Teammitglied ohne Karten bekommt beim Sieg wieder Karten und das Team spielt weiter
+$players = $mk([['0001'], ['0002', '0006'], [], ['0004', '0008']]);
+$game = trumpf_start_game($players, 8, $teams);
+$players = $mk([['0001'], ['0002', '0006'], [], ['0004', '0008']]);
+$game['activePlayerId'] = 'a';
+trumpf_choose_category($game, $players, 'a', 'leistung');
+check($game['phase'] !== 'choosing' && count($game['tableCards']) === 3, 'Spieler ohne Karten legt nicht mit');
+// Team ohne Karten verliert
+$players = $mk([['0001'], [], ['0003'], []]);
+$game['phase'] = 'choosing';
+$game['activePlayerId'] = 'a';
+$game['pot'] = [];
+trumpf_choose_category($game, $players, 'a', 'leistung');
+check($game['phase'] === 'finished' && $game['winnerTeam'] === 0 && $game['winnerIds'] === ['a', 'c'], 'Team ohne Karten verliert, beide im Siegerteam gewinnen');
+// Simulation ganzer Team-Partien
+$teamsOk = true;
+$cardsOk = true;
+for ($run = 0; $run < 20; $run++) {
+    foreach ([8, 16, 32] as $perPlayer) {
+        $players = $mk([[], [], [], []]);
+        $teams = trumpf_team_map($players, $run % 3);
+        $game = trumpf_start_game($players, $perPlayer, $teams);
+        $cats = array_keys(TRUMPF_CATEGORIES);
+        for ($round = 0; $round < 100000 && $game['phase'] !== 'finished'; $round++) {
+            trumpf_choose_category($game, $players, $game['activePlayerId'], $cats[random_int(0, count($cats) - 1)]);
+            if ($game['phase'] === 'revealed') {
+                trumpf_next_round($game, $players);
+            }
+        }
+        $teamsOk = $teamsOk && $game['phase'] === 'finished' && count($game['winnerIds']) === 2;
+        $total = array_sum(array_map(fn($p) => count($p['hand']), $players)) + count($game['pot']);
+        $cardsOk = $cardsOk && $total === 4 * $perPlayer;
+    }
+}
+check($teamsOk, 'Simulation: Team-Partien enden mit Siegerteam');
+check($cardsOk, 'Simulation: im Teammodus gehen keine Karten verloren');
+
 // --- API mit echtem Server --------------------------------------------------------------------
 echo "API\n";
 $dataDir = sys_get_temp_dir() . '/trumpf-test-' . getmypid();
@@ -609,6 +684,31 @@ try {
     check(call($port, ['action' => 'friendAdd', 'authToken' => $reg['authToken'], 'name' => 'Dora'])['ok'] === true && count(call($port, ['action' => 'friends', 'authToken' => $reg['authToken']])['friends']) === 2, 'gegenseitige Anfragen werden zur Freundschaft');
     call($port, ['action' => 'friendRemove', 'authToken' => $reg['authToken'], 'name' => 'Cem']);
     check(count(call($port, ['action' => 'friends', 'authToken' => $cem['authToken']])['friends']) === 0, 'Freund entfernen');
+
+    // 2 gegen 2 per API
+    $currentRoom = null;
+    $t1 = call($port, ['action' => 'join', 'name' => 'Tim1', 'create' => true]);
+    $currentRoom = $t1['room'];
+    $tt = [$t1['token']];
+    for ($n = 2; $n <= 4; $n++) {
+        if ($n === 4) {
+            check(call($port, ['action' => 'setTeams', 'token' => $tt[0], 'on' => true])['ok'] === false, 'Teams: mit 3 Spielern nicht möglich');
+        }
+        $tt[] = call($port, ['action' => 'join', 'name' => "Tim$n"])['token'];
+    }
+    check(call($port, ['action' => 'setTeams', 'token' => $tt[1], 'on' => true])['ok'] === false, 'Teams: nur der Host darf umschalten');
+    $on = call($port, ['action' => 'setTeams', 'token' => $tt[0], 'on' => true]);
+    check($on['ok'] && $on['state']['teamMode'] === true && $on['state']['players'][0]['team'] === 0 && $on['state']['players'][1]['team'] === 1 && $on['state']['players'][2]['team'] === 0, 'Teams: Lobby zeigt Teams 1+3 gegen 2+4');
+    $shuffled = call($port, ['action' => 'setTeams', 'token' => $tt[0], 'on' => true, 'shuffle' => true]);
+    check($shuffled['state']['players'][1]['team'] === 0, 'Teams: Aufstellung wechselt');
+    call($port, ['action' => 'start', 'token' => $tt[0]]);
+    $st = call($port, ['action' => 'state', 'token' => $tt[2]])['state'];
+    check($st['teamMode'] === true && $st['game']['teamMode'] === true && $st['players'][2]['team'] === 1, 'Teams: Spiel läuft im Teammodus');
+    $chooser = $st['game']['activePlayerId'];
+    $chooserToken = $tt[array_search($chooser, array_column($st['players'], 'id'), true)];
+    $after = call($port, ['action' => 'choose', 'token' => $chooserToken, 'category' => 'leistung']);
+    check($after['ok'] && count($after['state']['game']['tableCards']) === 4 && in_array($after['state']['game']['result']['type'], ['winner', 'tie'], true), 'Teams: alle vier Karten liegen auf dem Tisch');
+    $currentRoom = null;
 
     $htaccess = file_exists("$dataDir/.htaccess");
     check($htaccess, 'Datenordner ist per .htaccess geschützt');

@@ -152,7 +152,7 @@ function trumpf_playable(array $players): array
 }
 
 /** Teilt die Karten aus und liefert den Anfangszustand der Partie. */
-function trumpf_start_game(array &$players, int $cardsPerPlayer): array
+function trumpf_start_game(array &$players, int $cardsPerPlayer, ?array $teams = null): array
 {
     if (count($players) < 2 || count($players) > 4) {
         throw new TrumpfError('Ein Spiel benötigt 2 bis 4 Spieler.');
@@ -180,6 +180,8 @@ function trumpf_start_game(array &$players, int $cardsPerPlayer): array
         'round' => 1,
         'cardsPerPlayer' => $cardsPerPlayer,
         'activePlayerId' => $players[0]['id'],
+        'teams' => $teams,
+        'lastChooser' => [null, null],
         'category' => null,
         'tableCards' => [],
         'pot' => [],
@@ -216,6 +218,10 @@ function trumpf_choose_category(array &$game, array &$players, string $playerId,
     }
     if (!isset(TRUMPF_CATEGORIES[$category])) {
         throw new TrumpfError('Diese Kategorie gibt es nicht.');
+    }
+
+    if (!empty($game['teams'])) {
+        return trumpf_choose_team($game, $players, $category);
     }
 
     $deck = trumpf_load_deck();
@@ -309,6 +315,181 @@ function trumpf_choose_category(array &$game, array &$players, string $playerId,
         trumpf_finish($game, $players[$winnerIndex]['id']);
     }
 
+    return $game['result'];
+}
+
+/** Teamzuordnung für 2 gegen 2: Index-Paare je nach Aufstellung (0: 1+3 gegen 2+4, 1: 1+2 gegen 3+4, 2: 1+4 gegen 2+3). */
+function trumpf_team_map(array $players, int $pairing): array
+{
+    $teamA = [[0, 2], [0, 1], [0, 3]][$pairing % 3];
+    $map = [];
+    foreach ($players as $index => $player) {
+        $map[$player['id']] = in_array($index, $teamA, true) ? 0 : 1;
+    }
+    return $map;
+}
+
+/** Ausgang eines Stichs im Teammodus: Teamwert = beste Karte des Teams. Gibt [Gewinnerteam oder null, Teamwerte, Bestwert] zurück. */
+function trumpf_team_outcome(array $game, array $tableCards): array
+{
+    $deck = trumpf_load_deck();
+    $category = $game['category'];
+    $low = TRUMPF_CATEGORIES[$category]['direction'] === 'low';
+    $teamValue = [null, null];
+    foreach ($tableCards as $entry) {
+        $team = $game['teams'][$entry['playerId']] ?? 0;
+        $value = (float) ($deck[$entry['cardId']][$category] + 0);
+        if ($teamValue[$team] === null || ($low ? $value < $teamValue[$team] : $value > $teamValue[$team])) {
+            $teamValue[$team] = $value;
+        }
+    }
+    if ($teamValue[0] === null || $teamValue[1] === null || $teamValue[0] === $teamValue[1]) {
+        return [null, $teamValue, $teamValue[0] ?? $teamValue[1]];
+    }
+    $winner = ($low ? $teamValue[0] < $teamValue[1] : $teamValue[0] > $teamValue[1]) ? 0 : 1;
+    return [$winner, $teamValue, $teamValue[$winner]];
+}
+
+/** Verteilt Karten reihum an alle Mitglieder eines Teams, angefangen beim angegebenen Spieler. */
+function trumpf_give_to_team(array &$players, array $teams, int $team, array $cardIds, ?string $firstId): void
+{
+    $members = [];
+    foreach ($players as $index => $player) {
+        if (($teams[$player['id']] ?? null) === $team) {
+            $members[] = $index;
+        }
+    }
+    if (!$members) {
+        return;
+    }
+    $start = 0;
+    foreach ($members as $position => $index) {
+        if ($players[$index]['id'] === $firstId) {
+            $start = $position;
+        }
+    }
+    foreach (array_values($cardIds) as $offset => $cardId) {
+        $players[$members[($start + $offset) % count($members)]]['hand'][] = (string) $cardId;
+    }
+}
+
+function trumpf_team_has_cards(array $players, array $teams): array
+{
+    $has = [false, false];
+    foreach ($players as $player) {
+        if (count($player['hand']) > 0) {
+            $has[$teams[$player['id']] ?? 0] = true;
+        }
+    }
+    return $has;
+}
+
+function trumpf_finish_team(array &$game, array &$players, ?int $team): void
+{
+    $ids = [];
+    foreach ($players as $player) {
+        if ($team !== null && ($game['teams'][$player['id']] ?? null) === $team) {
+            $ids[] = $player['id'];
+        }
+    }
+    if ($team !== null && $game['pot']) {
+        trumpf_give_to_team($players, $game['teams'], $team, $game['pot'], $ids[0] ?? null);
+        $game['pot'] = [];
+    }
+    $game['phase'] = 'finished';
+    $game['winnerId'] = $ids[0] ?? null;
+    $game['winnerIds'] = $ids;
+    $game['winnerTeam'] = $team;
+    $game['activePlayerId'] = $ids[0] ?? $game['activePlayerId'];
+    $game['turnEndsAt'] = null;
+    $game['revealEndsAt'] = null;
+    $game['result'] = [
+        'type' => 'gameOver',
+        'winnerIds' => $ids,
+        'winnerTeam' => $team,
+        'value' => null,
+        'collectedCards' => 0,
+    ];
+}
+
+/** Wer wählt als Nächstes: die Teams wechseln sich ab (A, B, A, B), im Team wechseln die Spieler. */
+function trumpf_team_next_chooser(array &$game, array $players): void
+{
+    $currentTeam = $game['teams'][$game['activePlayerId']] ?? 0;
+    $game['lastChooser'][$currentTeam] = $game['activePlayerId'];
+    foreach ([1 - $currentTeam, $currentTeam] as $team) {
+        $members = [];
+        foreach ($players as $player) {
+            if (($game['teams'][$player['id']] ?? null) === $team && trumpf_can_play($player)) {
+                $members[] = $player['id'];
+            }
+        }
+        if (!$members) {
+            continue;
+        }
+        $fresh = array_values(array_filter($members, static function ($id) use ($game, $team) {
+            return $id !== ($game['lastChooser'][$team] ?? null);
+        }));
+        $game['activePlayerId'] = $fresh ? $fresh[0] : $members[0];
+        return;
+    }
+}
+
+function trumpf_choose_team(array &$game, array &$players, string $category): array
+{
+    $teams = $game['teams'];
+    $has = trumpf_team_has_cards($players, $teams);
+    if (!$has[0] || !$has[1]) {
+        trumpf_finish_team($game, $players, $has[0] ? 0 : ($has[1] ? 1 : null));
+        return $game['result'];
+    }
+    $contenders = trumpf_playable($players);
+    $present = [false, false];
+    foreach ($contenders as $index) {
+        $present[$teams[$players[$index]['id']] ?? 0] = true;
+    }
+    if (!$present[0] || !$present[1]) {
+        throw new TrumpfError('Von einem Team ist gerade niemand online.');
+    }
+
+    $tableCards = [];
+    foreach ($contenders as $index) {
+        $tableCards[] = [
+            'playerId' => $players[$index]['id'],
+            'cardId' => (string) array_shift($players[$index]['hand']),
+        ];
+    }
+    $game['category'] = $category;
+    $game['tableCards'] = $tableCards;
+    $game['phase'] = 'revealed';
+    $game['turnEndsAt'] = null;
+
+    [$winnerTeam, $teamValue, $best] = trumpf_team_outcome($game, $tableCards);
+    $deck = trumpf_load_deck();
+    $tableCardIds = array_column($tableCards, 'cardId');
+    // Karten, die den Teamwert erreichen (bei Gleichstand beider Teams ebenfalls)
+    $winnerIds = [];
+    foreach ($tableCards as $entry) {
+        $team = $teams[$entry['playerId']] ?? 0;
+        if (($winnerTeam === null || $team === $winnerTeam) && (float) ($deck[$entry['cardId']][$category] + 0) === (float) $teamValue[$team]) {
+            $winnerIds[] = $entry['playerId'];
+        }
+    }
+
+    if ($winnerTeam !== null) {
+        trumpf_give_to_team($players, $teams, $winnerTeam, array_merge($game['pot'], $tableCardIds), $winnerIds[0] ?? null);
+        $game['pot'] = [];
+        $game['result'] = ['type' => 'winner', 'winnerIds' => $winnerIds, 'winnerTeam' => $winnerTeam, 'value' => $best, 'collectedCards' => count($tableCards)];
+    } else {
+        $game['pot'] = array_merge($game['pot'], $tableCardIds);
+        $game['result'] = ['type' => 'tie', 'winnerIds' => $winnerIds, 'winnerTeam' => null, 'value' => $best, 'collectedCards' => 0];
+    }
+    trumpf_team_next_chooser($game, $players);
+
+    $has = trumpf_team_has_cards($players, $teams);
+    if (!$has[0] || !$has[1]) {
+        trumpf_finish_team($game, $players, $has[0] ? 0 : ($has[1] ? 1 : null));
+    }
     return $game['result'];
 }
 
