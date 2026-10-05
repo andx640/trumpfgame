@@ -5234,3 +5234,29 @@ body:has(.app-shell.is-playing) {
     justify-self: end;
   }
 }
+
+/* iPad/Safari ignoriert backface-visibility, wenn die Karten-Kinder eigene Transforms haben:
+   die Seiten werden deshalb zur Mitte der Drehung per visibility getauscht. */
+.flip-back {
+  visibility: visible;
+  transition: visibility 0s 225ms;
+}
+
+.flip-front {
+  visibility: hidden;
+  transition: visibility 0s 225ms;
+}
+
+.flip.is-face-up .flip-back {
+  visibility: hidden;
+  transition: visibility 0s 1250ms;
+}
+
+.flip.is-face-up .flip-front {
+  visibility: visible;
+  transition: visibility 0s 1250ms;
+}
+
+.flip.is-instant .flip-face {
+  transition: none;
+}
