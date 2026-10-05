@@ -12,6 +12,7 @@ const ACTIONS = {
   startGame: "start",
   chooseCategory: "choose",
   setCardsPerPlayer: "setCards",
+  setTeams: "setTeams",
   playAgain: "again",
   readyForNext: "ready",
   requestState: "state"
@@ -97,6 +98,7 @@ class PollingSocket {
     }
     if (event === "chooseCategory") body = { category: payload };
     if (event === "setCardsPerPlayer") body = { count: payload };
+    if (event === "setTeams") body = payload || {};
 
     this.request(action, body)
       .then((result) => {

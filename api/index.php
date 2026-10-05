@@ -60,6 +60,8 @@ class TrumpfRoom
             'players' => [],
             'hostId' => null,
             'cardsPerPlayer' => 32,
+            'teamMode' => false,
+            'teamPairing' => 0,
             'game' => null,
             'idleSince' => null,
         ];
@@ -161,6 +163,10 @@ class TrumpfRoom
                 $this->data['players'] = $kept;
                 $this->touch();
             }
+        }
+        if ($this->data['status'] === 'lobby' && !empty($this->data['teamMode']) && count($this->data['players']) !== MAX_PLAYERS) {
+            $this->data['teamMode'] = false;
+            $this->touch();
         }
         $this->transferHost();
         $this->checkIdle();
@@ -285,6 +291,28 @@ class TrumpfRoom
     {
         $winner = null;
         $online = trumpf_playable($this->data['players']);
+        if (!empty($this->data['game']['teams'])) {
+            $teams = $this->data['game']['teams'];
+            $roster = $this->data['players'];
+            $onlineTeams = array_values(array_unique(array_map(static function ($index) use ($teams, $roster) {
+                return $teams[$roster[$index]['id']] ?? 0;
+            }, $online)));
+            if (count($onlineTeams) === 1) {
+                $winnerTeam = $onlineTeams[0];
+            } else {
+                $totals = [0, 0];
+                foreach ($this->data['players'] as $player) {
+                    $totals[$teams[$player['id']] ?? 0] += count($player['hand']);
+                }
+                $winnerTeam = $totals[0] >= $totals[1] ? 0 : 1;
+            }
+            trumpf_finish_team($this->data['game'], $this->data['players'], $winnerTeam);
+            $this->data['game']['result']['reason'] = 'abandoned';
+            $this->data['game']['pausedUntil'] = null;
+            $this->data['status'] = 'finished';
+            $this->touch();
+            return;
+        }
         if (count($online) === 1) {
             $winner = $this->data['players'][$online[0]]['id'];
         } else {
@@ -371,7 +399,25 @@ class TrumpfRoom
         $blank = ['tricks' => 0, 'streak' => 0, 'best' => 0, 'outRound' => null];
         $category = $game['category'] ?? null;
         $tableCards = $game['tableCards'] ?? [];
-        if ($category !== null && isset(TRUMPF_CATEGORIES[$category]) && count($tableCards) > 1) {
+        if ($category !== null && !empty($game['teams']) && count($tableCards) > 1) {
+            [$winnerTeam, $teamValue] = trumpf_team_outcome($game, $tableCards);
+            $deck = trumpf_load_deck();
+            foreach ($tableCards as $entry) {
+                $team = $game['teams'][$entry['playerId']] ?? 0;
+                $entryStats = $stats['players'][$entry['playerId']] ?? $blank;
+                if ($winnerTeam !== null && $team === $winnerTeam) {
+                    $entryStats['tricks']++;
+                    $entryStats['streak']++;
+                    $entryStats['best'] = max($entryStats['best'], $entryStats['streak']);
+                    if ((float) ($deck[$entry['cardId']][$category] + 0) === (float) $teamValue[$team]) {
+                        $stats['cards'][$entry['cardId']] = ($stats['cards'][$entry['cardId']] ?? 0) + 1;
+                    }
+                } elseif ($winnerTeam !== null) {
+                    $entryStats['streak'] = 0;
+                }
+                $stats['players'][$entry['playerId']] = $entryStats;
+            }
+        } elseif ($category !== null && isset(TRUMPF_CATEGORIES[$category]) && count($tableCards) > 1) {
             $deck = trumpf_load_deck();
             $values = [];
             foreach ($tableCards as $entry) {
@@ -492,7 +538,13 @@ class TrumpfRoom
         foreach ($this->data['players'] as $index => $player) {
             $this->data['players'][$index]['away'] = false;
         }
-        $this->data['game'] = trumpf_start_game($this->data['players'], (int) $this->data['cardsPerPlayer']);
+        $teams = null;
+        if (!empty($this->data['teamMode']) && count($this->data['players']) === MAX_PLAYERS && empty($this->data['solo'])) {
+            $teams = trumpf_team_map($this->data['players'], (int) ($this->data['teamPairing'] ?? 0));
+        } else {
+            $this->data['teamMode'] = false;
+        }
+        $this->data['game'] = trumpf_start_game($this->data['players'], (int) $this->data['cardsPerPlayer'], $teams);
         $this->data['stats'] = ['players' => [], 'cards' => []];
         $this->data['rematch'] = [];
         $this->data['status'] = 'playing';
@@ -525,6 +577,12 @@ class TrumpfRoom
         $self = $data['players'][$index];
         $game = $data['game'];
 
+        $teamMap = null;
+        if ($game !== null) {
+            $teamMap = $game['teams'] ?? null;
+        } elseif (!empty($data['teamMode']) && count($data['players']) === MAX_PLAYERS) {
+            $teamMap = trumpf_team_map($data['players'], (int) ($data['teamPairing'] ?? 0));
+        }
         $players = [];
         foreach ($data['players'] as $entry) {
             $count = count($entry['hand']);
@@ -536,6 +594,7 @@ class TrumpfRoom
                 'isBot' => !empty($entry['bot']),
                 'difficulty' => $entry['difficulty'] ?? null,
                 'level' => $entry['accountLevel'] ?? null,
+                'team' => $teamMap === null ? null : ($teamMap[$entry['id']] ?? 0),
                 'cardCount' => $count,
                 'eliminated' => $data['status'] !== 'lobby' && $count === 0,
             ];
@@ -562,6 +621,8 @@ class TrumpfRoom
                 'result' => $game['result'],
                 'potCount' => count($game['pot']),
                 'winnerId' => $game['winnerId'],
+                'winnerIds' => $game['winnerIds'] ?? ($game['winnerId'] === null ? [] : [$game['winnerId']]),
+                'teamMode' => !empty($game['teams']),
                 'turnEndsAt' => $game['turnEndsAt'],
                 'revealEndsAt' => $game['revealEndsAt'],
                 'pausedUntil' => $game['pausedUntil'] ?? null,
@@ -588,6 +649,7 @@ class TrumpfRoom
             'topCard' => $this->topCard(),
             'rematchIds' => $data['rematch'] ?? [],
             'solo' => !empty($data['solo']),
+            'teamMode' => $teamMap !== null,
             'chat' => array_values(array_slice($data['chat'] ?? [], -50)),
             'aiLevel' => $data['aiLevel'] ?? null,
         ];
@@ -820,6 +882,22 @@ try {
                 $reply = $fail('Zum Starten werden mindestens zwei Spieler benötigt.');
             } else {
                 $room->beginGame();
+            }
+            break;
+
+        case 'setTeams':
+            if (!$isHost()) {
+                $reply = $fail('Nur der Host kann den Spielmodus ändern.');
+            } elseif ($room->data['status'] !== 'lobby' || !empty($room->data['solo'])) {
+                $reply = $fail('Der Spielmodus kann nur in der Lobby geändert werden.');
+            } elseif (!empty($input['on']) && count($room->data['players']) !== MAX_PLAYERS) {
+                $reply = $fail('Für 2 gegen 2 braucht ihr genau 4 Spieler.');
+            } else {
+                $room->data['teamMode'] = !empty($input['on']);
+                if (!empty($input['shuffle'])) {
+                    $room->data['teamPairing'] = ((int) ($room->data['teamPairing'] ?? 0) + 1) % 3;
+                }
+                $room->touch();
             }
             break;
 

@@ -570,10 +570,18 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
   );
 }
 
+const TEAM_INFO = [{ name: "Team Rot", short: "Rot" }, { name: "Team Blau", short: "Blau" }];
+
+function TeamTag({ team }) {
+  if (team === null || team === undefined) return null;
+  return <span className={`team-tag team-${team}`}>{TEAM_INFO[team].short}</span>;
+}
+
 function Lobby({ state, onLeave, account }) {
   const [inviting, setInviting] = useState(false);
   const selfIsHost = state.selfId === state.hostId;
   const canStart = state.players.length >= 2;
+  const canTeams = !state.solo && state.players.length === state.maxPlayers;
   const openSeats = state.solo ? [] : Array.from({ length: state.maxPlayers - state.players.length });
   const cardCountOptions = state.cardCountOptions || [8, 16, 32];
   const totalCards = state.players.length * state.cardsPerPlayer;
@@ -612,6 +620,7 @@ function Lobby({ state, onLeave, account }) {
                   <strong>{player.name} {player.level && <LevelBadge level={player.level} />} {player.id === state.selfId && <small>DU</small>}</strong>
                   <span>{player.isBot ? "Computergegner" : player.isHost ? "Rennleitung · Host" : `Startplatz ${index + 1}`}</span>
                 </div>
+                <TeamTag team={player.team} />
                 <i className="ready-light" aria-label="Bereit" />
               </div>
             ))}
@@ -649,6 +658,37 @@ function Lobby({ state, onLeave, account }) {
             </div>
             <small>{selfIsHost ? "Du legst als Host die Stapelgröße fest." : "Der Host legt die Stapelgröße fest."}</small>
           </div>
+          {canTeams && (
+            <div className="mode-settings">
+              <div>
+                <span>SPIELMODUS</span>
+                <b>{state.teamMode ? "2 gegen 2" : "Jeder gegen jeden"}</b>
+              </div>
+              <div className="mode-options" role="group" aria-label="Spielmodus">
+                <button type="button" className={!state.teamMode ? "is-selected" : ""} disabled={!selfIsHost} onClick={() => socket.emit("setTeams", { on: false })}>
+                  <strong>Alle</strong><span>gegeneinander</span>
+                </button>
+                <button type="button" className={state.teamMode ? "is-selected" : ""} disabled={!selfIsHost} onClick={() => socket.emit("setTeams", { on: true })}>
+                  <strong>2 vs 2</strong><span>im Team</span>
+                </button>
+              </div>
+              {state.teamMode && (
+                <>
+                  <div className="team-lineup">
+                    {[0, 1].map((team) => (
+                      <p className={`team-${team}`} key={team}>
+                        <b>{TEAM_INFO[team].name}</b>
+                        {state.players.filter((player) => player.team === team).map((player) => player.name).join(" + ")}
+                      </p>
+                    ))}
+                  </div>
+                  {selfIsHost && <button type="button" className="team-shuffle" onClick={() => socket.emit("setTeams", { on: true, shuffle: true })}>Teams neu mischen</button>}
+                  <small>Die beste Karte im Team zählt. Gewonnene Karten gehen an beide im Team. Die Teams sind abwechselnd dran.</small>
+                </>
+              )}
+              {!selfIsHost && !state.teamMode && <small>Der Host kann 2 gegen 2 einstellen.</small>}
+            </div>
+          )}
           <div className="rule-line"><span>01</span><p><b>Stapel ansehen</b>Wische durch alle deine eigenen Karten.</p></div>
           <div className="rule-line"><span>02</span><p><b>Wert ansagen</b>Der aktive Fahrer wählt die Kategorie.</p></div>
           <div className="rule-line"><span>03</span><p><b>Stich gewinnen</b>Der beste Wert erhält alle Tischkarten.</p></div>
@@ -688,7 +728,8 @@ function Game({ state }) {
   useEffect(() => {
     if (game.phase !== "revealed") return undefined;
     const played = game.tableCards.some((entry) => entry.playerId === selfId);
-    const won = game.result?.type === "winner" && game.result.winnerIds?.[0] === selfId;
+    const selfTeam = players.find((player) => player.id === selfId)?.team;
+    const won = game.result?.type === "winner" && (game.teamMode ? game.result.winnerTeam === selfTeam : game.result.winnerIds?.[0] === selfId);
     const flip = window.setTimeout(playFlip, 650);
     const outcome = window.setTimeout(() => {
       if (won) {
@@ -732,6 +773,12 @@ function Game({ state }) {
           <div className="arena-waiting" role="status">
             <TimerRing target={game.turnEndsAt} duration={game.turnDurationMs || 45000} />
             <span><b>{activePlayer.name}</b> wählt …</span>
+          </div>
+        )}
+        {isRevealed && game.teamMode && game.result?.type === "winner" && (
+          <div className={`arena-result team-result team-${game.result.winnerTeam}`} role="status">
+            <strong>{TEAM_INFO[game.result.winnerTeam].name} gewinnt den Stich</strong>
+            <span>{game.result.collectedCards} Karten gehen an das Team</span>
           </div>
         )}
         {isRevealed && game.result?.type === "tie" && (
@@ -822,7 +869,7 @@ const TableCards = memo(function TableCards({ state, timerTarget = null }) {
         const shownCount = played && !collecting ? Math.min(player.cardCount, before - 1) : player.cardCount;
         return (
           <div
-            className={`arena-seat ${isActive ? "is-active" : ""} ${isBest ? "is-best" : ""}`}
+            className={`arena-seat ${isActive ? "is-active" : ""} ${isBest ? "is-best" : ""} ${player.team !== null && player.team !== undefined ? `team-${player.team}` : ""}`}
             style={{ "--seat-index": index }}
             data-player={player.id}
             key={player.id}
@@ -1827,11 +1874,14 @@ function FinishPanel({ state }) {
   const { players, game, selfId } = state;
   const stats = state.stats || {};
   const winner = players.find((player) => player.id === game.winnerId);
+  const winnerIds = game.winnerIds?.length ? game.winnerIds : game.winnerId ? [game.winnerId] : [];
+  const winnerTeam = game.teamMode ? players.find((player) => player.id === game.winnerId)?.team : null;
   const statOf = (player) => stats[player.id] || { tricks: 0, best: 0, outRound: null };
   // Rangliste: Sieger zuerst, dann wer am längsten durchgehalten hat (bzw. die meisten Karten hat)
   const ranked = [...players].sort((a, b) => {
-    if (a.id === game.winnerId) return -1;
-    if (b.id === game.winnerId) return 1;
+    const aWon = winnerIds.includes(a.id);
+    const bWon = winnerIds.includes(b.id);
+    if (aWon !== bWon) return aWon ? -1 : 1;
     const outA = statOf(a).outRound ?? Infinity;
     const outB = statOf(b).outRound ?? Infinity;
     if (outA !== outB) return outB - outA;
@@ -1848,7 +1898,8 @@ function FinishPanel({ state }) {
       <div className="finish-panel panel">
         <div className="trophy">🏁</div>
         <p className="eyebrow">PARTIE BEENDET</p>
-        <h2>{winner?.name || "Unbekannt"} gewinnt!</h2>
+        <h2>{game.teamMode && winnerTeam !== null && winnerTeam !== undefined ? `${TEAM_INFO[winnerTeam].name} gewinnt!` : `${winner?.name || "Unbekannt"} gewinnt!`}</h2>
+        {game.teamMode && winnerIds.length > 0 && <p className="muted">{players.filter((player) => winnerIds.includes(player.id)).map((player) => player.name).join(" + ")}</p>}
         {game.result?.reason === "abandoned" && (
           <p className="muted">Die Partie wurde beendet, weil zu viele Mitspieler gegangen sind.</p>
         )}
@@ -1869,7 +1920,7 @@ function FinishPanel({ state }) {
             return (
               <li key={player.id} className={player.id === selfId ? "is-self" : ""}>
                 <span className="finish-rank">{index + 1}.</span>
-                <b>{player.name} {(game.xpAwards?.[player.id]?.level || player.level) && <LevelBadge level={game.xpAwards?.[player.id]?.level || player.level} />}</b>
+                <b>{player.name} <TeamTag team={player.team} /> {(game.xpAwards?.[player.id]?.level || player.level) && <LevelBadge level={game.xpAwards?.[player.id]?.level || player.level} />}</b>
                 <small>
                   {entry.tricks} {entry.tricks === 1 ? "Stich" : "Stiche"}
                   {entry.outRound ? ` · raus in Runde ${entry.outRound}` : ` · ${player.cardCount} Karten`}

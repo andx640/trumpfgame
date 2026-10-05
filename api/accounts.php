@@ -442,7 +442,7 @@ function trumpf_record_results(TrumpfRoom $room): void
     if ($db === null) {
         return;
     }
-    $opponents = max(1, count($room->data['players']) - 1);
+    $opponents = !empty($game['teams']) ? 1 : max(1, count($room->data['players']) - 1);
     $awards = [];
     try {
         trumpf_ensure_schema($db);
@@ -451,7 +451,7 @@ function trumpf_record_results(TrumpfRoom $room): void
             if ($accountId === null) {
                 continue;
             }
-            $won = $player['id'] === $game['winnerId'];
+            $won = in_array($player['id'], $game['winnerIds'] ?? [$game['winnerId']], true);
             $tricks = (int) ($room->data['stats']['players'][$player['id']]['tricks'] ?? 0);
             $xp = ($won ? XP_WIN + XP_PER_OPPONENT * ($opponents - 1) : XP_PLAYED) + XP_PER_TRICK * $tricks;
             if (!empty($room->data['solo'])) {
