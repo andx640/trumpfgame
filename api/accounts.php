@@ -88,6 +88,15 @@ function trumpf_ensure_schema(PDO $db): void
             auth TEXT NOT NULL,
             created_at INTEGER NOT NULL
         )');
+        $db->exec('CREATE TABLE IF NOT EXISTS collection (
+            account_id INTEGER NOT NULL,
+            card_id TEXT NOT NULL,
+            qty INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (account_id, card_id)
+        )');
+        $db->exec('CREATE TABLE IF NOT EXISTS collection_starter (
+            account_id INTEGER PRIMARY KEY
+        )');
         trumpf_add_streak_columns($db);
         return;
     }
@@ -139,6 +148,16 @@ function trumpf_ensure_schema(PDO $db): void
         UNIQUE KEY uniq_endpoint (endpoint(255)),
         KEY idx_account (account_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS collection (
+        account_id INT UNSIGNED NOT NULL,
+        card_id VARCHAR(8) NOT NULL,
+        qty INT UNSIGNED NOT NULL DEFAULT 1,
+        PRIMARY KEY (account_id, card_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS collection_starter (
+        account_id INT UNSIGNED NOT NULL,
+        PRIMARY KEY (account_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     trumpf_add_streak_columns($db);
 }
 
@@ -152,6 +171,139 @@ function trumpf_add_streak_columns(PDO $db): void
             $db->exec("ALTER TABLE accounts ADD COLUMN $column INT NOT NULL DEFAULT 0");
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sammlung: eigene Karten pro Konto, Startkarten, Ziehen nach Seltenheit
+
+const STARTER_CARDS = 16;
+const DRAW_CHANCES = [1 => 60, 2 => 25, 3 => 10, 4 => 4, 5 => 1]; // Prozent je Seltenheitsstufe (Rarität 1–5)
+
+/** Die schwächsten Autos: niedrigste Rarität zuerst, bei Gleichstand die schlechtesten Werte. */
+function trumpf_starter_ids(): array
+{
+    static $ids = null;
+    if ($ids !== null) {
+        return $ids;
+    }
+    $deck = array_values(trumpf_load_deck());
+    $score = [];
+    foreach (TRUMPF_CATEGORIES as $key => $rule) {
+        if ($key === 'raritaet') {
+            continue;
+        }
+        $values = array_map(static function ($card) use ($key) {
+            return (float) $card[$key];
+        }, $deck);
+        foreach ($deck as $card) {
+            $value = (float) $card[$key];
+            $better = 0;
+            foreach ($values as $other) {
+                if ($value <= 0) {
+                    break; // kein Wert (z. B. Hubraum beim Elektroauto) zählt als schwach
+                }
+                $better += ($rule['direction'] === 'low' ? $other > $value : $other < $value) ? 1 : 0;
+            }
+            $score[$card['c_id']] = ($score[$card['c_id']] ?? 0) + $better;
+        }
+    }
+    usort($deck, static function ($a, $b) use ($score) {
+        return [(int) $a['raritaet'], $score[$a['c_id']]] <=> [(int) $b['raritaet'], $score[$b['c_id']]];
+    });
+    $ids = array_map(static function ($card) {
+        return (string) $card['c_id'];
+    }, array_slice($deck, 0, STARTER_CARDS));
+    return $ids;
+}
+
+/** Eine zufällige Karte: erst die Stufe nach DRAW_CHANCES, dann ein Auto dieser Stufe. */
+function trumpf_draw_card(): string
+{
+    $roll = random_int(1, 100);
+    $tier = 1;
+    foreach (DRAW_CHANCES as $level => $chance) {
+        if ($roll <= $chance) {
+            $tier = $level;
+            break;
+        }
+        $roll -= $chance;
+    }
+    $pool = [];
+    foreach (trumpf_load_deck() as $id => $card) {
+        if ((int) $card['raritaet'] === $tier) {
+            $pool[] = (string) $id;
+        }
+    }
+    return $pool[random_int(0, count($pool) - 1)];
+}
+
+/** Karte(n) gutschreiben. Gibt zurück, ob das Auto vorher noch nicht in der Sammlung war. */
+function trumpf_collection_add(PDO $db, int $accountId, string $cardId, int $qty = 1): bool
+{
+    $query = $db->prepare('SELECT qty FROM collection WHERE account_id = ? AND card_id = ?');
+    $query->execute([$accountId, $cardId]);
+    $have = $query->fetchColumn();
+    if ($have === false) {
+        $db->prepare('INSERT INTO collection (account_id, card_id, qty) VALUES (?, ?, ?)')->execute([$accountId, $cardId, $qty]);
+        return true;
+    }
+    $db->prepare('UPDATE collection SET qty = qty + ? WHERE account_id = ? AND card_id = ?')->execute([$qty, $accountId, $cardId]);
+    return (int) $have <= 0;
+}
+
+/** Eine Karte abgeben (Risiko-Modus). Gibt false zurück, wenn sie nicht (mehr) da ist. */
+function trumpf_collection_remove(PDO $db, int $accountId, string $cardId): bool
+{
+    $query = $db->prepare('SELECT qty FROM collection WHERE account_id = ? AND card_id = ?');
+    $query->execute([$accountId, $cardId]);
+    $have = (int) $query->fetchColumn();
+    if ($have <= 0) {
+        return false;
+    }
+    if ($have === 1) {
+        $db->prepare('DELETE FROM collection WHERE account_id = ? AND card_id = ?')->execute([$accountId, $cardId]);
+    } else {
+        $db->prepare('UPDATE collection SET qty = qty - 1 WHERE account_id = ? AND card_id = ?')->execute([$accountId, $cardId]);
+    }
+    return true;
+}
+
+/** Eigene Karten eines Kontos als [card_id => Anzahl]. Beim ersten Mal gibt es die 16 Startkarten. */
+function trumpf_owned_cards(PDO $db, int $accountId): array
+{
+    trumpf_ensure_schema($db);
+    $given = $db->prepare('SELECT COUNT(*) FROM collection_starter WHERE account_id = ?');
+    $given->execute([$accountId]);
+    if ((int) $given->fetchColumn() === 0) {
+        $db->prepare('INSERT INTO collection_starter (account_id) VALUES (?)')->execute([$accountId]);
+        foreach (trumpf_starter_ids() as $cardId) {
+            trumpf_collection_add($db, $accountId, $cardId);
+        }
+    }
+    $deck = trumpf_load_deck();
+    $query = $db->prepare('SELECT card_id, qty FROM collection WHERE account_id = ? AND qty > 0');
+    $query->execute([$accountId]);
+    $owned = [];
+    foreach ($query->fetchAll() as $row) {
+        if (isset($deck[(string) $row['card_id']])) {
+            $owned[(string) $row['card_id']] = (int) $row['qty'];
+        }
+    }
+    ksort($owned);
+    return $owned;
+}
+
+/** Zufällige Auswahl aus einer Sammlung (Duplikate nur so oft, wie man sie besitzt). */
+function trumpf_random_from_owned(array $owned, int $count, array $taken = []): array
+{
+    $pool = [];
+    foreach ($owned as $cardId => $qty) {
+        $free = $qty - count(array_keys($taken, (string) $cardId, true));
+        for ($i = 0; $i < $free; $i++) {
+            $pool[] = (string) $cardId;
+        }
+    }
+    return array_slice(trumpf_shuffle($pool), 0, max(0, $count));
 }
 
 /** Level aus Gesamt-XP. Von Level L nach L+1 braucht man 100 + 50·(L−1) XP, jedes Level also 50 mehr. */
@@ -319,7 +471,11 @@ function trumpf_account_rank(PDO $db, array $row): int
 /** Öffentliches Profil mit Rangplatz und Zahl aller Spieler. */
 function trumpf_account_with_rank(PDO $db, array $row): array
 {
+    $collected = $db->prepare('SELECT COUNT(*) FROM collection WHERE account_id = ? AND qty > 0');
+    $collected->execute([(int) $row['id']]);
     return trumpf_account_public($row) + [
+        'collected' => (int) $collected->fetchColumn(),
+        'totalCards' => count(trumpf_load_deck()),
         'rank' => trumpf_account_rank($db, $row),
         'players' => (int) $db->query('SELECT COUNT(*) FROM accounts')->fetchColumn(),
     ];
@@ -336,7 +492,23 @@ function trumpf_account_action(string $action, array $input): void
         trumpf_ensure_schema($db);
         if ($action === 'profile') {
             $row = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
+            if ($row) {
+                trumpf_owned_cards($db, (int) $row['id']); // Startkarten auch für ältere Konten
+            }
             respond($row ? ['ok' => true, 'account' => trumpf_account_with_rank($db, $row)] : ['ok' => false, 'code' => 'logged_out', 'message' => 'Bitte melde dich neu an.']);
+        }
+        if ($action === 'collection') {
+            // Nur die eigenen Karten: welche Autos es sonst noch gibt, bleibt geheim.
+            $row = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
+            if (!$row) {
+                respond(['ok' => false, 'code' => 'logged_out', 'message' => 'Melde dich an, um Autos zu sammeln.']);
+            }
+            $deck = trumpf_load_deck();
+            $cards = [];
+            foreach (trumpf_owned_cards($db, (int) $row['id']) as $cardId => $qty) {
+                $cards[] = $deck[$cardId] + ['qty' => $qty];
+            }
+            respond(['ok' => true, 'categories' => TRUMPF_CATEGORIES, 'cards' => $cards, 'collected' => count($cards), 'total' => count($deck)]);
         }
         if (in_array($action, ['heartbeat', 'inviteDecline', 'pushKey', 'pushSubscribe', 'pushUnsubscribe'], true)) {
             $me = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
@@ -442,6 +614,7 @@ function trumpf_record_results(TrumpfRoom $room): void
     if ($db === null) {
         return;
     }
+    trumpf_setup_risk($room);
     $opponents = !empty($game['teams']) ? 1 : max(1, count($room->data['players']) - 1);
     $awards = [];
     try {
@@ -469,6 +642,19 @@ function trumpf_record_results(TrumpfRoom $room): void
             $db->prepare('UPDATE accounts SET games_played = games_played + 1, wins = wins + ?, losses = losses + ?, xp = xp + ?, current_streak = ?, best_streak = ? WHERE id = ?')
                 ->execute([$won ? 1 : 0, $won ? 0 : 1, $xp, $streak, $best, $accountId]);
 
+            if ($won && !empty($room->data['solo']) && ($room->data['aiLevel'] ?? '') === 'hard') {
+                // Belohnung für einen Sieg gegen „Schwer“: 16 Karten → 1 Auto, 32 Karten → Pack mit 3–5 Autos
+                $per = (int) ($game['cardsPerPlayer'] ?? 0);
+                $count = $per >= 32 ? random_int(3, 5) : ($per >= 16 ? 1 : 0);
+                $cards = [];
+                trumpf_owned_cards($db, (int) $accountId);
+                for ($i = 0; $i < $count; $i++) {
+                    $cardId = trumpf_draw_card();
+                    $cards[] = ['id' => $cardId, 'isNew' => trumpf_collection_add($db, (int) $accountId, $cardId)];
+                }
+                $room->data['game']['cardAwards'][$player['id']] = $cards;
+            }
+
             $levelBefore = trumpf_level($before)['level'];
             $after = trumpf_level($before + $xp);
             $awards[$player['id']] = ['xp' => $xp, 'levelBefore' => $levelBefore] + $after;
@@ -478,6 +664,134 @@ function trumpf_record_results(TrumpfRoom $room): void
         // Statistik ist Zusatz: Fehler dürfen das Spiel nicht stören.
     }
     $room->data['game']['xpAwards'] = $awards;
+}
+
+/** Sammlungen aller Spieler im Raum für die Modi mit eigenen Karten. Gibt [playerId => [cardId => Anzahl]] oder eine Fehlermeldung zurück. */
+function trumpf_room_collections(TrumpfRoom $room)
+{
+    $db = trumpf_db();
+    if ($db === null) {
+        return 'Eigene Karten gehen gerade nicht (keine Datenbank).';
+    }
+    $need = (int) $room->data['cardsPerPlayer'];
+    $result = [];
+    $guests = [];
+    $short = [];
+    try {
+        foreach ($room->data['players'] as $player) {
+            if (($player['accountId'] ?? null) === null) {
+                $guests[] = $player['name'];
+                continue;
+            }
+            $owned = trumpf_owned_cards($db, (int) $player['accountId']);
+            if (array_sum($owned) < $need) {
+                $short[] = $player['name'] . ' (' . array_sum($owned) . ')';
+            }
+            $result[$player['id']] = $owned;
+        }
+    } catch (PDOException $error) {
+        return 'Datenbankfehler, bitte später nochmal versuchen.';
+    }
+    if ($guests) {
+        return 'Mit eigenen Karten spielen nur angemeldete Spieler. Ohne Konto: ' . implode(', ', $guests) . '.';
+    }
+    if ($short) {
+        return "Für $need Karten pro Spieler haben zu wenige Karten: " . implode(', ', $short) . '.';
+    }
+    return $result;
+}
+
+/** Risiko-Modus nach Spielende: der Gewinner darf sich von jedem Verlierer eine Karte aus dessen Deck aussuchen. */
+function trumpf_setup_risk(TrumpfRoom $room): void
+{
+    $game = $room->data['game'];
+    if (($game['deckMode'] ?? '') !== 'risk' || empty($game['decks']) || $game['winnerId'] === null) {
+        return;
+    }
+    $options = [];
+    $picks = [];
+    foreach ($game['decks'] as $playerId => $cardIds) {
+        if ($playerId !== $game['winnerId'] && $cardIds) {
+            $options[$playerId] = array_values($cardIds);
+            $picks[$playerId] = null;
+        }
+    }
+    if (!$options) {
+        return;
+    }
+    $room->data['risk'] = [
+        'winnerId' => $game['winnerId'],
+        'deadline' => $room->now + RISK_PICK_MS,
+        'options' => $options,
+        'picks' => $picks,
+        'done' => false,
+    ];
+    $room->touch();
+}
+
+function trumpf_risk_pick(TrumpfRoom $room, string $playerId, string $loserId, string $cardId): ?string
+{
+    $risk = $room->data['risk'] ?? null;
+    if ($risk === null || !empty($risk['done'])) {
+        return 'Es gibt gerade nichts auszusuchen.';
+    }
+    if ($playerId !== $risk['winnerId']) {
+        return 'Nur der Gewinner sucht sich eine Karte aus.';
+    }
+    if (!isset($risk['options'][$loserId]) || !in_array($cardId, $risk['options'][$loserId], true)) {
+        return 'Diese Karte steht nicht zur Wahl.';
+    }
+    $room->data['risk']['picks'][$loserId] = $cardId;
+    $room->touch();
+    trumpf_settle_risk($room);
+    return null;
+}
+
+/** Alle gewählt oder Zeit um: fehlende Wahl zufällig, dann wechseln die Karten wirklich den Besitzer. */
+function trumpf_settle_risk(TrumpfRoom $room): void
+{
+    $risk = $room->data['risk'] ?? null;
+    if ($risk === null || !empty($risk['done'])) {
+        return;
+    }
+    $open = in_array(null, $risk['picks'], true);
+    if ($open && $room->now < $risk['deadline']) {
+        return;
+    }
+    $db = trumpf_db();
+    if ($db === null) {
+        return;
+    }
+    $accountOf = [];
+    foreach ($room->data['players'] as $player) {
+        $accountOf[$player['id']] = $player['accountId'] ?? null;
+    }
+    $winnerAccount = $accountOf[$risk['winnerId']] ?? null;
+    try {
+        foreach ($risk['picks'] as $loserId => $cardId) {
+            $loserAccount = $accountOf[$loserId] ?? null;
+            if ($winnerAccount === null || $loserAccount === null) {
+                $risk['picks'][$loserId] = null;
+                continue;
+            }
+            // gewählte Karte zuerst, sonst (oder falls sie inzwischen weg ist) eine zufällige aus dem Deck
+            $candidates = array_values(array_unique(array_merge($cardId === null ? [] : [$cardId], trumpf_shuffle($risk['options'][$loserId]))));
+            $taken = null;
+            foreach ($candidates as $candidate) {
+                if (trumpf_collection_remove($db, (int) $loserAccount, (string) $candidate)) {
+                    trumpf_collection_add($db, (int) $winnerAccount, (string) $candidate);
+                    $taken = (string) $candidate;
+                    break;
+                }
+            }
+            $risk['picks'][$loserId] = $taken;
+        }
+    } catch (PDOException $error) {
+        return; // nächster Versuch bei der nächsten Anfrage
+    }
+    $risk['done'] = true;
+    $room->data['risk'] = $risk;
+    $room->touch();
 }
 
 /** Freundschaften: Anfrage per Name senden, annehmen, entfernen; Freundesliste mit Profilen. */

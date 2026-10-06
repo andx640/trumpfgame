@@ -152,7 +152,10 @@ function trumpf_playable(array $players): array
 }
 
 /** Teilt die Karten aus und liefert den Anfangszustand der Partie. */
-function trumpf_start_game(array &$players, int $cardsPerPlayer, ?array $teams = null): array
+/**
+ * @param array|null $hands Eigene Decks: [playerId => [cardId, …]] (Modus mit Sammlung). Ohne: zufällig aus allen Karten.
+ */
+function trumpf_start_game(array &$players, int $cardsPerPlayer, ?array $teams = null, ?array $hands = null): array
 {
     if (count($players) < 2 || count($players) > 4) {
         throw new TrumpfError('Ein Spiel benötigt 2 bis 4 Spieler.');
@@ -161,18 +164,28 @@ function trumpf_start_game(array &$players, int $cardsPerPlayer, ?array $teams =
         throw new TrumpfError('Pro Spieler sind nur 8, 16 oder 32 Karten erlaubt.');
     }
 
-    $needed = count($players) * $cardsPerPlayer;
-    $deck = trumpf_load_deck();
-    if (count($deck) < $needed) {
-        throw new TrumpfError("Für diese Partie werden $needed unterschiedliche Karten benötigt.");
-    }
+    if ($hands !== null) {
+        foreach ($players as $index => $player) {
+            $hand = array_map('strval', array_values($hands[$player['id']] ?? []));
+            if (count($hand) !== $cardsPerPlayer) {
+                throw new TrumpfError('Für ' . ($player['name'] ?? 'einen Spieler') . " fehlen Karten (es werden $cardsPerPlayer gebraucht).");
+            }
+            $players[$index]['hand'] = trumpf_shuffle($hand);
+        }
+    } else {
+        $needed = count($players) * $cardsPerPlayer;
+        $deck = trumpf_load_deck();
+        if (count($deck) < $needed) {
+            throw new TrumpfError("Für diese Partie werden $needed unterschiedliche Karten benötigt.");
+        }
 
-    $cardIds = array_slice(trumpf_shuffle(array_map('strval', array_keys($deck))), 0, $needed);
-    foreach ($players as $index => $player) {
-        $players[$index]['hand'] = [];
-    }
-    foreach ($cardIds as $position => $cardId) {
-        $players[$position % count($players)]['hand'][] = (string) $cardId;
+        $cardIds = array_slice(trumpf_shuffle(array_map('strval', array_keys($deck))), 0, $needed);
+        foreach ($players as $index => $player) {
+            $players[$index]['hand'] = [];
+        }
+        foreach ($cardIds as $position => $cardId) {
+            $players[$position % count($players)]['hand'][] = (string) $cardId;
+        }
     }
 
     return [
@@ -181,6 +194,7 @@ function trumpf_start_game(array &$players, int $cardsPerPlayer, ?array $teams =
         'cardsPerPlayer' => $cardsPerPlayer,
         'activePlayerId' => $players[0]['id'],
         'teams' => $teams,
+        'decks' => $hands,
         'lastChooser' => [null, null],
         'category' => null,
         'tableCards' => [],
