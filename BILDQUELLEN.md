@@ -132,7 +132,7 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0126 | Porsche 959 | [M 93](https://commons.wikimedia.org/wiki/File:Porsche_959_%E2%80%93_Frontansicht_(2),_21._M%C3%A4rz_2013,_D%C3%BCsseldorf.jpg) | [CC BY-SA 3.0 de](https://creativecommons.org/licenses/by-sa/3.0/de/deed.en) |
 | 0127 | Ferrari F40 | [Will ainsworth](https://commons.wikimedia.org/wiki/File:F40_Ferrari_20090509.jpg) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
 | 0128 | Lamborghini Countach LPI 800-4 | [MrWalkr](https://commons.wikimedia.org/wiki/File:2022_Lamborghini_Countach.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
-| 0129 | Bugatti La Voiture Noire | [Calreyn88](https://commons.wikimedia.org/wiki/File:Bugatti_Chiron_1.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0129 | Bugatti La Voiture Noire | [Handelsgeselschaft](https://commons.wikimedia.org/wiki/File:Bugatti_La_Voiture_Noire_2.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0130 | Ferrari 250 GTO | [MrWalkr](https://commons.wikimedia.org/wiki/File:1962_Ferrari_250_GTO_SP25.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0131 | Mercedes-Benz 300 SLR Uhlenhaut Coupé | [Thomas Vogt from Paderborn, Deutschland](https://commons.wikimedia.org/wiki/File:Mercedes-Benz_300_SLR,_Uhlenhaut_Coup%C3%A9_(51563094005).jpg) | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0) |
 | 0132 | Rolls-Royce Boat Tail | [pelican-actor](https://commons.wikimedia.org/wiki/File:Rolls-Royce_Boat_Tail_side.png) | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0) |
@@ -157,7 +157,7 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0151 | Porsche 718 Cayman GT4 RS | [Matti Blume](https://commons.wikimedia.org/wiki/File:Manthey_Porsche_GT4_RS,_EMS_23,_Essen_(P1160647-RR).jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.en) |
 | 0152 | Porsche 718 Spyder RS | [Alexander-93](https://commons.wikimedia.org/wiki/File:Porsche_718_Boxster_Spyder_RS_IAA_2023_1X7A0535.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0153 | Porsche 911 GT3 RS 4.0 | [Alexander-93](https://commons.wikimedia.org/wiki/File:Porsche_911_GT3_RS_(2022)_1X7A7164.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
-| 0154 | Porsche 911 Dakar | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Porsche_953_Retro_Classics_2025_DSC_7598.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0154 | Porsche 911 Dakar | [MrWalkr](https://commons.wikimedia.org/wiki/File:2023_Porsche_911_Dakar_HCC24.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0155 | Porsche 911 Carrera RS 2.7 | [Lothar Spurzem](https://commons.wikimedia.org/wiki/File:Porsche_911_Carrera_RS,_Bj._1972-73_(2016-07-02_01_Sp).JPG) | [CC BY-SA 2.0 de](https://creativecommons.org/licenses/by-sa/2.0/de/deed.en) |
 | 0156 | Porsche 911 Carrera RS (964) | [Matti Blume](https://commons.wikimedia.org/wiki/File:Porsche_911_No_1000000,_70_Years_Porsche_Sports_Car,_Berlin_(1X7A3888).jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0157 | Porsche 911 Turbo S Exclusive Series | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Porsche_911_Turbo_S_Exclusive_Series_IMG_3750.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
@@ -215,7 +215,7 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0209 | Porsche 911 GT3 Touring | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Porsche_992_GT3_with_touring_package_1X7A6511.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0210 | Porsche 911 GT3 (997) | [Dori](https://commons.wikimedia.org/wiki/File:Porsche_FARA_race_Miami_Speedway_8358.jpg) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
 | 0211 | Porsche 911 Turbo (930) | [Ermell](https://commons.wikimedia.org/wiki/File:Porsche_911_Turbo_(Typ_930-3.3)-_6280186.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
-| 0212 | Porsche Cayman GT4 | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Porsche_718_Boxster_Spyder_IMG_2961.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0212 | Porsche Cayman GT4 | [MrWalkr](https://commons.wikimedia.org/wiki/File:Porsche_981_Cayman_GT4_SCD_24.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0213 | Porsche 718 Cayman GT4 | [Vauxford](https://commons.wikimedia.org/wiki/File:2018_Porsche_718_Cayman_S_S-A_2.5_Front.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0214 | Porsche 718 Boxster Spyder | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Porsche_718_Boxster_Spyder_DSC_7896.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0215 | Porsche Taycan Turbo GT | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Porsche_Taycan_Turbo_GT_MYLE_Festival_2025_DSC_9442.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
@@ -292,7 +292,7 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0286 | Porsche 911 Carrera S | [多多123](https://commons.wikimedia.org/wiki/File:Porsche_911_Carrera_964_Stratstone_2.jpg) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0) |
 | 0287 | Porsche 911 Carrera GTS | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Porsche_992_Turbo_S_1X7A0413.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0288 | Porsche 911 Turbo | [Alexander-93](https://commons.wikimedia.org/wiki/File:Porsche_911_Carrera_Turbo_Nr._1_in_the_Porsche-Museum_(2009)_IMG_7416.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
-| 0289 | Porsche 911 Carrera (993) | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Porsche_991_GT3_with_touring_package_1X7A0365.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0289 | Porsche 911 Carrera (993) | [Yu Chu Chin](https://commons.wikimedia.org/wiki/File:Porsche_993_Carrera_RS_at_the_2025_Shannons_Adelaide_Rally_(028A4670).jpg) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0) |
 | 0290 | Porsche 718 Cayman | [多多123](https://commons.wikimedia.org/wiki/File:2018_Porsche_718_Cayman.jpg) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0) |
 | 0291 | Porsche 718 Cayman GTS 4.0 | [Alexander-93](https://commons.wikimedia.org/wiki/File:Porsche_718_Cayman_GTS_1X7A7165.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0292 | Porsche 718 Boxster S | [TTTNIS](https://commons.wikimedia.org/wiki/File:2025_Porsche_718_Spyder_RS.jpg) | [CC0](http://creativecommons.org/publicdomain/zero/1.0/deed.en) |
@@ -343,7 +343,7 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0337 | Chevrolet Corvette Stingray | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Chevrolet_Corvette_C3_Stingray_IMG_3199.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0338 | Chevrolet Corvette Stingray (C7) | [Crisco 1492](https://commons.wikimedia.org/wiki/File:Chevrolet_Corvette_Stingray,_Kingsville,_Ontario,_2025-06-29.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0339 | Chevrolet Corvette Z06 (C7) | [M 93](https://commons.wikimedia.org/wiki/File:Corvette_Z06_Cabriolet_(C7)_%E2%80%93_Innenraum,_28._Oktober_2015,_D%C3%BCsseldorf.jpg) | [CC BY-SA 3.0 de](https://creativecommons.org/licenses/by-sa/3.0/de/deed.en) |
-| 0340 | Chevrolet Corvette Z06 (C6) | [Wilfredor](https://commons.wikimedia.org/wiki/File:Auberge_Du_Tresor.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0340 | Chevrolet Corvette Z06 (C6) | [Calreyn88](https://commons.wikimedia.org/wiki/File:2010_Chevrolet_Corvette_C6_Z06.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0341 | Chevrolet Corvette Stingray (C3) | [Yu Chu Chin](https://commons.wikimedia.org/wiki/File:Chevrolet_Corvette_C3_at_Hindley_Street,_Adelaide.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0342 | Chevrolet Camaro ZL1 | [Calreyn88](https://commons.wikimedia.org/wiki/File:Chevrolet_Camaro_ZL1_1LE.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0343 | Chevrolet Camaro SS | [Ermell](https://commons.wikimedia.org/wiki/File:Chevrolet_Camaro_Hirschaid_2022-20220709-RM-112013.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
@@ -361,7 +361,7 @@ Die Fahrzeugfotos werden als skalierte Vorschaubilder von Wikimedia Commons gela
 | 0355 | Toyota MR2 Turbo | [4AGZE](https://commons.wikimedia.org/wiki/File:1993_Toyota_MR2_Turbo_Interior.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0356 | Toyota Corolla AE86 Sprinter Trueno | [crash71100](https://commons.wikimedia.org/wiki/File:Toyota_Corolla_Trueno_AE86_Initial_D_at_Montlh%C3%A9ry_front.jpg) | [CC0](http://creativecommons.org/publicdomain/zero/1.0/deed.en) |
 | 0357 | Nissan GT-R | [OSX](https://commons.wikimedia.org/wiki/File:2009-2010_Nissan_GT-R_(R35)_coupe_01.jpg) | [Public domain](https://commons.wikimedia.org/wiki/File:2009-2010_Nissan_GT-R_(R35)_coupe_01.jpg) |
-| 0358 | Nissan Z | [Charles01](https://commons.wikimedia.org/wiki/File:Datsun_240Z_mfd_1970_registered_January_1971_per_dvla_2393cc.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| 0358 | Nissan Z | [Kazyakuruma](https://commons.wikimedia.org/wiki/File:Nissan_Z_NISMO,_2023,_front.jpg) | [CC0](http://creativecommons.org/publicdomain/zero/1.0/deed.en) |
 | 0359 | Nissan 370Z Nismo | [Alexander Migl](https://commons.wikimedia.org/wiki/File:Nismo_370Z_DSC_8254.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0360 | Nissan 350Z | [Vauxford](https://commons.wikimedia.org/wiki/File:2004_Nissan_350Z_3.5_Front.jpg) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | 0361 | Nissan Silvia S15 Spec-R | [Razorback 69](https://commons.wikimedia.org/wiki/File:Nissan_Silvia_S15_Spec_R_in_Europe.png) | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
