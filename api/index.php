@@ -551,7 +551,11 @@ class TrumpfRoom
     public function startMatch(): ?string
     {
         $mode = $this->data['deckMode'] ?? 'friendly';
-        if (!empty($this->data['solo']) || $mode === 'friendly') {
+        if (!empty($this->data['solo'])) {
+            $this->beginGame(trumpf_solo_hands($this));
+            return null;
+        }
+        if ($mode === 'friendly') {
             $this->beginGame();
             return null;
         }
@@ -649,7 +653,12 @@ class TrumpfRoom
             $this->data['teamMode'] = false;
         }
         $this->data['game'] = trumpf_start_game($this->data['players'], (int) $this->data['cardsPerPlayer'], $teams, $hands);
-        $this->data['game']['deckMode'] = $hands === null ? 'friendly' : ($this->data['deckMode'] ?? 'auto');
+        $this->data['game']['deckMode'] = $hands === null ? 'friendly' : (!empty($this->data['solo']) ? 'auto' : ($this->data['deckMode'] ?? 'auto'));
+        $ratings = [];
+        foreach ($this->data['players'] as $player) {
+            $ratings[$player['id']] = trumpf_deck_rating($player['hand']);
+        }
+        $this->data['game']['deckRatings'] = $ratings;
         $this->data['risk'] = null;
         $this->data['stats'] = ['players' => [], 'cards' => []];
         $this->data['rematch'] = [];
@@ -706,7 +715,7 @@ class TrumpfRoom
             $options = [];
             foreach ($risk['options'] as $loserId => $cardIds) {
                 $options[$loserId] = array_map(function ($cardId) {
-                    return $this->expand($cardId);
+                    return $this->expand($cardId) + ['score' => trumpf_card_scores()[$cardId] ?? 0];
                 }, array_values(array_unique($cardIds)));
             }
         }
@@ -778,8 +787,9 @@ class TrumpfRoom
                 'readyIds' => $game['readyIds'] ?? [],
                 'xpAwards' => $game['xpAwards'] ?? new stdClass(),
                 'deckMode' => $game['deckMode'] ?? 'friendly',
+                'deckRatings' => $game['deckRatings'] ?? new stdClass(),
                 'cardAwards' => array_map(function ($award) {
-                    return ['card' => $this->expand($award['id']), 'isNew' => $award['isNew']];
+                    return ['card' => $this->expand($award['id']) + ['score' => trumpf_card_scores()[$award['id']] ?? 0], 'isNew' => $award['isNew']];
                 }, $game['cardAwards'][$self['id']] ?? []),
                 'turnDurationMs' => TURN_DURATION_MS,
                 'revealDurationMs' => REVEAL_DURATION_MS,
