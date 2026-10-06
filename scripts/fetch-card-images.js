@@ -59,6 +59,16 @@ const FILE_OVERRIDES = {
 
 // Gezielte Commons-Suche für Varianten: Suchbegriff und Muster, das im Dateinamen vorkommen muss.
 const SEARCH_HINTS = {
+  "0129": ["Bugatti La Voiture Noire", /voiture noire/],
+  "0154": ["Porsche 911 Dakar", /dakar/],
+  "0166": ["Audi RS 6 GT", /rs ?6.*\bgt\b/],
+  "0180": ["Mercedes SLK 55 AMG Black Series", /slk ?55.*black|black series.*slk/],
+  "0212": ["Porsche Cayman GT4 981", /cayman gt4/],
+  "0272": ["Caterham Seven 620", /caterham/],
+  "0289": ["Porsche 993 Carrera", /993/],
+  "0326": ["Mercedes-AMG GT S coupe", /amg gt s\b(?!.*(badge|logo|emblem|interior|engine|motor))/],
+  "0340": ["Chevrolet Corvette C6 Z06", /(c6|2006|2007|2008|2009|2010|2011|2012|2013).*z06|z06.*(c6|2006|2007|2008|2009|2010|2011|2012|2013)/],
+  "0358": ["Nissan Z 2023", /(2023|2024|rz34|proto).*nissan z\b|nissan z\b.*(2023|2024|rz34|proto)/],
   "0034": ["Koenigsegg One:1", /one[ :_-]?1(?!.*(engine|motor|interior))/],
   "0050": ["McLaren 675LT", /675/],
   "0051": ["McLaren 600LT", /600 ?lt/],
