@@ -18,7 +18,18 @@ function check(bool $condition, string $label): void
 // --- Spiellogik -----------------------------------------------------------------------------
 echo "Spiellogik\n";
 $deck = trumpf_load_deck();
-check(count($deck) === 128, '128 Karten geladen');
+check(count($deck) === 400, '400 Karten geladen');
+$tiers = array_count_values(array_map(fn($c) => (int) $c['raritaet'], $deck));
+ksort($tiers);
+check($tiers === [1 => 120, 2 => 100, 3 => 80, 4 => 60, 5 => 40], 'Seltenheit als Pyramide: 120/100/80/60/40');
+$mythicOk = true;
+foreach ($deck as $c) {
+    if ((int) $c['raritaet'] === 5) {
+        $mythicOk = $mythicOk && ($c['leistung'] >= 1500 || $c['drehmoment'] >= 1500 || $c['drehzahl'] >= 10000 || $c['preis'] >= 4000000
+            || $c['hoechstgeschwindigkeit'] >= 400 || ($c['beschleunigung'] > 0 && $c['beschleunigung'] <= 2.2) || ($c['gewicht'] > 0 && $c['gewicht'] <= 1000));
+    }
+}
+check($mythicOk, 'jede Mythic-Karte hat einen Extremwert');
 
 $players = [['id' => 'a', 'hand' => []], ['id' => 'b', 'hand' => []]];
 $game = trumpf_start_game($players, 8);
@@ -237,7 +248,7 @@ for ($i = 0; $i < 50 && !@fsockopen('127.0.0.1', $mockPort); $i++) {
 try {
     check(call($port, ['action' => 'ping'])['ok'] === true, 'ping');
     $all = call($port, ['action' => 'cards']);
-    check($all['ok'] && count($all['cards']) === 128 && isset($all['categories']['leistung']), 'Sammlung: alle 128 Karten abrufbar');
+    check($all['ok'] && count($all['cards']) === 400 && isset($all['categories']['leistung']), 'Sammlung: alle 400 Karten abrufbar');
     check(isset($all['cards'][0]['name'], $all['cards'][0]['image'], $all['cards'][0]['leistung']), 'Sammlung: Karten haben Name, Bild und Werte');
 
     $a = call($port, ['action' => 'join', 'name' => '  Ada  ', 'create' => true]);
