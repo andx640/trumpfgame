@@ -309,7 +309,7 @@ function App() {
         ) : state.status === "deckbuild" && state.deckbuild ? (
           <DeckBuilder state={state} authToken={authToken} />
         ) : (
-          <Game state={state} />
+          <Game state={state} onLeave={leave} />
         )}
         </SlideStage>
       </main>
@@ -925,7 +925,7 @@ function Lobby({ state, onLeave, account }) {
   );
 }
 
-function Game({ state }) {
+function Game({ state, onLeave }) {
   const { game, players, selfId, categories } = state;
   const hand = game.ownHand || [];
   const [soundOn, setSoundOn] = useState(soundEnabled);
@@ -1025,7 +1025,7 @@ function Game({ state }) {
         />
       )}
 
-      {game.phase === "finished" && <FinishPanel state={state} />}
+      {game.phase === "finished" && <FinishPanel state={state} onLeave={onLeave} />}
     </section>
   );
 }
@@ -2093,7 +2093,7 @@ function UserIcon() {
   );
 }
 
-function FinishPanel({ state }) {
+function FinishPanel({ state, onLeave }) {
   const { players, game, selfId } = state;
   const stats = state.stats || {};
   const winner = players.find((player) => player.id === game.winnerId);
@@ -2162,9 +2162,12 @@ function FinishPanel({ state }) {
             <div><span>Stärkste Karte</span><b>{state.topCard.name} · {state.topCard.wins} {state.topCard.wins === 1 ? "Stich" : "Stiche"}</b></div>
           )}
         </div>
-        <button className="primary-button" disabled={voted || (state.risk && !state.risk.done)} onClick={() => socket.emit("playAgain")}>
-          <span>{voted ? `Warte auf die anderen (${votes.length}/${voters.length})` : "Revanche"}</span><FlagIcon />
-        </button>
+        <div className="finish-actions">
+          <button type="button" className="team-shuffle finish-home" onClick={onLeave}>← Startseite</button>
+          <button className="primary-button" disabled={voted || (state.risk && !state.risk.done)} onClick={() => socket.emit("playAgain")}>
+            <span>{voted ? `Warte auf die anderen (${votes.length}/${voters.length})` : "Revanche"}</span><FlagIcon />
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1026,6 +1026,17 @@ try {
                 if (!empty($room->data['solo'])) {
                     $deleteRoom = true; // gegen die KI spielt sonst niemand, der Raum wird nicht mehr gebraucht
                 }
+            } elseif ($selfIndex !== null && $room->data['status'] === 'finished') {
+                // Nach Spielende zur Startseite: Spieler gilt sofort als weg (keine Revanche mit ihm)
+                $leaverId = $room->data['players'][$selfIndex]['id'];
+                $room->data['players'][$selfIndex]['connected'] = false;
+                $room->data['players'][$selfIndex]['lastSeen'] = 0;
+                $room->data['rematch'] = array_values(array_diff($room->data['rematch'] ?? [], [$leaverId]));
+                $selfIndex = null;
+                $room->touch();
+                if (!empty($room->data['solo']) && (empty($room->data['risk']) || !empty($room->data['risk']['done']))) {
+                    $deleteRoom = true;
+                }
             }
             break;
 
