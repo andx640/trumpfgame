@@ -5341,3 +5341,30 @@ body:has(.app-shell.is-playing) {
   top: 44px;
   animation-delay: 0ms;
 }
+
+/* Kopfzeile: Label links, Zurück rechts in derselben Zeile; kein orangener Balken, keine 01 */
+.join-card::before,
+.panel-number {
+  display: none;
+}
+
+.card-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-head-row .eyebrow,
+.card-head-row h1 {
+  margin: 0;
+}
+
+.card-head-row .text-button {
+  margin: 0;
+  padding-block: 0;
+}
+
+.collection-head .card-head-row .text-button {
+  justify-self: auto;
+}

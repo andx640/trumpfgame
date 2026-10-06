@@ -379,8 +379,10 @@ function Collection({ onBack }) {
   return (
     <section className="collection page-width">
       <div className="collection-head">
-        <button type="button" className="text-button" onClick={onBack}>← Zurück</button>
-        <h1>Sammlung</h1>
+        <div className="card-head-row">
+          <h1>Sammlung</h1>
+          <button type="button" className="text-button" onClick={onBack}>← Zurück</button>
+        </div>
         <p className="muted">{data ? `${cards.length} von ${data.cards.length} Autos` : "Lädt …"}</p>
         <input
           type="search"
@@ -461,9 +463,10 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
   return (
     <section className="welcome page-width">
       <div className="join-card panel">
-        <div className="panel-number">01</div>
-        {onBack && <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>}
-        <p className="eyebrow">STARTAUFSTELLUNG</p>
+        <div className="card-head-row">
+          <p className="eyebrow">STARTAUFSTELLUNG</p>
+          {onBack && <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>}
+        </div>
         <h2>{mode === "join" ? "Spiel beitreten" : "Neues Spiel"}</h2>
         {mode === "new" && (
           <div className="account-tabs" role="tablist" aria-label="Spielart">
@@ -1510,8 +1513,10 @@ function AccountForm({ onBack, onSignedIn, connected }) {
   return (
     <section className="welcome page-width">
       <div className="join-card panel account-card">
-        <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
-        <p className="eyebrow">SPIELERKONTO</p>
+        <div className="card-head-row">
+          <p className="eyebrow">SPIELERKONTO</p>
+          <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
+        </div>
         <h2>{mode === "login" ? "Anmelden" : "Registrieren"}</h2>
         <div className="account-tabs" role="tablist">
           <button type="button" role="tab" aria-selected={mode === "login"} onClick={() => setMode("login")}>Anmelden</button>
@@ -1770,8 +1775,10 @@ function Profile({ account, authToken, invites = [], onAcceptInvite, onDeclineIn
   return (
     <section className="welcome page-width">
       <div className="join-card panel profile-card">
-        <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
-        <p className="eyebrow">SPIELERKONTO</p>
+        <div className="card-head-row">
+          <p className="eyebrow">SPIELERKONTO</p>
+          <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
+        </div>
         <h2>{account.name}</h2>
         <ProfileStats account={account} />
         <Inbox invites={invites} authToken={authToken} onAccept={onAcceptInvite} onDecline={onDeclineInvite} />
@@ -1807,8 +1814,10 @@ function Leaderboard({ onBack, selfName }) {
   return (
     <section className="welcome page-width">
       <div className="join-card panel leaderboard-card">
-        <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
-        <p className="eyebrow">RANGLISTE</p>
+        <div className="card-head-row">
+          <p className="eyebrow">RANGLISTE</p>
+          <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
+        </div>
         <h2>Top 10</h2>
         <p className="muted">Die Spieler mit den meisten XP.</p>
         {error && <p className="form-error" role="alert">{error}</p>}
