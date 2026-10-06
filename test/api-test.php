@@ -801,6 +801,18 @@ try {
     }
     $currentRoom = null;
 
+    // Nach Spielende zur Startseite
+    $currentRoom = null;
+    $lh = call($port, ['action' => 'join', 'name' => 'Lena', 'create' => true, 'ai' => ['difficulty' => 'easy', 'opponents' => 1]]);
+    $currentRoom = $lh['room'];
+    call($port, ['action' => 'setCards', 'token' => $lh['token'], 'count' => 8]);
+    call($port, ['action' => 'start', 'token' => $lh['token']]);
+    $forceWin($currentRoom, 0);
+    call($port, ['action' => 'choose', 'token' => $lh['token'], 'category' => 'leistung']);
+    $gone = call($port, ['action' => 'leave', 'token' => $lh['token']]);
+    check($gone['ok'] && !is_file($roomFile($currentRoom)), 'Nach Spielende gegen KI: Startseite räumt den Raum ab');
+    $currentRoom = null;
+
     // 2 gegen 2 per API
     $currentRoom = null;
     $t1 = call($port, ['action' => 'join', 'name' => 'Tim1', 'create' => true]);

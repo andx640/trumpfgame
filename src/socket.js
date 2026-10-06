@@ -111,6 +111,8 @@ class PollingSocket {
           this.token = null;
           this.room = null;
           this.version = 0;
+          callback?.(result);
+          return; // die Antwort enthält noch den alten Raum, der darf nicht zurückkommen
         }
         this.applyResult(result);
         if (!result.ok && event !== "joinGame" && event !== "requestState" && result.message) {

@@ -5595,3 +5595,13 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   width: min(760px, calc(100vw - 24px));
   max-width: none;
 }
+
+.finish-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.finish-actions .primary-button { flex: 1 1 200px; width: auto; }
+.finish-actions .finish-home { flex: 0 1 auto; min-height: 52px; padding: 0 18px; white-space: nowrap; }
