@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/../api/engine.php';
 require_once __DIR__ . '/../api/push.php';
+require_once __DIR__ . '/../api/accounts.php';
 
 $failures = 0;
 function check(bool $condition, string $label): void
@@ -196,6 +197,18 @@ for ($run = 0; $run < 20; $run++) {
 check($teamsOk, 'Simulation: Team-Partien enden mit Siegerteam');
 check($cardsOk, 'Simulation: im Teammodus gehen keine Karten verloren');
 
+// Sammlung: Ziehchancen und Startkarten
+echo "Sammlung\n";
+$drawn = [1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0];
+for ($i = 0; $i < 20000; $i++) {
+    $drawn[(int) $deck[trumpf_draw_card()]['raritaet']]++;
+}
+check(abs($drawn[1] / 200 - 60) < 2.5 && abs($drawn[2] / 200 - 25) < 2 && abs($drawn[3] / 200 - 10) < 1.5 && abs($drawn[4] / 200 - 4) < 1 && abs($drawn[5] / 200 - 1) < 0.6, 'Ziehchancen ≈ 60/25/10/4/1 % (' . implode('/', array_map(fn($n) => round($n / 200, 1), $drawn)) . ')');
+$starter = trumpf_starter_ids();
+check(count($starter) === 16 && count(array_unique($starter)) === 16 && max(array_map(fn($id) => (int) $deck[$id]['raritaet'], $starter)) === 1, 'Startkarten: 16 verschiedene Common-Autos');
+$pickedRandom = trumpf_random_from_owned(['0001' => 2, '0002' => 1], 5, ['0001']);
+check(count($pickedRandom) === 2 && count(array_keys($pickedRandom, '0001', true)) <= 1, 'Zufallsauswahl nimmt Duplikate nur so oft wie vorhanden');
+
 // --- API mit echtem Server --------------------------------------------------------------------
 echo "API\n";
 $dataDir = sys_get_temp_dir() . '/trumpf-test-' . getmypid();
@@ -248,8 +261,7 @@ for ($i = 0; $i < 50 && !@fsockopen('127.0.0.1', $mockPort); $i++) {
 try {
     check(call($port, ['action' => 'ping'])['ok'] === true, 'ping');
     $all = call($port, ['action' => 'cards']);
-    check($all['ok'] && count($all['cards']) === 400 && isset($all['categories']['leistung']), 'Sammlung: alle 400 Karten abrufbar');
-    check(isset($all['cards'][0]['name'], $all['cards'][0]['image'], $all['cards'][0]['leistung']), 'Sammlung: Karten haben Name, Bild und Werte');
+    check($all['ok'] && $all['total'] === 400 && !isset($all['cards']) && isset($all['categories']['leistung']), 'öffentlich nur Kategorien und Gesamtzahl, keine Autoliste');
 
     $a = call($port, ['action' => 'join', 'name' => '  Ada  ', 'create' => true]);
     $currentRoom = $a['room'];
@@ -695,6 +707,99 @@ try {
     check(call($port, ['action' => 'friendAdd', 'authToken' => $reg['authToken'], 'name' => 'Dora'])['ok'] === true && count(call($port, ['action' => 'friends', 'authToken' => $reg['authToken']])['friends']) === 2, 'gegenseitige Anfragen werden zur Freundschaft');
     call($port, ['action' => 'friendRemove', 'authToken' => $reg['authToken'], 'name' => 'Cem']);
     check(count(call($port, ['action' => 'friends', 'authToken' => $cem['authToken']])['friends']) === 0, 'Freund entfernen');
+
+    // Sammlung, Kartenmodi, Risiko und Belohnungen
+    $roomFile = static function (string $code) use ($dataDir): string {
+        return "$dataDir/room_$code.json";
+    };
+    $forceWin = static function (string $code, int $winnerIndex) use ($roomFile): void {
+        // Partie abkürzen: der Gewinner bekommt alle Karten und ist am Zug
+        $data = json_decode((string) file_get_contents($roomFile($code)), true);
+        $all = [];
+        foreach ($data['players'] as $index => $player) {
+            $all = array_merge($all, $player['hand']);
+            $data['players'][$index]['hand'] = [];
+        }
+        $data['players'][$winnerIndex]['hand'] = $all;
+        $data['game']['activePlayerId'] = $data['players'][$winnerIndex]['id'];
+        $data['game']['phase'] = 'choosing';
+        file_put_contents($roomFile($code), json_encode($data));
+    };
+    $risa = call($port, ['action' => 'register', 'name' => 'Risa', 'password' => 'pw']);
+    $rolf = call($port, ['action' => 'register', 'name' => 'Rolf', 'password' => 'pw']);
+    $risaCol = call($port, ['action' => 'collection', 'authToken' => $risa['authToken']]);
+    check($risaCol['ok'] && $risaCol['collected'] === 16 && $risaCol['total'] === 400 && count($risaCol['cards']) === 16 && $risaCol['cards'][0]['qty'] === 1, 'Sammlung: neues Konto hat 16 Startkarten, 16/400');
+    check(call($port, ['action' => 'collection'])['ok'] === false, 'Sammlung: ohne Anmeldung keine Karten');
+    $risaProfile = call($port, ['action' => 'profile', 'authToken' => $risa['authToken']]);
+    check($risaProfile['account']['collected'] === 16 && $risaProfile['account']['totalCards'] === 400, 'Profil zeigt gesammelte Autos');
+
+    $currentRoom = null;
+    $rh = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $risa['authToken'], 'create' => true]);
+    $currentRoom = $rh['room'];
+    $guestT = call($port, ['action' => 'join', 'name' => 'Gasti'])['token'];
+    check(call($port, ['action' => 'setDeckMode', 'token' => $guestT, 'mode' => 'auto'])['ok'] === false, 'Kartenmodus: nur der Host');
+    call($port, ['action' => 'setDeckMode', 'token' => $rh['token'], 'mode' => 'auto']);
+    $guestStart = call($port, ['action' => 'start', 'token' => $rh['token']]);
+    check($guestStart['ok'] === false && strpos($guestStart['message'], 'Gasti') !== false, 'Eigene Karten: Gast kann nicht mitspielen');
+    call($port, ['action' => 'leave', 'token' => $guestT]);
+    $rolfJoin = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $rolf['authToken']]);
+    call($port, ['action' => 'setCards', 'token' => $rh['token'], 'count' => 32]);
+    $tooFew = call($port, ['action' => 'start', 'token' => $rh['token']]);
+    check($tooFew['ok'] === false && strpos($tooFew['message'], '(16)') !== false, 'Eigene Karten: zu wenige Karten für 32');
+    call($port, ['action' => 'setCards', 'token' => $rh['token'], 'count' => 16]);
+    $auto = call($port, ['action' => 'start', 'token' => $rh['token']]);
+    $ownIds = array_column($risaCol['cards'], 'c_id');
+    $autoHand = array_column($auto['state']['game']['ownHand'] ?? [], 'c_id');
+    check($auto['ok'] && $auto['state']['game']['deckMode'] === 'auto' && count($autoHand) === 16 && !array_diff($autoHand, $ownIds), 'Automatisches Deck: 16 Karten aus der eigenen Sammlung');
+
+    // Risiko-Modus
+    $currentRoom = null;
+    $rh = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $risa['authToken'], 'create' => true]);
+    $currentRoom = $rh['room'];
+    $rj = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $rolf['authToken']]);
+    call($port, ['action' => 'setCards', 'token' => $rh['token'], 'count' => 8]);
+    call($port, ['action' => 'setDeckMode', 'token' => $rh['token'], 'mode' => 'risk']);
+    check(call($port, ['action' => 'setTeams', 'token' => $rh['token'], 'on' => true])['ok'] === false, 'Risiko und 2 gegen 2 schließen sich aus');
+    $build = call($port, ['action' => 'start', 'token' => $rh['token']]);
+    check($build['ok'] && $build['state']['status'] === 'deckbuild' && $build['state']['deckbuild']['need'] === 8 && $build['state']['deckbuild']['deadline'] > $build['serverNow'] + 80000, 'Risiko: 90 s Deck-Phase startet');
+    $chosen = array_slice($ownIds, 0, 3);
+    check(call($port, ['action' => 'deck', 'token' => $rh['token'], 'cards' => ['0400']])['ok'] === false, 'Deck: fremde Karten werden abgelehnt');
+    $picked = call($port, ['action' => 'deck', 'token' => $rh['token'], 'cards' => $chosen, 'ready' => true]);
+    check($picked['ok'] && $picked['state']['deckbuild']['picks'] === $chosen && $picked['state']['status'] === 'deckbuild', 'Deck: Auswahl gespeichert, wartet auf die anderen');
+    $go = call($port, ['action' => 'deck', 'token' => $rj['token'], 'cards' => [], 'ready' => true]);
+    $risaHand = array_column(call($port, ['action' => 'state', 'token' => $rh['token']])['state']['game']['ownHand'] ?? [], 'c_id');
+    check($go['ok'] && $go['state']['status'] === 'playing' && count($risaHand) === 8 && !array_diff($chosen, $risaHand), 'Deck: alle fertig, Rest zufällig aufgefüllt, Spiel läuft');
+    $rolfId = $go['state']['selfId'];
+    $rolfDeck = json_decode((string) file_get_contents($roomFile($currentRoom)), true)['game']['decks'][$rolfId];
+    $forceWin($currentRoom, 0);
+    $over = call($port, ['action' => 'choose', 'token' => $rh['token'], 'category' => 'leistung']);
+    check($over['state']['status'] === 'finished' && $over['state']['risk']['winnerId'] === $over['state']['selfId'] && count($over['state']['risk']['options'][$rolfId]) >= 1, 'Risiko: Gewinner sieht das Deck des Verlierers');
+    check(call($port, ['action' => 'again', 'token' => $rh['token']])['ok'] === false, 'Risiko: Revanche erst nach der Kartenwahl');
+    check(call($port, ['action' => 'riskPick', 'token' => $rj['token'], 'loserId' => $rolfId, 'cardId' => $rolfDeck[0]])['ok'] === false, 'Risiko: Verlierer darf nicht wählen');
+    $prey = $rolfDeck[0];
+    $rolfBefore = array_column(call($port, ['action' => 'collection', 'authToken' => $rolf['authToken']])['cards'], 'qty', 'c_id');
+    $risaBefore = array_column(call($port, ['action' => 'collection', 'authToken' => $risa['authToken']])['cards'], 'qty', 'c_id');
+    $pick = call($port, ['action' => 'riskPick', 'token' => $rh['token'], 'loserId' => $rolfId, 'cardId' => $prey]);
+    $rolfAfter = array_column(call($port, ['action' => 'collection', 'authToken' => $rolf['authToken']])['cards'], 'qty', 'c_id');
+    $risaAfter = array_column(call($port, ['action' => 'collection', 'authToken' => $risa['authToken']])['cards'], 'qty', 'c_id');
+    check($pick['ok'] && $pick['state']['risk']['done'] && $pick['state']['risk']['picks'][$rolfId]['c_id'] === $prey, 'Risiko: Karte gewählt');
+    check(($rolfAfter[$prey] ?? 0) === $rolfBefore[$prey] - 1 && ($risaAfter[$prey] ?? 0) === ($risaBefore[$prey] ?? 0) + 1 && array_sum($rolfAfter) === 15 && array_sum($risaAfter) === 17, 'Risiko: Karte wechselt dauerhaft den Besitzer');
+
+    // Belohnung gegen KI Schwer
+    foreach ([[8, 0, 0], [16, 1, 1], [32, 3, 5]] as [$per, $min, $max]) {
+        $currentRoom = null;
+        $kira = call($port, ['action' => 'register', 'name' => "Kira$per", 'password' => 'pw']);
+        $kr = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $kira['authToken'], 'create' => true, 'ai' => ['difficulty' => 'hard', 'opponents' => 1]]);
+        $currentRoom = $kr['room'];
+        call($port, ['action' => 'setCards', 'token' => $kr['token'], 'count' => $per]);
+        call($port, ['action' => 'start', 'token' => $kr['token']]);
+        $forceWin($currentRoom, 0);
+        $won = call($port, ['action' => 'choose', 'token' => $kr['token'], 'category' => 'leistung'])['state'];
+        $awards = $won['game']['cardAwards'];
+        $after = call($port, ['action' => 'collection', 'authToken' => $kira['authToken']]);
+        check(count($awards) >= $min && count($awards) <= $max && array_sum(array_column($after['cards'], 'qty')) === 16 + count($awards) && (!$awards || isset($awards[0]['card']['name'], $awards[0]['isNew'])), "Belohnung KI Schwer mit $per Karten: " . count($awards) . ' Auto(s)');
+    }
+    $currentRoom = null;
 
     // 2 gegen 2 per API
     $currentRoom = null;

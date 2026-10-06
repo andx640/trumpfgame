@@ -262,8 +262,8 @@ function App() {
   const fullScreenView = !state && ["home", "new", "join", "account", "profile", "leaderboard"].includes(view);
 
   // Seitenwechsel: das neue Fenster schiebt sich von rechts herein, beim Zurück von links.
-  const pageKey = state ? (state.status === "lobby" ? "lobby" : "game") : view;
-  const pageRank = state ? (state.status === "lobby" ? 2 : 3) : view === "home" ? 0 : 1;
+  const pageKey = state ? (state.status === "lobby" ? "lobby" : state.status === "deckbuild" ? "deckbuild" : "game") : view;
+  const pageRank = state ? (state.status === "lobby" ? 2 : state.status === "deckbuild" ? 2.5 : 3) : view === "home" ? 0 : 1;
   const headerInside = !state && view === "collection";
 
   return (
@@ -284,7 +284,7 @@ function App() {
         ) : !state && view === "collection" ? (
           <>
             <Header connected={connected} state={state} />
-            <Collection onBack={() => setView("home")} />
+            <Collection onBack={() => setView("home")} authToken={account ? authToken : null} />
           </>
         ) : !state && view === "leaderboard" ? (
           <Leaderboard onBack={() => setView("home")} selfName={account?.name} />
@@ -306,6 +306,8 @@ function App() {
           <Welcome mode={view} onBack={() => setView("home")} onJoin={join} joining={joining} connected={connected} account={account} />
         ) : state.status === "lobby" ? (
           <Lobby state={state} onLeave={leave} account={account} />
+        ) : state.status === "deckbuild" && state.deckbuild ? (
+          <DeckBuilder state={state} authToken={authToken} />
         ) : (
           <Game state={state} />
         )}
@@ -384,7 +386,7 @@ function Home({ onNew, onJoin, onCollection, onLeaderboard, account, onAccount, 
           </button>
           <button type="button" className="home-card" onClick={onCollection}>
             <CollectionIcon />
-            <span><strong>Sammlung</strong><small>Alle Autos im Überblick</small></span>
+            <span><strong>Sammlung</strong><small>Deine gesammelten Autos</small></span>
             <HomeArrow />
           </button>
           <button type="button" className="home-card" onClick={onLeaderboard}>
@@ -398,57 +400,100 @@ function Home({ onNew, onJoin, onCollection, onLeaderboard, account, onAccount, 
   );
 }
 
-function Collection({ onBack }) {
-  const [data, setData] = useState(null);
-  const [failed, setFailed] = useState(false);
-  const [query, setQuery] = useState("");
+const TIER_NAMES = { 1: "Common", 2: "Rare", 3: "Epic", 4: "Legendary", 5: "Mythic" };
 
+function TierBadge({ tier }) {
+  return <span className={`tier-badge tier-${tier}`}>{TIER_NAMES[tier] || "Common"}</span>;
+}
+
+// Karte mit Seltenheitsrahmen, optional Anzahl (×3) und „NEU“
+function CollectionCard({ card, categories, qty = 0, isNew = false, onClick, dimmed = false, style }) {
+  const tier = Number(card.raritaet) || 1;
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag type={onClick ? "button" : undefined} className={`tier-frame tier-${tier} ${dimmed ? "is-dimmed" : ""}`} onClick={onClick} style={style}>
+      <ScaledCard>
+        <VehicleCard card={card} categories={categories} />
+      </ScaledCard>
+      <TierBadge tier={tier} />
+      {qty > 1 && <b className="card-qty">×{qty}</b>}
+      {isNew && <b className="card-new">NEU</b>}
+    </Tag>
+  );
+}
+
+// Eigene Karten des Kontos (nur angemeldet). Was es sonst noch gibt, bleibt geheim.
+function useOwnCollection(authToken) {
+  const [data, setData] = useState(null);
+  const [failed, setFailed] = useState("");
   useEffect(() => {
+    if (!authToken) return undefined;
     let alive = true;
     socket
-      .request("cards")
+      .request("collection", { authToken })
       .then((result) => {
         if (!alive) return;
         if (result.ok) setData(result);
-        else setFailed(true);
+        else setFailed(result.message || "Die Sammlung konnte nicht geladen werden.");
       })
-      .catch(() => alive && setFailed(true));
+      .catch(() => alive && setFailed("Die Sammlung konnte nicht geladen werden."));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [authToken]);
+  return [data, failed];
+}
+
+function sortCards(cards, order) {
+  return [...cards].sort((a, b) => (order === "name" ? a.name.localeCompare(b.name, "de") : (b.raritaet - a.raritaet) || a.name.localeCompare(b.name, "de")));
+}
+
+function Collection({ onBack, authToken }) {
+  const [data, failed] = useOwnCollection(authToken);
+  const [query, setQuery] = useState("");
+  const [order, setOrder] = useState("tier");
 
   const cards = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("de");
-    return (data?.cards || []).filter((card) => !needle || card.name.toLocaleLowerCase("de").includes(needle));
-  }, [data, query]);
+    return sortCards((data?.cards || []).filter((card) => !needle || card.name.toLocaleLowerCase("de").includes(needle)), order);
+  }, [data, query, order]);
 
   return (
     <section className="collection page-width">
       <div className="collection-head">
         <div className="card-head-row">
-          <h1>Sammlung</h1>
+          <h1>Meine Sammlung</h1>
           <button type="button" className="text-button" onClick={onBack}>← Zurück</button>
         </div>
-        <p className="muted">{data ? `${cards.length} von ${data.cards.length} Autos` : "Lädt …"}</p>
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Auto suchen, z. B. Porsche"
-          aria-label="Auto suchen"
-        />
+        {!authToken ? (
+          <p className="muted">Melde dich an, um Autos zu sammeln. Neue Konten starten mit 16 Autos.</p>
+        ) : (
+          <>
+            <p className="collection-count">{data ? <><b>{data.collected}</b> / {data.total} Autos</> : "Lädt …"}</p>
+            <div className="collection-tools">
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="In deiner Sammlung suchen"
+                aria-label="Auto suchen"
+              />
+              <select value={order} onChange={(event) => setOrder(event.target.value)} aria-label="Sortierung">
+                <option value="tier">Nach Seltenheit</option>
+                <option value="name">Nach Name</option>
+              </select>
+            </div>
+          </>
+        )}
       </div>
-      {failed && <p className="collection-empty">Die Sammlung konnte nicht geladen werden. Versuche es gleich noch einmal.</p>}
+      {failed && <p className="collection-empty">{failed}</p>}
       {data && cards.length === 0 && <p className="collection-empty">Kein Auto gefunden.</p>}
       <div className="collection-grid">
         {cards.map((card) => (
-          <ScaledCard key={card.c_id}>
-            <VehicleCard card={card} categories={data.categories} />
-          </ScaledCard>
+          <CollectionCard card={card} categories={data.categories} qty={card.qty} key={card.c_id} />
         ))}
       </div>
-      {data && (
+      {data && data.cards.length > 0 && (
         <details className="photo-credits">
           <summary>Bildnachweise</summary>
           <ul>
@@ -461,6 +506,112 @@ function Collection({ onBack }) {
           </ul>
         </details>
       )}
+    </section>
+  );
+}
+
+// Risiko-Modus: 90 Sekunden, um aus der eigenen Sammlung das Deck zu wählen. Danach füllt der Server den Rest zufällig.
+function DeckBuilder({ state, authToken }) {
+  const build = state.deckbuild;
+  const [data, failed] = useOwnCollection(authToken);
+  const [picks, setPicks] = useState(build.picks || []);
+  const [order, setOrder] = useState("tier");
+  const isReady = build.readyIds.includes(state.selfId);
+  const need = build.need;
+  const secondsLeft = useSeconds(build.deadline);
+
+  const send = useCallback((next, ready = false) => {
+    socket.request("deck", { cards: next, ready }).then((result) => {
+      if (result.ok) socket.applyResult(result);
+    }).catch(() => {});
+  }, []);
+
+  const used = useMemo(() => {
+    const counts = new Map();
+    picks.forEach((id) => counts.set(id, (counts.get(id) || 0) + 1));
+    return counts;
+  }, [picks]);
+
+  const cards = useMemo(() => sortCards(data?.cards || [], order), [data, order]);
+  const byId = useMemo(() => new Map((data?.cards || []).map((card) => [card.c_id, card])), [data]);
+
+  const change = (next) => {
+    if (isReady) return;
+    setPicks(next);
+    send(next);
+  };
+  const add = (card) => {
+    if (picks.length >= need || (used.get(card.c_id) || 0) >= card.qty) return;
+    change([...picks, card.c_id]);
+  };
+  const remove = (index) => change(picks.filter((_, position) => position !== index));
+  const fillRandom = () => {
+    const pool = [];
+    (data?.cards || []).forEach((card) => {
+      for (let i = (used.get(card.c_id) || 0); i < card.qty; i += 1) pool.push(card.c_id);
+    });
+    for (let i = pool.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    change([...picks, ...pool.slice(0, need - picks.length)]);
+  };
+  const done = () => {
+    send(picks, true);
+  };
+  const readyPlayers = state.players.filter((player) => build.readyIds.includes(player.id)).length;
+
+  return (
+    <section className="deckbuilder">
+      <div className="deckbuilder-head page-width">
+        <div className="card-head-row">
+          <p className="eyebrow">RISIKO-MODUS</p>
+          <span className={`deck-timer ${secondsLeft <= LOW_SECONDS ? "is-low" : ""}`}>{secondsLeft} s</span>
+        </div>
+        <h1>Deck zusammenstellen</h1>
+        <p className="muted">Wähle {need} Karten aus deiner Sammlung. Wenn die Zeit um ist, wird der Rest zufällig gewählt. Achtung: Der Gewinner darf sich eine Karte aus deinem Deck aussuchen.</p>
+        <div className="deck-picks" aria-label="Dein Deck">
+          <b className="deck-count">{picks.length} / {need}</b>
+          {picks.map((id, index) => {
+            const card = byId.get(id);
+            return (
+              <button type="button" className={`deck-chip tier-${card?.raritaet || 1}`} key={`${id}-${index}`} onClick={() => remove(index)} disabled={isReady} title="Aus dem Deck nehmen">
+                {card?.name || id} <span aria-hidden="true">×</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="deck-actions">
+          {isReady ? (
+            <p className="deck-wait"><SpinnerIcon /> Fertig. Warte auf die anderen ({readyPlayers}/{state.players.length}) …</p>
+          ) : (
+            <>
+              <button type="button" className="team-shuffle" onClick={fillRandom} disabled={picks.length >= need || !data}>Rest zufällig</button>
+              <button type="button" className="primary-button deck-done" onClick={done}><span>{picks.length < need ? "Fertig (Rest zufällig)" : "Fertig"}</span><FlagIcon /></button>
+            </>
+          )}
+          <select value={order} onChange={(event) => setOrder(event.target.value)} aria-label="Sortierung">
+            <option value="tier">Nach Seltenheit</option>
+            <option value="name">Nach Name</option>
+          </select>
+        </div>
+      </div>
+      {failed && <p className="collection-empty page-width">{failed}</p>}
+      <div className="collection-grid page-width deck-grid">
+        {cards.map((card) => {
+          const left = card.qty - (used.get(card.c_id) || 0);
+          return (
+            <CollectionCard
+              card={card}
+              categories={data.categories}
+              qty={left}
+              dimmed={left <= 0 || isReady}
+              onClick={left > 0 && !isReady ? () => add(card) : undefined}
+              key={card.c_id}
+            />
+          );
+        })}
+      </div>
     </section>
   );
 }
@@ -584,6 +735,7 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
               </div>
               {difficulty === "easy" && <p className="ai-note" role="status">Gegen „Leicht“ gibt es keine XP.</p>}
               {difficulty === "medium" && <p className="ai-note" role="status">Gegen „Mittel“ gibt es nur 35 % der XP.</p>}
+              {difficulty === "hard" && <p className="ai-note" role="status">Sieg mit 16 Karten: 1 neues Auto. Mit 32 Karten: Pack mit 3–5 Autos.{account ? "" : " Nur mit Konto."}</p>}
               <span className="field-label">Gegner</span>
               <div className="ai-opponents" role="radiogroup" aria-label="Anzahl der Gegner">
                 {[1, 2, 3].map((count) => (
@@ -607,6 +759,12 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
     </section>
   );
 }
+
+const DECK_MODE_INFO = [
+  { id: "friendly", label: "Freundschaft", short: "Pool-Karten", text: "Alle spielen mit Karten aus dem gemeinsamen Pool. Niemand gewinnt oder verliert Karten." },
+  { id: "auto", label: "Eigene Karten", short: "zufällig", text: "Jeder spielt mit zufälligen Karten aus seiner Sammlung. Kein Verlust. Alle brauchen ein Konto und genug Karten." },
+  { id: "risk", label: "Risiko", short: "eigenes Deck", text: "Jeder stellt in 90 Sekunden sein Deck zusammen. Der Gewinner darf sich von jedem Verlierer eine Karte aus dessen Deck nehmen." }
+];
 
 const TEAM_INFO = [{ name: "Team Rot", short: "Rot" }, { name: "Team Blau", short: "Blau" }];
 
@@ -696,6 +854,28 @@ function Lobby({ state, onLeave, account }) {
             </div>
             <small>{selfIsHost ? "Du legst als Host die Stapelgröße fest." : "Der Host legt die Stapelgröße fest."}</small>
           </div>
+          {!state.solo && (
+            <div className="mode-settings">
+              <div>
+                <span>KARTEN</span>
+                <b>{DECK_MODE_INFO.find((mode) => mode.id === state.deckMode)?.label || "Freundschaft"}</b>
+              </div>
+              <div className="mode-options is-three" role="group" aria-label="Kartenmodus">
+                {DECK_MODE_INFO.map((mode) => (
+                  <button
+                    type="button"
+                    className={state.deckMode === mode.id ? "is-selected" : ""}
+                    disabled={!selfIsHost}
+                    key={mode.id}
+                    onClick={() => socket.request("setDeckMode", { mode: mode.id }).then((result) => (result.ok ? socket.applyResult(result) : window.alert(result.message))).catch(() => {})}
+                  >
+                    <strong>{mode.label}</strong><span>{mode.short}</span>
+                  </button>
+                ))}
+              </div>
+              <small>{DECK_MODE_INFO.find((mode) => mode.id === state.deckMode)?.text}</small>
+            </div>
+          )}
           {canTeams && (
             <div className="mode-settings">
               <div>
@@ -1776,6 +1956,7 @@ function ProfileStats({ account }) {
         <div className="is-record"><dt>Rekord</dt><dd>{account.bestStreak ?? 0}</dd><small>Siege am Stück</small></div>
       </dl>
       <p className="profile-xp-total">{account.xp} XP gesamt</p>
+      {account.totalCards ? <p className="profile-collection">Sammlung: <b>{account.collected}</b> / {account.totalCards} Autos</p> : null}
     </>
   );
 }
@@ -1956,6 +2137,8 @@ function FinishPanel({ state }) {
         {award && award.xp === 0 && state.solo && (
           <p className="muted finish-no-xp">Gegen „Leicht“ gibt es keine XP.</p>
         )}
+        {game.cardAwards?.length > 0 && <PackReveal awards={game.cardAwards} categories={state.categories} />}
+        {state.risk && <RiskPanel state={state} />}
         <ol className="finish-ranking">
           {ranked.map((player, index) => {
             const entry = statOf(player);
@@ -1979,10 +2162,87 @@ function FinishPanel({ state }) {
             <div><span>Stärkste Karte</span><b>{state.topCard.name} · {state.topCard.wins} {state.topCard.wins === 1 ? "Stich" : "Stiche"}</b></div>
           )}
         </div>
-        <button className="primary-button" disabled={voted} onClick={() => socket.emit("playAgain")}>
+        <button className="primary-button" disabled={voted || (state.risk && !state.risk.done)} onClick={() => socket.emit("playAgain")}>
           <span>{voted ? `Warte auf die anderen (${votes.length}/${voters.length})` : "Revanche"}</span><FlagIcon />
         </button>
       </div>
+    </div>
+  );
+}
+
+// Belohnung gegen KI „Schwer“: die Karten werden nacheinander aufgedeckt
+function PackReveal({ awards, categories }) {
+  return (
+    <div className="pack-reveal">
+      <p className="eyebrow">{awards.length > 1 ? `PACK MIT ${awards.length} AUTOS` : "NEUES AUTO"}</p>
+      <div className="pack-cards">
+        {awards.map((award, index) => (
+          <CollectionCard
+            card={award.card}
+            categories={categories}
+            isNew={award.isNew}
+            style={{ "--reveal-delay": `${400 + index * 700}ms` }}
+            key={`${award.card.c_id}-${index}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Risiko-Modus nach Spielende: der Gewinner wählt, alle sehen das Ergebnis
+function RiskPanel({ state }) {
+  const { risk, players, selfId, categories } = state;
+  const winner = players.find((player) => player.id === risk.winnerId);
+  const isWinner = selfId === risk.winnerId;
+  const [busy, setBusy] = useState(false);
+  const nameOf = (id) => players.find((player) => player.id === id)?.name || "Spieler";
+  const pick = (loserId, cardId) => {
+    setBusy(true);
+    socket.request("riskPick", { loserId, cardId }).then((result) => {
+      setBusy(false);
+      if (result.ok) socket.applyResult(result);
+    }).catch(() => setBusy(false));
+  };
+
+  if (risk.done) {
+    return (
+      <div className="risk-panel is-done">
+        <p className="eyebrow">RISIKO</p>
+        {Object.entries(risk.picks).map(([loserId, card]) => card && (
+          <p key={loserId}>
+            {isWinner ? <>Du bekommst <b>{card.name}</b> von {nameOf(loserId)}.</> : loserId === selfId ? <>Du hast <b>{card.name}</b> an {winner?.name} verloren.</> : <>{winner?.name} bekommt <b>{card.name}</b> von {nameOf(loserId)}.</>}
+          </p>
+        ))}
+      </div>
+    );
+  }
+  if (!isWinner) {
+    return (
+      <div className="risk-panel">
+        <p className="eyebrow">RISIKO</p>
+        <p><SpinnerIcon /> {winner?.name} sucht sich {risk.picks[selfId] !== undefined ? "eine Karte aus deinem Deck" : "seine Karten"} aus … noch <Seconds target={risk.deadline} /> s</p>
+      </div>
+    );
+  }
+  return (
+    <div className="risk-panel">
+      <p className="eyebrow">RISIKO · NOCH <Seconds target={risk.deadline} /> S</p>
+      {Object.entries(risk.options || {}).map(([loserId, cards]) => (
+        <div className="risk-choice" key={loserId}>
+          <h3>Such dir eine Karte von {nameOf(loserId)} aus</h3>
+          {risk.picks[loserId] ? (
+            <p>Gewählt: <b>{risk.picks[loserId].name}</b></p>
+          ) : (
+            <div className="risk-cards">
+              {sortCards(cards, "tier").map((card) => (
+                <CollectionCard card={card} categories={categories} onClick={busy ? undefined : () => pick(loserId, card.c_id)} key={card.c_id} />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      <small className="muted">Ohne Wahl wird nach Ablauf der Zeit zufällig gewählt.</small>
     </div>
   );
 }

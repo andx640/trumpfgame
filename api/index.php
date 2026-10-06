@@ -19,6 +19,9 @@ const CHAT_MAX_LENGTH = 200;
 const CHAT_HISTORY = 60;          // so viele Nachrichten bleiben im Raum gespeichert
 const CHAT_MIN_GAP_MS = 700;      // mindestens so lange zwischen zwei Nachrichten desselben Spielers
 const AI_LEVELS = ['easy', 'medium', 'hard'];
+const DECK_MODES = ['friendly', 'auto', 'risk']; // Pool wie bisher / zufällig aus eigener Sammlung / eigenes Deck mit Kartenverlust
+const DECK_BUILD_MS = 90000;      // so lange hat jeder im Risiko-Modus Zeit, sein Deck zu wählen
+const RISK_PICK_MS = 60000;       // so lange darf sich der Gewinner eine Karte aussuchen
 const AI_NAMES = ['easy' => 'KI Leicht', 'medium' => 'KI Mittel', 'hard' => 'KI Schwer'];
 
 function cleanName($value): string
@@ -62,6 +65,7 @@ class TrumpfRoom
             'cardsPerPlayer' => 32,
             'teamMode' => false,
             'teamPairing' => 0,
+            'deckMode' => 'friendly',
             'game' => null,
             'idleSince' => null,
         ];
@@ -170,6 +174,9 @@ class TrumpfRoom
         }
         $this->transferHost();
         $this->checkIdle();
+        if ($this->data['status'] === 'deckbuild') {
+            $this->tickDeckBuild();
+        }
         $paused = $this->updatePresence();
 
         for ($step = 0; !$paused && $step < 6 && $this->data['game'] !== null; $step++) {
@@ -457,6 +464,9 @@ class TrumpfRoom
         if ($this->data['status'] !== 'finished') {
             return 'Die aktuelle Partie ist noch nicht beendet.';
         }
+        if (!empty($this->data['risk']) && empty($this->data['risk']['done'])) {
+            return 'Erst wählt der Gewinner seine Karte.';
+        }
         $votes = $this->data['rematch'] ?? [];
         if (!in_array($playerId, $votes, true)) {
             $votes[] = $playerId;
@@ -475,7 +485,11 @@ class TrumpfRoom
                 return 'Für eine Revanche müssen mindestens zwei Spieler verbunden sein.';
             }
             $this->data['players'] = $connected;
-            $this->beginGame();
+            $problem = $this->startMatch();
+            if ($problem !== null) {
+                $this->data['rematch'] = [];
+                return $problem;
+            }
         }
         return null;
     }
@@ -533,7 +547,97 @@ class TrumpfRoom
         $this->touch();
     }
 
-    public function beginGame(): void
+    /** Startet eine Partie im eingestellten Kartenmodus. Gibt eine Fehlermeldung zurück oder null. */
+    public function startMatch(): ?string
+    {
+        $mode = $this->data['deckMode'] ?? 'friendly';
+        if (!empty($this->data['solo']) || $mode === 'friendly') {
+            $this->beginGame();
+            return null;
+        }
+        if ($mode === 'risk' && !empty($this->data['teamMode'])) {
+            return '2 gegen 2 geht nicht im Risiko-Modus.';
+        }
+        $owned = trumpf_room_collections($this);
+        if (is_string($owned)) {
+            return $owned;
+        }
+        $need = (int) $this->data['cardsPerPlayer'];
+        if ($mode === 'auto') {
+            $hands = [];
+            foreach ($owned as $playerId => $cards) {
+                $hands[$playerId] = trumpf_random_from_owned($cards, $need);
+            }
+            $this->beginGame($hands);
+            return null;
+        }
+        // Risiko: erst hat jeder DECK_BUILD_MS Zeit, sein Deck zu wählen
+        $this->data['status'] = 'deckbuild';
+        $this->data['game'] = null;
+        $this->data['risk'] = null;
+        $this->data['rematch'] = [];
+        $this->data['deckbuild'] = [
+            'deadline' => $this->now + DECK_BUILD_MS,
+            'need' => $need,
+            'owned' => $owned,
+            'picks' => array_fill_keys(array_keys($owned), []),
+            'ready' => [],
+        ];
+        $this->touch();
+        return null;
+    }
+
+    /** Auswahl eines Spielers in der Deck-Phase speichern (nur Karten, die er besitzt). */
+    public function setDeck(string $playerId, array $cards, bool $ready): ?string
+    {
+        $build = $this->data['deckbuild'] ?? null;
+        if ($this->data['status'] !== 'deckbuild' || $build === null || !isset($build['owned'][$playerId])) {
+            return 'Gerade wird kein Deck zusammengestellt.';
+        }
+        $cards = array_values(array_map('strval', array_filter($cards, 'is_scalar')));
+        if (count($cards) > $build['need']) {
+            return 'Zu viele Karten.';
+        }
+        $counts = array_count_values($cards);
+        foreach ($counts as $cardId => $count) {
+            if ($count > ($build['owned'][$playerId][(string) $cardId] ?? 0)) {
+                return 'Diese Karte hast du nicht so oft.';
+            }
+        }
+        $this->data['deckbuild']['picks'][$playerId] = $cards;
+        if ($ready && !in_array($playerId, $build['ready'], true)) {
+            $this->data['deckbuild']['ready'][] = $playerId;
+        }
+        $this->touch();
+        $this->tickDeckBuild();
+        return null;
+    }
+
+    /** Zeit um oder alle fertig: offene Plätze zufällig füllen und losspielen. */
+    private function tickDeckBuild(): void
+    {
+        $build = $this->data['deckbuild'] ?? null;
+        if ($build === null) {
+            return;
+        }
+        $allReady = true;
+        foreach ($this->data['players'] as $player) {
+            $allReady = $allReady && (!$player['connected'] || in_array($player['id'], $build['ready'], true));
+        }
+        if (!$allReady && $this->now < $build['deadline']) {
+            return;
+        }
+        $hands = [];
+        foreach ($this->data['players'] as $player) {
+            $picks = $build['picks'][$player['id']] ?? [];
+            $owned = $build['owned'][$player['id']] ?? [];
+            $hands[$player['id']] = array_merge($picks, trumpf_random_from_owned($owned, $build['need'] - count($picks), $picks));
+        }
+        $this->data['deckbuild'] = null;
+        $this->beginGame($hands);
+    }
+
+    public function beginGame(?array $hands = null): void
     {
         foreach ($this->data['players'] as $index => $player) {
             $this->data['players'][$index]['away'] = false;
@@ -544,7 +648,9 @@ class TrumpfRoom
         } else {
             $this->data['teamMode'] = false;
         }
-        $this->data['game'] = trumpf_start_game($this->data['players'], (int) $this->data['cardsPerPlayer'], $teams);
+        $this->data['game'] = trumpf_start_game($this->data['players'], (int) $this->data['cardsPerPlayer'], $teams, $hands);
+        $this->data['game']['deckMode'] = $hands === null ? 'friendly' : ($this->data['deckMode'] ?? 'auto');
+        $this->data['risk'] = null;
         $this->data['stats'] = ['players' => [], 'cards' => []];
         $this->data['rematch'] = [];
         $this->data['status'] = 'playing';
@@ -568,6 +674,49 @@ class TrumpfRoom
     private function expand(string $cardId): array
     {
         return trumpf_load_deck()[$cardId];
+    }
+
+    private function deckbuildFor(string $playerId): ?array
+    {
+        $build = $this->data['deckbuild'] ?? null;
+        if ($this->data['status'] !== 'deckbuild' || $build === null) {
+            return null;
+        }
+        return [
+            'deadline' => $build['deadline'],
+            'need' => $build['need'],
+            'picks' => $build['picks'][$playerId] ?? [],
+            'readyIds' => $build['ready'],
+        ];
+    }
+
+    /** Risiko-Auswahl: der Gewinner sieht die Decks der Verlierer, alle sehen das Ergebnis. */
+    private function riskFor(string $playerId): ?array
+    {
+        $risk = $this->data['risk'] ?? null;
+        if ($risk === null) {
+            return null;
+        }
+        $picks = [];
+        foreach ($risk['picks'] as $loserId => $cardId) {
+            $picks[$loserId] = $cardId === null ? null : $this->expand($cardId);
+        }
+        $options = null;
+        if ($playerId === $risk['winnerId'] && empty($risk['done'])) {
+            $options = [];
+            foreach ($risk['options'] as $loserId => $cardIds) {
+                $options[$loserId] = array_map(function ($cardId) {
+                    return $this->expand($cardId);
+                }, array_values(array_unique($cardIds)));
+            }
+        }
+        return [
+            'winnerId' => $risk['winnerId'],
+            'deadline' => $risk['deadline'],
+            'done' => !empty($risk['done']),
+            'picks' => $picks ?: new stdClass(),
+            'options' => $options,
+        ];
     }
 
     /** Zustand aus Sicht eines Spielers: fremde Hände bleiben geheim. */
@@ -628,6 +777,10 @@ class TrumpfRoom
                 'pausedUntil' => $game['pausedUntil'] ?? null,
                 'readyIds' => $game['readyIds'] ?? [],
                 'xpAwards' => $game['xpAwards'] ?? new stdClass(),
+                'deckMode' => $game['deckMode'] ?? 'friendly',
+                'cardAwards' => array_map(function ($award) {
+                    return ['card' => $this->expand($award['id']), 'isNew' => $award['isNew']];
+                }, $game['cardAwards'][$self['id']] ?? []),
                 'turnDurationMs' => TURN_DURATION_MS,
                 'revealDurationMs' => REVEAL_DURATION_MS,
                 'ownCard' => $hand[0] ?? null,
@@ -650,6 +803,9 @@ class TrumpfRoom
             'rematchIds' => $data['rematch'] ?? [],
             'solo' => !empty($data['solo']),
             'teamMode' => $teamMap !== null,
+            'deckMode' => $data['deckMode'] ?? 'friendly',
+            'deckbuild' => $this->deckbuildFor($self['id']),
+            'risk' => $this->riskFor($self['id']),
             'chat' => array_values(array_slice($data['chat'] ?? [], -50)),
             'aiLevel' => $data['aiLevel'] ?? null,
         ];
@@ -677,10 +833,10 @@ if ($action === 'ping') {
     respond(['ok' => true, 'serverNow' => (int) floor(microtime(true) * 1000)]);
 }
 if ($action === 'cards') {
-    // Alle Fahrzeugkarten für die Sammlung (öffentlich, ohne Spielstand).
-    respond(['ok' => true, 'categories' => TRUMPF_CATEGORIES, 'cards' => array_values(trumpf_load_deck())]);
+    // Welche Autos es gibt, bleibt geheim: öffentlich nur die Kategorien und die Gesamtzahl.
+    respond(['ok' => true, 'categories' => TRUMPF_CATEGORIES, 'total' => count(trumpf_load_deck())]);
 }
-if (in_array($action, ['register', 'login', 'profile', 'playerProfile', 'leaderboard', 'heartbeat', 'inviteDecline', 'pushKey', 'pushSubscribe', 'pushUnsubscribe', 'friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile'], true)) {
+if (in_array($action, ['register', 'login', 'profile', 'collection', 'playerProfile', 'leaderboard', 'heartbeat', 'inviteDecline', 'pushKey', 'pushSubscribe', 'pushUnsubscribe', 'friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile'], true)) {
     trumpf_account_action($action, $input);
 }
 $token = is_string($input['token'] ?? null) ? $input['token'] : '';
@@ -881,11 +1037,56 @@ try {
             } elseif (count($room->data['players']) < 2) {
                 $reply = $fail('Zum Starten werden mindestens zwei Spieler benötigt.');
             } else {
-                $room->beginGame();
+                $problem = $room->startMatch();
+                if ($problem !== null) {
+                    $reply = $fail($problem);
+                }
+            }
+            break;
+
+        case 'setDeckMode':
+            $mode = is_string($input['mode'] ?? null) ? $input['mode'] : '';
+            if (!$isHost()) {
+                $reply = $fail('Nur der Host kann den Kartenmodus ändern.');
+            } elseif ($room->data['status'] !== 'lobby' || !empty($room->data['solo'])) {
+                $reply = $fail('Der Kartenmodus kann nur in der Lobby geändert werden.');
+            } elseif (!in_array($mode, DECK_MODES, true)) {
+                $reply = $fail('Diesen Modus gibt es nicht.');
+            } elseif ($mode === 'risk' && !empty($room->data['teamMode'])) {
+                $reply = $fail('2 gegen 2 geht nicht im Risiko-Modus.');
+            } else {
+                $room->data['deckMode'] = $mode;
+                $room->touch();
+            }
+            break;
+
+        case 'deck':
+            if ($selfIndex === null) {
+                $reply = $fail('Du bist in keiner Partie.');
+            } else {
+                $problem = $room->setDeck($room->data['players'][$selfIndex]['id'], is_array($input['cards'] ?? null) ? $input['cards'] : [], !empty($input['ready']));
+                if ($problem !== null) {
+                    $reply = $fail($problem);
+                }
+            }
+            break;
+
+        case 'riskPick':
+            if ($selfIndex === null) {
+                $reply = $fail('Du bist in keiner Partie.');
+            } else {
+                $problem = trumpf_risk_pick($room, $room->data['players'][$selfIndex]['id'], (string) ($input['loserId'] ?? ''), (string) ($input['cardId'] ?? ''));
+                if ($problem !== null) {
+                    $reply = $fail($problem);
+                }
             }
             break;
 
         case 'setTeams':
+            if (!empty($input['on']) && ($room->data['deckMode'] ?? '') === 'risk') {
+                $reply = $fail('2 gegen 2 geht nicht im Risiko-Modus.');
+                break;
+            }
             if (!$isHost()) {
                 $reply = $fail('Nur der Host kann den Spielmodus ändern.');
             } elseif ($room->data['status'] !== 'lobby' || !empty($room->data['solo'])) {
@@ -985,6 +1186,7 @@ try {
 }
 
 trumpf_record_results($room);
+trumpf_settle_risk($room);
 
 if ($deleteRoom) {
     $room->dirty = false;
