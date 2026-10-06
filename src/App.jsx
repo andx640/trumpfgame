@@ -261,10 +261,16 @@ function App() {
   const isPlaying = state && state.status !== "lobby";
   const fullScreenView = !state && ["home", "new", "join", "account", "profile", "leaderboard"].includes(view);
 
+  // Seitenwechsel: das neue Fenster schiebt sich von rechts herein, beim Zurück von links.
+  const pageKey = state ? (state.status === "lobby" ? "lobby" : "game") : view;
+  const pageRank = state ? (state.status === "lobby" ? 2 : 3) : view === "home" ? 0 : 1;
+  const headerInside = !state && view === "collection";
+
   return (
     <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${fullScreenView ? "is-home" : ""} ${state && !state.solo ? "has-chat" : ""}`}>
-      {!isPlaying && !fullScreenView && <Header connected={connected} state={state} />}
+      {!isPlaying && !fullScreenView && !headerInside && <Header connected={connected} state={state} />}
       <main>
+        <SlideStage pageKey={pageKey} rank={pageRank}>
         {!state && view === "home" ? (
           <Home
             onNew={() => setView("new")}
@@ -276,7 +282,10 @@ function App() {
             onAccount={() => setView(account ? "profile" : "account")}
           />
         ) : !state && view === "collection" ? (
-          <Collection onBack={() => setView("home")} />
+          <>
+            <Header connected={connected} state={state} />
+            <Collection onBack={() => setView("home")} />
+          </>
         ) : !state && view === "leaderboard" ? (
           <Leaderboard onBack={() => setView("home")} selfName={account?.name} />
         ) : !state && view === "account" ? (
@@ -300,12 +309,50 @@ function App() {
         ) : (
           <Game state={state} />
         )}
+        </SlideStage>
       </main>
       {banner && <InviteBanner invite={banner} canJoin={!state || state.status === "lobby"} onAccept={() => acceptInvite(banner)} onDecline={() => declineInvite(banner)} onClose={() => setBanner(null)} />}
       {state && !state.solo && <ChatWidget chat={state.chat || []} selfId={state.selfId} sessionId={state.sessionId} />}
       {notice && <div className="toast" role="alert">{notice}</div>}
     </div>
   );
+}
+
+const SLIDE_MS = 380;
+
+// Hält beim Seitenwechsel kurz die alte Seite fest, damit sie hinausgleiten kann, während die neue hereinkommt.
+function SlideStage({ pageKey, rank, children }) {
+  const previous = useRef({ key: pageKey, node: children, rank });
+  const [leaving, setLeaving] = useState(null);
+  const [direction, setDirection] = useState("forward");
+
+  useLayoutEffect(() => {
+    const before = previous.current;
+    if (before.key !== pageKey) {
+      const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      if (before.key !== "game" && pageKey !== "game" && !reduced) {
+        setDirection(rank < before.rank ? "back" : "forward");
+        setLeaving(before);
+        window.scrollTo(0, 0);
+      } else {
+        setLeaving(null);
+      }
+    }
+    previous.current = { key: pageKey, node: children, rank };
+  });
+
+  useEffect(() => {
+    if (!leaving) return undefined;
+    const timer = window.setTimeout(() => setLeaving(null), SLIDE_MS + 40);
+    return () => window.clearTimeout(timer);
+  }, [leaving]);
+
+  const panes = [];
+  if (leaving && leaving.key !== pageKey) {
+    panes.push(<div className={`slide-pane is-leaving is-${direction}`} key={leaving.key} inert="" aria-hidden="true">{leaving.node}</div>);
+  }
+  panes.push(<div className={`slide-pane ${leaving ? `is-entering is-${direction}` : ""}`} key={pageKey}>{children}</div>);
+  return <div className="slide-stage">{panes}</div>;
 }
 
 function Home({ onNew, onJoin, onCollection, onLeaderboard, account, onAccount, inviteCount = 0 }) {
