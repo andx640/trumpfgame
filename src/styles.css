@@ -5368,3 +5368,32 @@ body:has(.app-shell.is-playing) {
 .collection-head .card-head-row .text-button {
   justify-self: auto;
 }
+
+/* Seitenwechsel: neues Fenster gleitet von rechts herein, die alte Seite nach links hinaus (zurück: umgekehrt) */
+.slide-stage {
+  position: relative;
+  overflow-x: clip;
+}
+
+.slide-pane.is-leaving {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+  animation: 380ms cubic-bezier(0.22, 0.8, 0.25, 1) both;
+}
+
+.slide-pane.is-entering {
+  animation: 380ms cubic-bezier(0.22, 0.8, 0.25, 1) backwards;
+}
+
+.slide-pane.is-entering.is-forward { animation-name: slide-in-from-right; }
+.slide-pane.is-entering.is-back { animation-name: slide-in-from-left; }
+.slide-pane.is-leaving.is-forward { animation-name: slide-out-to-left; }
+.slide-pane.is-leaving.is-back { animation-name: slide-out-to-right; }
+
+@keyframes slide-in-from-right { from { transform: translateX(100%); } }
+@keyframes slide-in-from-left { from { transform: translateX(-100%); } }
+@keyframes slide-out-to-left { to { transform: translateX(-100%); } }
+@keyframes slide-out-to-right { to { transform: translateX(100%); } }
