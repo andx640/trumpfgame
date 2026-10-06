@@ -50,14 +50,6 @@ function TurnTimer({ target }) {
   return <span className={`turn-timer ${seconds <= LOW_SECONDS ? "is-low" : ""}`}>{seconds}s</span>;
 }
 
-function vibrate(pattern) {
-  try {
-    navigator.vibrate?.(pattern);
-  } catch {
-    // nicht jedes Gerät kann vibrieren
-  }
-}
-
 // Ring, der in der verbleibenden Zeit leerläuft. Läuft per CSS-Animation, ohne dass React tickt.
 function TimerRing({ target, duration }) {
   const remaining = Math.max(0, target - socket.now());
@@ -80,9 +72,6 @@ function TimerRing({ target, duration }) {
 function TurnBanner({ target, duration }) {
   const seconds = useSeconds(target);
   const low = seconds <= LOW_SECONDS;
-  useEffect(() => {
-    if (low && seconds > 0) vibrate(200);
-  }, [low]);
   return (
     <span className={`turn-banner ${low ? "is-low" : ""}`}>
       <TimerRing target={target} duration={duration} /> DU BIST DRAN · {seconds}s
@@ -137,7 +126,6 @@ function App() {
           if (fresh.length && !document.hidden) {
             setBanner(fresh[0]);
             playTurn();
-            vibrate([80, 50, 80]);
           }
         })
         .catch(() => {});
@@ -720,7 +708,6 @@ function Game({ state }) {
 
   useEffect(() => {
     if (!isMyTurn || isPaused) return;
-    vibrate([70, 50, 70]);
     playTurn();
   }, [isMyTurn, isPaused, game.turnEndsAt]);
 
@@ -734,7 +721,6 @@ function Game({ state }) {
     const outcome = window.setTimeout(() => {
       if (won) {
         playWin();
-        vibrate([40, 30, 90]);
       } else if (played && game.result?.type === "winner") {
         playLose();
       }
