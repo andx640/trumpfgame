@@ -5397,3 +5397,9 @@ body:has(.app-shell.is-playing) {
 @keyframes slide-in-from-left { from { transform: translateX(-100%); } }
 @keyframes slide-out-to-left { to { transform: translateX(-100%); } }
 @keyframes slide-out-to-right { to { transform: translateX(100%); } }
+
+/* Im Spiel ist die App-Hülle fixiert; Tisch und Deck-Phase beziehen sich auf sie, nicht auf die Slide-Bühne */
+.app-shell.is-playing .slide-stage,
+.app-shell.is-playing .slide-pane {
+  position: static;
+}
