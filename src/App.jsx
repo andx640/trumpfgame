@@ -417,6 +417,7 @@ function CollectionCard({ card, categories, qty = 0, isNew = false, onClick, dim
       </ScaledCard>
       <TierBadge tier={tier} />
       {qty > 1 && <b className="card-qty">×{qty}</b>}
+      {card.score !== undefined && <span className="card-score" title="Kartenstärke (0–100)">{Math.round(card.score)}</span>}
       {isNew && <b className="card-new">NEU</b>}
     </Tag>
   );
@@ -444,7 +445,16 @@ function useOwnCollection(authToken) {
   return [data, failed];
 }
 
+// Deckwertung: Durchschnitt der Kartenstärke (0–100, vom Server je Karte als score geliefert)
+function deckRating(cards) {
+  const list = cards.filter(Boolean);
+  if (!list.length) return 0;
+  const total = list.reduce((sum, card) => sum + (Number(card.score) || 0), 0);
+  return Math.round(total / list.length);
+}
+
 function sortCards(cards, order) {
+  if (order === "score") return [...cards].sort((a, b) => (b.score || 0) - (a.score || 0));
   return [...cards].sort((a, b) => (order === "name" ? a.name.localeCompare(b.name, "de") : (b.raritaet - a.raritaet) || a.name.localeCompare(b.name, "de")));
 }
 
@@ -469,7 +479,9 @@ function Collection({ onBack, authToken }) {
           <p className="muted">Melde dich an, um Autos zu sammeln. Neue Konten starten mit 16 Autos.</p>
         ) : (
           <>
-            <p className="collection-count">{data ? <><b>{data.collected}</b> / {data.total} Autos</> : "Lädt …"}</p>
+            <p className="collection-count">
+              {data ? <><b>{data.collected}</b> / {data.total} Autos{data.cards.length > 0 && <span className="collection-rating"> · Ø Stärke <b>{deckRating(data.cards)}</b></span>}</> : "Lädt …"}
+            </p>
             <div className="collection-tools">
               <input
                 type="search"
@@ -480,6 +492,7 @@ function Collection({ onBack, authToken }) {
               />
               <select value={order} onChange={(event) => setOrder(event.target.value)} aria-label="Sortierung">
                 <option value="tier">Nach Seltenheit</option>
+                <option value="score">Nach Stärke</option>
                 <option value="name">Nach Name</option>
               </select>
             </div>
@@ -572,6 +585,7 @@ function DeckBuilder({ state, authToken }) {
         <p className="muted">Wähle {need} Karten aus deiner Sammlung. Wenn die Zeit um ist, wird der Rest zufällig gewählt. Achtung: Der Gewinner darf sich eine Karte aus deinem Deck aussuchen.</p>
         <div className="deck-picks" aria-label="Dein Deck">
           <b className="deck-count">{picks.length} / {need}</b>
+          {picks.length > 0 && <span className="deck-rating">Deckwertung <b>{deckRating(picks.map((id) => byId.get(id)))}</b></span>}
           {picks.map((id, index) => {
             const card = byId.get(id);
             return (
@@ -592,7 +606,8 @@ function DeckBuilder({ state, authToken }) {
           )}
           <select value={order} onChange={(event) => setOrder(event.target.value)} aria-label="Sortierung">
             <option value="tier">Nach Seltenheit</option>
-            <option value="name">Nach Name</option>
+            <option value="score">Nach Stärke</option>
+                <option value="name">Nach Name</option>
           </select>
         </div>
       </div>
@@ -793,7 +808,10 @@ function Lobby({ state, onLeave, account }) {
         <button className="text-button" onClick={onLeave}>Lobby verlassen</button>
       </div>
       {state.solo ? (
+        <>
         <p className="muted session-code">Spiel gegen KI · Stufe <b>{AI_LEVEL_INFO.find((level) => level.id === state.aiLevel)?.label || "Mittel"}</b></p>
+        {account && <p className="ai-note">Du spielst mit Autos aus deiner Sammlung, die KI bekommt ein Deck mit ähnlicher Deckwertung{state.aiLevel === "hard" ? " (etwas stärker)" : state.aiLevel === "easy" ? " (schwächer)" : ""}. Fehlen dir Karten, wird mit ähnlich starken Leihkarten aufgefüllt.</p>}
+        </>
       ) : (
         <p className="muted session-code">Session-ID zum Beitreten: <b>{state.sessionId}</b></p>
       )}
@@ -2149,6 +2167,7 @@ function FinishPanel({ state, onLeave }) {
                 <small>
                   {entry.tricks} {entry.tricks === 1 ? "Stich" : "Stiche"}
                   {entry.outRound ? ` · raus in Runde ${entry.outRound}` : ` · ${player.cardCount} Karten`}
+                  {game.deckRatings?.[player.id] !== undefined && ` · Deckwertung ${game.deckRatings[player.id]}`}
                 </small>
               </li>
             );

@@ -206,6 +206,12 @@ for ($i = 0; $i < 20000; $i++) {
 check(abs($drawn[1] / 200 - 60) < 2.5 && abs($drawn[2] / 200 - 25) < 2 && abs($drawn[3] / 200 - 10) < 1.5 && abs($drawn[4] / 200 - 4) < 1 && abs($drawn[5] / 200 - 1) < 0.6, 'Ziehchancen ≈ 60/25/10/4/1 % (' . implode('/', array_map(fn($n) => round($n / 200, 1), $drawn)) . ')');
 $starter = trumpf_starter_ids();
 check(count($starter) === 16 && count(array_unique($starter)) === 16 && max(array_map(fn($id) => (int) $deck[$id]['raritaet'], $starter)) === 1, 'Startkarten: 16 verschiedene Common-Autos');
+$scores = trumpf_card_scores();
+check(count($scores) === 400 && min($scores) >= 0 && max($scores) <= 100, 'Kartenstärke 0–100 für alle Autos');
+$starterRating = trumpf_deck_rating(trumpf_starter_ids());
+check($starterRating < 30, "Startdeck ist schwach (Wertung $starterRating)");
+$balanced = trumpf_balanced_deck(50, 32);
+check(count($balanced) === 32 && abs(trumpf_deck_rating($balanced) - 50) <= 1, 'ausgeglichenes Deck trifft die Zielwertung');
 $pickedRandom = trumpf_random_from_owned(['0001' => 2, '0002' => 1], 5, ['0001']);
 check(count($pickedRandom) === 2 && count(array_keys($pickedRandom, '0001', true)) <= 1, 'Zufallsauswahl nimmt Duplikate nur so oft wie vorhanden');
 
@@ -799,6 +805,23 @@ try {
         $after = call($port, ['action' => 'collection', 'authToken' => $kira['authToken']]);
         check(count($awards) >= $min && count($awards) <= $max && array_sum(array_column($after['cards'], 'qty')) === 16 + count($awards) && (!$awards || isset($awards[0]['card']['name'], $awards[0]['isNew'])), "Belohnung KI Schwer mit $per Karten: " . count($awards) . ' Auto(s)');
     }
+    $currentRoom = null;
+
+    // Gegen KI mit Konto: eigene Karten, KI-Deck mit passender Wertung
+    $currentRoom = null;
+    $kai = call($port, ['action' => 'register', 'name' => 'Kai', 'password' => 'pw']);
+    $kaiOwn = array_column(call($port, ['action' => 'collection', 'authToken' => $kai['authToken']])['cards'], 'c_id');
+    $ks = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $kai['authToken'], 'create' => true, 'ai' => ['difficulty' => 'hard', 'opponents' => 1]]);
+    $currentRoom = $ks['room'];
+    call($port, ['action' => 'setCards', 'token' => $ks['token'], 'count' => 32]);
+    $kStart = call($port, ['action' => 'start', 'token' => $ks['token']])['state'];
+    $kHand = array_column($kStart['game']['ownHand'] ?? [], 'c_id');
+    $ratings = (array) $kStart['game']['deckRatings'];
+    $mineRating = $ratings[$kStart['selfId']];
+    unset($ratings[$kStart['selfId']]);
+    $aiRating = array_values($ratings)[0];
+    check(count($kHand) === 32 && count(array_intersect(array_unique($kHand), $kaiOwn)) === 16, 'KI-Spiel: 16 eigene Karten + 16 Leihkarten');
+    check($aiRating - $mineRating >= 0 && $aiRating - $mineRating <= 8, "KI-Spiel Schwer: KI-Deck nur etwas stärker ($mineRating vs. $aiRating)");
     $currentRoom = null;
 
     // Nach Spielende zur Startseite

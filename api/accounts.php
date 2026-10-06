@@ -506,7 +506,7 @@ function trumpf_account_action(string $action, array $input): void
             $deck = trumpf_load_deck();
             $cards = [];
             foreach (trumpf_owned_cards($db, (int) $row['id']) as $cardId => $qty) {
-                $cards[] = $deck[$cardId] + ['qty' => $qty];
+                $cards[] = $deck[$cardId] + ['qty' => $qty, 'score' => trumpf_card_scores()[$cardId] ?? 0];
             }
             respond(['ok' => true, 'categories' => TRUMPF_CATEGORIES, 'cards' => $cards, 'collected' => count($cards), 'total' => count($deck)]);
         }
@@ -664,6 +664,136 @@ function trumpf_record_results(TrumpfRoom $room): void
         // Statistik ist Zusatz: Fehler dürfen das Spiel nicht stören.
     }
     $room->data['game']['xpAwards'] = $awards;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Deckwertung: Stärke jeder Karte (0–100) aus ihrem Rang in allen Spielkategorien
+
+const AI_DECK_OFFSET = ['easy' => -10, 'medium' => 0, 'hard' => 3]; // KI-Deck im Vergleich zu deinem
+
+/** Stärke je Karte: Durchschnitt, wie viele Karten sie in jeder Kategorie schlägt (0 = schwächste, 100 = stärkste). */
+function trumpf_card_scores(): array
+{
+    static $scores = null;
+    if ($scores !== null) {
+        return $scores;
+    }
+    $deck = trumpf_load_deck();
+    $total = max(1, count($deck) - 1);
+    $sum = array_fill_keys(array_map('strval', array_keys($deck)), 0.0);
+    foreach (TRUMPF_CATEGORIES as $key => $rule) {
+        $values = [];
+        foreach ($deck as $id => $card) {
+            $value = (float) $card[$key];
+            // kein Wert (z. B. Hubraum beim Elektroauto) zählt als schwächster
+            $values[(string) $id] = $value <= 0 ? -INF : ($rule['direction'] === 'low' ? -$value : $value);
+        }
+        $sorted = array_values($values);
+        sort($sorted);
+        foreach ($values as $id => $value) {
+            // Rang = Anzahl schwächerer Karten (bei Gleichstand Mitte)
+            $below = 0;
+            $equal = 0;
+            foreach ($sorted as $other) {
+                if ($other < $value) {
+                    $below++;
+                } elseif ($other == $value) {
+                    $equal++;
+                } else {
+                    break;
+                }
+            }
+            $sum[$id] += ($below + ($equal - 1) / 2) / $total;
+        }
+    }
+    $scores = [];
+    foreach ($sum as $id => $value) {
+        $scores[$id] = round(100 * $value / count(TRUMPF_CATEGORIES), 1);
+    }
+    return $scores;
+}
+
+/** Deckwertung = Durchschnitt der Kartenstärken (0–100). */
+function trumpf_deck_rating(array $cardIds): int
+{
+    if (!$cardIds) {
+        return 0;
+    }
+    $scores = trumpf_card_scores();
+    $sum = 0.0;
+    foreach ($cardIds as $id) {
+        $sum += $scores[(string) $id] ?? 0;
+    }
+    return (int) round($sum / count($cardIds));
+}
+
+/** Zufälliges Deck aus allen Autos mit einer Wertung möglichst nah an $target (ohne die Karten aus $exclude). */
+function trumpf_balanced_deck(float $target, int $count, array $exclude = []): array
+{
+    $scores = trumpf_card_scores();
+    $pool = array_values(array_diff(array_map('strval', array_keys($scores)), array_map('strval', $exclude)));
+    if (count($pool) <= $count) {
+        return trumpf_shuffle($pool);
+    }
+    // Start: Karten aus einem Fenster um den Zielwert, danach tauschen, bis der Schnitt passt
+    usort($pool, static function ($a, $b) use ($scores, $target) {
+        return abs($scores[$a] - $target) <=> abs($scores[$b] - $target);
+    });
+    $window = array_slice($pool, 0, max($count * 3, 40));
+    $hand = array_slice(trumpf_shuffle($window), 0, $count);
+    $rest = array_values(array_diff($pool, $hand));
+    $sum = 0.0;
+    foreach ($hand as $id) {
+        $sum += $scores[$id];
+    }
+    for ($i = 0; $i < 400 && abs($sum / $count - $target) > 0.5; $i++) {
+        $h = random_int(0, $count - 1);
+        $r = random_int(0, count($rest) - 1);
+        $next = $sum - $scores[$hand[$h]] + $scores[$rest[$r]];
+        if (abs($next / $count - $target) < abs($sum / $count - $target)) {
+            [$hand[$h], $rest[$r]] = [$rest[$r], $hand[$h]];
+            $sum = $next;
+        }
+    }
+    return trumpf_shuffle($hand);
+}
+
+/**
+ * Gegen die KI mit eigenen Karten: der Spieler bekommt zufällige Karten aus seiner Sammlung
+ * (zu wenige werden mit ähnlich starken Leihkarten aufgefüllt), jede KI ein Deck mit passender Wertung.
+ * Gibt [playerId => [cardId, …]] zurück oder null (Gast/keine Datenbank → wie bisher zufällig).
+ */
+function trumpf_solo_hands(TrumpfRoom $room): ?array
+{
+    $db = trumpf_db();
+    $need = (int) $room->data['cardsPerPlayer'];
+    $human = null;
+    foreach ($room->data['players'] as $player) {
+        if (empty($player['bot'])) {
+            $human = $player;
+        }
+    }
+    if ($db === null || $human === null || ($human['accountId'] ?? null) === null) {
+        return null;
+    }
+    try {
+        $owned = trumpf_owned_cards($db, (int) $human['accountId']);
+    } catch (PDOException $error) {
+        return null;
+    }
+    $mine = trumpf_random_from_owned($owned, $need);
+    if (count($mine) < $need) {
+        $mine = array_merge($mine, trumpf_balanced_deck(trumpf_deck_rating($mine), $need - count($mine), $mine));
+    }
+    $hands = [$human['id'] => $mine];
+    $target = trumpf_deck_rating($mine) + (AI_DECK_OFFSET[$room->data['aiLevel'] ?? 'medium'] ?? 0);
+    foreach ($room->data['players'] as $player) {
+        if (!empty($player['bot'])) {
+            // die KI darf dieselben Autos haben wie du, sonst wäre gegen ein Starterdeck kein schwaches Deck mehr möglich
+            $hands[$player['id']] = trumpf_balanced_deck(max(5, min(95, $target)), $need);
+        }
+    }
+    return $hands;
 }
 
 /** Sammlungen aller Spieler im Raum für die Modi mit eigenen Karten. Gibt [playerId => [cardId => Anzahl]] oder eine Fehlermeldung zurück. */
