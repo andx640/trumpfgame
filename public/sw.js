@@ -16,7 +16,6 @@ self.addEventListener("push", (event) => {
       badge: "/favicon-96x96.png",
       tag: data.tag || "andi-trumpf",
       renotify: true,
-      vibrate: [120, 60, 120],
       data: { url: data.url || "/" }
     })
   );
