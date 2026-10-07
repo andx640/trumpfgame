@@ -5975,7 +5975,7 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 /* Karten */
 .pack-hand {
   --slot-w: min(27vw, 150px);
-  --zoom: 1.7;
+ 
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -5985,15 +5985,15 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   padding: 24px 0;
 }
 
-.pack-hand[data-n="1"] { --slot-w: min(56vw, 250px); --zoom: 1.35; }
-.pack-hand[data-n="2"] { --slot-w: min(38vw, 210px); --zoom: 1.4; }
-.pack-hand[data-n="3"] { --slot-w: min(29vw, 190px); --zoom: 1.5; }
+.pack-hand[data-n="1"] { --slot-w: min(56vw, 250px); }
+.pack-hand[data-n="2"] { --slot-w: min(38vw, 210px); }
+.pack-hand[data-n="3"] { --slot-w: min(29vw, 190px); }
 
 @media (min-width: 761px) {
-  .pack-hand { --slot-w: min(17vw, 186px); --zoom: 1.55; }
-  .pack-hand[data-n="1"] { --slot-w: min(26vw, 270px); --zoom: 1.4; }
-  .pack-hand[data-n="2"] { --slot-w: min(22vw, 230px); --zoom: 1.45; }
-  .pack-hand[data-n="3"] { --slot-w: min(20vw, 210px); --zoom: 1.5; }
+  .pack-hand { --slot-w: min(17vw, 186px); }
+  .pack-hand[data-n="1"] { --slot-w: min(26vw, 270px); }
+  .pack-hand[data-n="2"] { --slot-w: min(22vw, 230px); }
+  .pack-hand[data-n="3"] { --slot-w: min(20vw, 210px); }
 }
 
 .pack-slot {
@@ -6006,7 +6006,6 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   transition: transform 450ms cubic-bezier(0.2, 0.8, 0.25, 1), opacity 400ms, filter 400ms;
 }
 
-.pack-slot.is-active { z-index: 6; transform: translateX(var(--dx, 0px)) scale(var(--zoom)); }
 
 
 .pack-slot.tier-1 { --tier-color: var(--tier-1); }
@@ -6046,21 +6045,6 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 .pack-slot.is-up .pf-back { visibility: hidden; }
 
 /* Karte lädt sich auf */
-.pack-slot.is-charging::before {
-  content: "";
-  position: absolute;
-  inset: -28%;
-  z-index: -1;
-  background: radial-gradient(circle, rgba(255, 214, 120, 0.7) 0%, rgba(255, 170, 60, 0) 62%);
-  opacity: 0;
-  animation: card-glow 500ms ease-in forwards;
-}
-
-@keyframes card-glow {
-  0% { opacity: 0; transform: scale(0.7); }
-  100% { opacity: 1; transform: scale(1.15); }
-}
-
 /* Aufdecken: je seltener, desto größer */
 .reveal-fx {
   position: absolute;
