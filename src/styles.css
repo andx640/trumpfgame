@@ -6351,3 +6351,43 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 }
 
 .pack-hand[data-n="many"] .pack-slot.is-entering { animation-delay: calc(var(--i) * 22ms + 80ms); }
+
+/* Karten kommen einzeln: immer nur eine große Karte in der Mitte */
+.pack-hand[data-n="1"] { --slot-w: min(60vw, 290px); --zoom: 1; padding: 8px 0; }
+
+@media (min-width: 761px) {
+  .pack-hand[data-n="1"] { --slot-w: min(24vw, 270px); --zoom: 1; }
+}
+
+.pack-hand[data-n="1"] .pack-slot:not(.is-entering) { animation: next-in 380ms cubic-bezier(0.2, 0.9, 0.3, 1) backwards; }
+
+@keyframes next-in {
+  from { opacity: 0; transform: translateX(70px) scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+
+.pack-hint { margin: 0; min-height: 18px; color: var(--muted); font-size: 13px; letter-spacing: 0.04em; }
+
+.pack-dots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: min(92vw, 420px);
+}
+
+.pack-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  transition: background 200ms, box-shadow 200ms;
+}
+
+.pack-dots i.is-current { box-shadow: 0 0 0 2px var(--acid); }
+.pack-dots i.is-done { background: var(--dot-color, var(--tier-1)); }
+.pack-dots i.tier-1 { --dot-color: var(--tier-1); }
+.pack-dots i.tier-2 { --dot-color: var(--tier-2); }
+.pack-dots i.tier-3 { --dot-color: var(--tier-3); }
+.pack-dots i.tier-4 { --dot-color: var(--tier-4); }
+.pack-dots i.tier-5 { --dot-color: var(--tier-5); }
