@@ -433,7 +433,7 @@ function Home({ onNew, onJoin, onCollection, onLeaderboard, onDaily, dailyBusy =
             <span>
               <strong>Tagespack</strong>
               <small>
-                {!account ? "Anmelden und täglich 20 Karten holen" : dailyReady ? "Heute gratis: 20 Karten" : `Schon geöffnet · nächstes in ${dailyWait}`}
+                {!account ? "Anmelden und alle 24 Std Karten holen" : dailyReady ? "Gratis: 1–5 Karten, alle 24 Std" : `Schon geöffnet · nächstes in ${dailyWait}`}
               </small>
             </span>
             {dailyReady ? <b className="home-daily-badge">1×</b> : <HomeArrow />}

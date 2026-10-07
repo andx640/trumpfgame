@@ -12,7 +12,9 @@ const XP_PER_TRICK = 10;
 const XP_PER_OPPONENT = 25; // Sieg gegen mehr Gegner bringt mehr
 const ONLINE_WINDOW_S = 75;   // so lange nach dem letzten Lebenszeichen gilt ein Spieler als online
 const INVITE_TTL_S = 1800;    // Einladungen verfallen nach 30 Minuten
-const DAILY_PACK_CARDS = 20; // Tagespack: einmal pro Tag und Konto, Tageswechsel um Mitternacht deutscher Zeit
+const DAILY_PACK_MIN = 1; // Tagespack: zufällig 1 bis 5 Karten, danach 24 Stunden Pause
+const DAILY_PACK_MAX = 5;
+const DAILY_COOLDOWN_S = 86400;
 const XP_AI_FACTOR = ['easy' => 0.2, 'medium' => 0.5, 'hard' => 1.0]; // gegen Leicht 20 %, gegen Mittel 50 % der XP
 
 function trumpf_db(): ?PDO
@@ -318,46 +320,60 @@ function trumpf_random_from_owned(array $owned, int $count, array $taken = []): 
 }
 
 // ---------------------------------------------------------------------------------------------
-// Tagespack: einmal pro Tag ein Pack mit DAILY_PACK_CARDS Karten
+// Tagespack: alle 24 Stunden ein Pack mit 1 bis 5 zufälligen Karten (Seltenheit nach den üblichen Chancen)
 
-/** Der heutige Tag (Europe/Berlin) als Y-m-d. */
-function trumpf_today(): string
+/** Wann das Tagespack zuletzt geöffnet wurde (Unix-Sekunden, 0 = noch nie). Ältere Einträge sind ein Datum (Y-m-d), das zählt als dessen Mitternacht in Berlin. */
+function trumpf_daily_last(array $row): int
 {
-    return (new DateTime('now', new DateTimeZone('Europe/Berlin')))->format('Y-m-d');
+    $value = (string) ($row['last_daily'] ?? '');
+    if ($value === '') {
+        return 0;
+    }
+    if (ctype_digit($value)) {
+        return (int) $value;
+    }
+    $date = DateTime::createFromFormat('!Y-m-d', $value, new DateTimeZone('Europe/Berlin'));
+    return $date ? (int) $date->format('U') : 0;
 }
 
-/** Zeitpunkt (ms) des nächsten Mitternachts in Europe/Berlin: ab dann gibt es das nächste Tagespack. */
-function trumpf_next_daily_ms(): int
+/** Ab wann (Unix-Sekunden) das nächste Tagespack möglich ist. */
+function trumpf_daily_next(array $row): int
 {
-    $midnight = (new DateTime('tomorrow', new DateTimeZone('Europe/Berlin')));
-    return (int) $midnight->format('U') * 1000;
+    $last = trumpf_daily_last($row);
+    return $last > 0 ? $last + DAILY_COOLDOWN_S : 0;
 }
 
 function trumpf_daily_available(array $row): bool
 {
-    return ($row['last_daily'] ?? null) !== trumpf_today();
+    return time() >= trumpf_daily_next($row);
 }
 
-/** Tagespack abholen: zieht die Karten nach den Seltenheitschancen und schreibt sie gut. Nur einmal pro Tag (auch bei gleichzeitigen Anfragen). */
+/** Tagespack abholen. Die Zeit wird zuerst reserviert, erst dann gibt es Karten: zwei gleichzeitige Anfragen können es nicht doppelt abholen. */
 function trumpf_daily_claim(PDO $db, array $row): array
 {
-    $today = trumpf_today();
-    // Den Tag zuerst reservieren: nur wer ihn damit gewinnt, bekommt die Karten (kein doppeltes Abholen bei zwei Anfragen)
-    $claim = $db->prepare('UPDATE accounts SET last_daily = ? WHERE id = ? AND (last_daily IS NULL OR last_daily <> ?)');
-    $claim->execute([$today, (int) $row['id'], $today]);
+    if (!trumpf_daily_available($row)) {
+        return ['ok' => false, 'message' => 'Dein Tagespack gibt es nur alle 24 Stunden. Das nächste ist noch nicht soweit.', 'nextAt' => trumpf_daily_next($row) * 1000];
+    }
+    $now = time();
+    $old = $row['last_daily'] ?? null;
+    $claim = $old === null || $old === ''
+        ? $db->prepare("UPDATE accounts SET last_daily = ? WHERE id = ? AND (last_daily IS NULL OR last_daily = '')")
+        : $db->prepare('UPDATE accounts SET last_daily = ? WHERE id = ? AND last_daily = ?');
+    $claim->execute($old === null || $old === '' ? [(string) $now, (int) $row['id']] : [(string) $now, (int) $row['id'], (string) $old]);
     if ($claim->rowCount() === 0) {
-        return ['ok' => false, 'message' => 'Dein Tagespack hast du heute schon geöffnet. Morgen gibt es das nächste.', 'nextAt' => trumpf_next_daily_ms()];
+        return ['ok' => false, 'message' => 'Dein Tagespack hast du gerade schon geöffnet.', 'nextAt' => ($now + DAILY_COOLDOWN_S) * 1000];
     }
     trumpf_owned_cards($db, (int) $row['id']); // Startkarten zuerst, damit „neu“ stimmt
     $deck = trumpf_load_deck();
     $scores = trumpf_card_scores();
+    $count = random_int(DAILY_PACK_MIN, DAILY_PACK_MAX);
     $cards = [];
-    for ($i = 0; $i < DAILY_PACK_CARDS; $i++) {
+    for ($i = 0; $i < $count; $i++) {
         $cardId = trumpf_draw_card();
         $isNew = trumpf_collection_add($db, (int) $row['id'], $cardId);
         $cards[] = ['card' => $deck[$cardId] + ['score' => $scores[$cardId] ?? 0], 'isNew' => $isNew];
     }
-    return ['ok' => true, 'cards' => $cards, 'categories' => TRUMPF_CATEGORIES, 'nextAt' => trumpf_next_daily_ms()];
+    return ['ok' => true, 'cards' => $cards, 'categories' => TRUMPF_CATEGORIES, 'nextAt' => ($now + DAILY_COOLDOWN_S) * 1000];
 }
 
 /** Level aus Gesamt-XP. Von Level L nach L+1 braucht man 100 + 50·(L−1) XP, jedes Level also 50 mehr. */
@@ -531,8 +547,7 @@ function trumpf_account_with_rank(PDO $db, array $row): array
         'collected' => (int) $collected->fetchColumn(),
         'totalCards' => count(trumpf_load_deck()),
         'dailyAvailable' => trumpf_daily_available($row),
-        'dailyNextAt' => trumpf_next_daily_ms(),
-        'dailyCards' => DAILY_PACK_CARDS,
+        'dailyNextAt' => trumpf_daily_next($row) * 1000,
         'rank' => trumpf_account_rank($db, $row),
         'players' => (int) $db->query('SELECT COUNT(*) FROM accounts')->fetchColumn(),
     ];
