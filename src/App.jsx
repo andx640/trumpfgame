@@ -748,8 +748,8 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
                   </button>
                 ))}
               </div>
-              {difficulty === "easy" && <p className="ai-note" role="status">Gegen „Leicht“ gibt es keine XP.</p>}
-              {difficulty === "medium" && <p className="ai-note" role="status">Gegen „Mittel“ gibt es nur 35 % der XP.</p>}
+              {difficulty === "easy" && <p className="ai-note" role="status">Gegen „Leicht“ gibt es nur 20 % der XP.</p>}
+              {difficulty === "medium" && <p className="ai-note" role="status">Gegen „Mittel“ gibt es nur 50 % der XP.</p>}
               {difficulty === "hard" && <p className="ai-note" role="status">Sieg mit 16 Karten: 1 neues Auto. Mit 32 Karten: Pack mit 3–5 Autos.{account ? "" : " Nur mit Konto."}</p>}
               <span className="field-label">Gegner</span>
               <div className="ai-opponents" role="radiogroup" aria-label="Anzahl der Gegner">
@@ -2149,11 +2149,9 @@ function FinishPanel({ state, onLeave }) {
             <strong>+{award.xp} XP</strong>
             {award.level > award.levelBefore && <span className="finish-levelup">Level {award.level} erreicht!</span>}
             <XpBar level={award.level} xpInLevel={award.xpInLevel} xpForLevel={award.xpForLevel} />
-            {state.solo && state.aiLevel === "medium" && <small className="finish-xp-note">Gegen „Mittel“ gibt es nur 35 % der XP.</small>}
+            {state.solo && state.aiLevel === "easy" && <small className="finish-xp-note">Gegen „Leicht“ gibt es nur 20 % der XP.</small>}
+            {state.solo && state.aiLevel === "medium" && <small className="finish-xp-note">Gegen „Mittel“ gibt es nur 50 % der XP.</small>}
           </div>
-        )}
-        {award && award.xp === 0 && state.solo && (
-          <p className="muted finish-no-xp">Gegen „Leicht“ gibt es keine XP.</p>
         )}
         {game.cardAwards?.length > 0 && <PackReveal awards={game.cardAwards} categories={state.categories} />}
         {state.risk && <RiskPanel state={state} />}

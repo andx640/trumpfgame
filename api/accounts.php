@@ -12,7 +12,7 @@ const XP_PER_TRICK = 10;
 const XP_PER_OPPONENT = 25; // Sieg gegen mehr Gegner bringt mehr
 const ONLINE_WINDOW_S = 75;   // so lange nach dem letzten Lebenszeichen gilt ein Spieler als online
 const INVITE_TTL_S = 1800;    // Einladungen verfallen nach 30 Minuten
-const XP_AI_FACTOR = ['easy' => 0.0, 'medium' => 0.35, 'hard' => 1.0]; // gegen Leicht gibt es keine XP
+const XP_AI_FACTOR = ['easy' => 0.2, 'medium' => 0.5, 'hard' => 1.0]; // gegen Leicht 20 %, gegen Mittel 50 % der XP
 
 function trumpf_db(): ?PDO
 {
@@ -631,7 +631,7 @@ function trumpf_record_results(TrumpfRoom $room): void
             $tricks = (int) ($room->data['stats']['players'][$player['id']]['tricks'] ?? 0);
             $xp = ($won ? XP_WIN + XP_PER_OPPONENT * ($opponents - 1) : XP_PLAYED) + XP_PER_TRICK * $tricks;
             if (!empty($room->data['solo'])) {
-                // Gegen die KI gibt es je nach Stufe weniger XP, gegen Leicht gar keine.
+                // Gegen die KI gibt es je nach Stufe weniger XP (Leicht 20 %, Mittel 50 %).
                 $xp = (int) round($xp * (XP_AI_FACTOR[$room->data['aiLevel'] ?? 'medium'] ?? 0.7));
             }
 
