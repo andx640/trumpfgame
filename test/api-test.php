@@ -740,6 +740,29 @@ try {
     $risaProfile = call($port, ['action' => 'profile', 'authToken' => $risa['authToken']]);
     check($risaProfile['account']['collected'] === 16 && $risaProfile['account']['totalCards'] === 400, 'Profil zeigt gesammelte Autos');
 
+    // Tagespack: einmal pro Tag 20 Karten
+    $dana = call($port, ['action' => 'register', 'name' => 'Dana', 'password' => 'pw']);
+    $danaProfile = call($port, ['action' => 'profile', 'authToken' => $dana['authToken']]);
+    check($danaProfile['account']['dailyAvailable'] === true && $danaProfile['account']['dailyCards'] === 20 && $danaProfile['account']['dailyNextAt'] > time() * 1000, 'Tagespack: für neues Konto verfügbar, nächster Termin liegt in der Zukunft');
+    check(call($port, ['action' => 'dailyClaim'])['ok'] === false, 'Tagespack: ohne Anmeldung nicht möglich');
+    $before = array_sum(array_column(call($port, ['action' => 'collection', 'authToken' => $dana['authToken']])['cards'], 'qty'));
+    $daily = call($port, ['action' => 'dailyClaim', 'authToken' => $dana['authToken']]);
+    check($daily['ok'] && count($daily['cards']) === 20 && isset($daily['cards'][0]['card']['name'], $daily['cards'][0]['card']['score'], $daily['cards'][0]['isNew']) && isset($daily['categories']['leistung']), 'Tagespack: 20 Karten mit Werten, Stärke und „neu“-Markierung');
+    $after = call($port, ['action' => 'collection', 'authToken' => $dana['authToken']]);
+    check(array_sum(array_column($after['cards'], 'qty')) === $before + 20, 'Tagespack: alle 20 Karten sind in der Sammlung');
+    $newCount = count(array_filter($daily['cards'], fn($c) => $c['isNew']));
+    check($after['collected'] === 16 + $newCount, "Tagespack: genau die als neu markierten Autos kommen zur Sammlung dazu ($newCount neu)");
+    $again = call($port, ['action' => 'dailyClaim', 'authToken' => $dana['authToken']]);
+    check($again['ok'] === false && strpos($again['message'], 'heute schon') !== false && $again['nextAt'] > time() * 1000, 'Tagespack: heute nur einmal');
+    check(call($port, ['action' => 'profile', 'authToken' => $dana['authToken']])['account']['dailyAvailable'] === false, 'Tagespack: Profil zeigt „heute schon geöffnet“');
+    $tdb = new PDO("sqlite:$dataDir/accounts.sqlite");
+    $tdb->exec("UPDATE accounts SET last_daily = '2000-01-01' WHERE name = 'Dana'");
+    check(call($port, ['action' => 'profile', 'authToken' => $dana['authToken']])['account']['dailyAvailable'] === true, 'Tagespack: am nächsten Tag wieder verfügbar');
+    check(call($port, ['action' => 'dailyClaim', 'authToken' => $dana['authToken']])['ok'] === true, 'Tagespack: am nächsten Tag wieder abholbar');
+    $dirk = call($port, ['action' => 'register', 'name' => 'Dirk', 'password' => 'pw']);
+    $other = call($port, ['action' => 'dailyClaim', 'authToken' => $dirk['authToken']]);
+    check($other['ok'] === true && count($other['cards']) === 20, 'Tagespack: jedes Konto hat sein eigenes');
+
     $currentRoom = null;
     $rh = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $risa['authToken'], 'create' => true]);
     $currentRoom = $rh['room'];

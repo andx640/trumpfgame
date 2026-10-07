@@ -90,6 +90,8 @@ function App() {
   const [account, setAccount] = useState(null);
   const [invites, setInvites] = useState([]);
   const [banner, setBanner] = useState(null);
+  const [daily, setDaily] = useState(null); // geöffnetes Tagespack: { cards, categories }
+  const [dailyBusy, setDailyBusy] = useState(false);
   const notifiedInvites = useRef(new Set());
 
   const loadProfile = useCallback((token) => {
@@ -105,6 +107,25 @@ function App() {
   }, []);
 
   useEffect(() => loadProfile(authToken), [authToken, loadProfile]);
+
+  // Tagespack: einmal pro Tag. Ohne Konto geht es zur Anmeldung, der Server entscheidet, ob heute noch eins da ist.
+  const openDaily = () => {
+    if (!account) {
+      setView("account");
+      return;
+    }
+    if (dailyBusy) return;
+    setDailyBusy(true);
+    unlockAudio();
+    socket.request("dailyClaim", { authToken }).then((result) => {
+      if (result.ok) {
+        setDaily(result);
+      } else {
+        setNotice(result.message || "Das Tagespack ist gerade nicht verfügbar.");
+        loadProfile(authToken);
+      }
+    }).catch(() => setNotice("Keine Verbindung zum Server.")).finally(() => setDailyBusy(false));
+  };
   // nach einer Partie die neue Statistik holen
   useEffect(() => {
     if (state?.status === "finished") loadProfile(authToken);
@@ -278,6 +299,8 @@ function App() {
             onJoin={() => setView("join")}
             onCollection={() => setView("collection")}
             onLeaderboard={() => setView("leaderboard")}
+            onDaily={openDaily}
+            dailyBusy={dailyBusy}
             account={account}
             inviteCount={invites.length}
             onAccount={() => setView(account ? "profile" : "account")}
@@ -317,6 +340,17 @@ function App() {
       {banner && <InviteBanner invite={banner} canJoin={!state || state.status === "lobby"} onAccept={() => acceptInvite(banner)} onDecline={() => declineInvite(banner)} onClose={() => setBanner(null)} />}
       {state && !state.solo && <ChatWidget chat={state.chat || []} selfId={state.selfId} sessionId={state.sessionId} />}
       {notice && <div className="toast" role="alert">{notice}</div>}
+      {daily && (
+        <PackOpening
+          awards={daily.cards}
+          categories={daily.categories}
+          intro="daily"
+          onDone={() => {
+            setDaily(null);
+            loadProfile(authToken);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -358,7 +392,21 @@ function SlideStage({ pageKey, rank, children }) {
   return <div className="slide-stage">{panes}</div>;
 }
 
-function Home({ onNew, onJoin, onCollection, onLeaderboard, account, onAccount, inviteCount = 0 }) {
+function formatWait(ms) {
+  const minutes = Math.max(1, Math.ceil(ms / 60_000));
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h} Std ${m} Min` : `${m} Min`;
+}
+
+function Home({ onNew, onJoin, onCollection, onLeaderboard, onDaily, dailyBusy = false, account, onAccount, inviteCount = 0 }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setTick((n) => n + 1), 30_000); // Countdown bis zum nächsten Tagespack
+    return () => window.clearInterval(timer);
+  }, []);
+  const dailyReady = Boolean(account) && (account.dailyAvailable || socket.now() >= account.dailyNextAt);
+  const dailyWait = account && !dailyReady ? formatWait(account.dailyNextAt - socket.now()) : "";
   return (
     <section className="home">
       <button type="button" className="home-account" onClick={onAccount}>
@@ -379,6 +427,16 @@ function Home({ onNew, onJoin, onCollection, onLeaderboard, account, onAccount, 
             <CardsIcon />
             <span><strong>Neues Spiel</strong><small>Mit Freunden oder gegen KI</small></span>
             <HomeArrow />
+          </button>
+          <button type="button" className={`home-card home-daily ${dailyReady ? "is-ready" : ""} ${account && !dailyReady ? "is-done" : ""}`} onClick={onDaily} disabled={dailyBusy}>
+            <img className="home-pack" src={packArt} alt="" draggable="false" />
+            <span>
+              <strong>Tagespack</strong>
+              <small>
+                {!account ? "Anmelden und täglich 20 Karten holen" : dailyReady ? "Heute gratis: 20 Karten" : `Schon geöffnet · nächstes in ${dailyWait}`}
+              </small>
+            </span>
+            {dailyReady ? <b className="home-daily-badge">1×</b> : <HomeArrow />}
           </button>
           <button type="button" className="home-card" onClick={onJoin}>
             <PeopleIcon />
@@ -2309,11 +2367,11 @@ function Dust({ count }) {
 // Belohnung nach dem Spiel: erst nur das Pack, dann Aufladen und Explosion.
 // Danach liegen die Karten verdeckt da und jede wird einzeln angetippt: Karte rüttelt kurz, dreht sich um und schlägt auf.
 // Legendary und Mythic lassen dabei den Bildschirm beben.
-function PackOpening({ awards, categories, onDone }) {
+function PackOpening({ awards, categories, onDone, intro = "win" }) {
   const cards = awards;
   const total = cards.length;
   const tierOf = (index) => Number(cards[index]?.card.raritaet) || 1;
-  const [phase, setPhase] = useState("win"); // win → idle → charge → burst → pick
+  const [phase, setPhase] = useState(intro === "win" ? "win" : "idle"); // win (nur nach einem Sieg) → idle → charge → burst → pick
   const [status, setStatus] = useState({}); // Karte → charging | flipping | landed | up
   const [focus, setFocus] = useState(-1); // vergrößerte Karte
   const [quake, setQuake] = useState(null); // { tier, n, x, y } beim Einschlag von Legendary/Mythic
@@ -2416,8 +2474,8 @@ function PackOpening({ awards, categories, onDone }) {
     slot.style.setProperty("--dx", `${Math.round(dx)}px`);
   }, [focus]);
 
-  let eyebrow = "BELOHNUNG";
-  let headline = <>Dein Pack wartet</>;
+  let eyebrow = intro === "daily" ? "TAGESPACK" : "BELOHNUNG";
+  let headline = intro === "daily" ? <>Dein Tagespack wartet</> : <>Dein Pack wartet</>;
   if (phase === "charge") headline = <>Es lädt sich auf …</>;
   if (phase === "burst") headline = <>Jetzt!</>;
   if (phase === "pick") {
@@ -2458,7 +2516,7 @@ function PackOpening({ awards, categories, onDone }) {
           <h2 key={`${phase}-${focus}-${focusStatus}-${allSettled}`}>{headline}</h2>
         </div>
 
-        <div className="pack-main">
+        <div className={`pack-main ${total > 5 ? "is-many" : ""}`}>
           <div className="pack-stage">
             {(phase === "charge" || phase === "burst") && <div className="pack-rays" />}
             {showPack && (
@@ -2483,7 +2541,7 @@ function PackOpening({ awards, categories, onDone }) {
           </div>
 
           {phase === "burst" || phase === "pick" ? (
-            <div className="pack-hand" data-n={Math.min(total, 5)} ref={handRef}>
+            <div className="pack-hand" data-n={total > 5 ? "many" : total} ref={handRef}>
               {cards.map((award, index) => {
                 const tier = tierOf(index);
                 const state = status[index];

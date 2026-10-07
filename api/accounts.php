@@ -12,6 +12,7 @@ const XP_PER_TRICK = 10;
 const XP_PER_OPPONENT = 25; // Sieg gegen mehr Gegner bringt mehr
 const ONLINE_WINDOW_S = 75;   // so lange nach dem letzten Lebenszeichen gilt ein Spieler als online
 const INVITE_TTL_S = 1800;    // Einladungen verfallen nach 30 Minuten
+const DAILY_PACK_CARDS = 20; // Tagespack: einmal pro Tag und Konto, Tageswechsel um Mitternacht deutscher Zeit
 const XP_AI_FACTOR = ['easy' => 0.2, 'medium' => 0.5, 'hard' => 1.0]; // gegen Leicht 20 %, gegen Mittel 50 % der XP
 
 function trumpf_db(): ?PDO
@@ -61,6 +62,7 @@ function trumpf_ensure_schema(PDO $db): void
             xp INTEGER NOT NULL DEFAULT 0,
             current_streak INTEGER NOT NULL DEFAULT 0,
             best_streak INTEGER NOT NULL DEFAULT 0,
+            last_daily TEXT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             last_login TEXT NULL
         )');
@@ -111,6 +113,7 @@ function trumpf_ensure_schema(PDO $db): void
         xp INT UNSIGNED NOT NULL DEFAULT 0,
         current_streak INT UNSIGNED NOT NULL DEFAULT 0,
         best_streak INT UNSIGNED NOT NULL DEFAULT 0,
+        last_daily VARCHAR(10) NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_login DATETIME NULL,
         PRIMARY KEY (id),
@@ -170,6 +173,11 @@ function trumpf_add_streak_columns(PDO $db): void
         } catch (PDOException $missing) {
             $db->exec("ALTER TABLE accounts ADD COLUMN $column INT NOT NULL DEFAULT 0");
         }
+    }
+    try {
+        $db->query('SELECT last_daily FROM accounts LIMIT 1');
+    } catch (PDOException $missing) {
+        $db->exec('ALTER TABLE accounts ADD COLUMN last_daily VARCHAR(10) NULL');
     }
 }
 
@@ -307,6 +315,49 @@ function trumpf_random_from_owned(array $owned, int $count, array $taken = []): 
         }
     }
     return array_slice(trumpf_shuffle($pool), 0, max(0, $count));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tagespack: einmal pro Tag ein Pack mit DAILY_PACK_CARDS Karten
+
+/** Der heutige Tag (Europe/Berlin) als Y-m-d. */
+function trumpf_today(): string
+{
+    return (new DateTime('now', new DateTimeZone('Europe/Berlin')))->format('Y-m-d');
+}
+
+/** Zeitpunkt (ms) des nächsten Mitternachts in Europe/Berlin: ab dann gibt es das nächste Tagespack. */
+function trumpf_next_daily_ms(): int
+{
+    $midnight = (new DateTime('tomorrow', new DateTimeZone('Europe/Berlin')));
+    return (int) $midnight->format('U') * 1000;
+}
+
+function trumpf_daily_available(array $row): bool
+{
+    return ($row['last_daily'] ?? null) !== trumpf_today();
+}
+
+/** Tagespack abholen: zieht die Karten nach den Seltenheitschancen und schreibt sie gut. Nur einmal pro Tag (auch bei gleichzeitigen Anfragen). */
+function trumpf_daily_claim(PDO $db, array $row): array
+{
+    $today = trumpf_today();
+    // Den Tag zuerst reservieren: nur wer ihn damit gewinnt, bekommt die Karten (kein doppeltes Abholen bei zwei Anfragen)
+    $claim = $db->prepare('UPDATE accounts SET last_daily = ? WHERE id = ? AND (last_daily IS NULL OR last_daily <> ?)');
+    $claim->execute([$today, (int) $row['id'], $today]);
+    if ($claim->rowCount() === 0) {
+        return ['ok' => false, 'message' => 'Dein Tagespack hast du heute schon geöffnet. Morgen gibt es das nächste.', 'nextAt' => trumpf_next_daily_ms()];
+    }
+    trumpf_owned_cards($db, (int) $row['id']); // Startkarten zuerst, damit „neu“ stimmt
+    $deck = trumpf_load_deck();
+    $scores = trumpf_card_scores();
+    $cards = [];
+    for ($i = 0; $i < DAILY_PACK_CARDS; $i++) {
+        $cardId = trumpf_draw_card();
+        $isNew = trumpf_collection_add($db, (int) $row['id'], $cardId);
+        $cards[] = ['card' => $deck[$cardId] + ['score' => $scores[$cardId] ?? 0], 'isNew' => $isNew];
+    }
+    return ['ok' => true, 'cards' => $cards, 'categories' => TRUMPF_CATEGORIES, 'nextAt' => trumpf_next_daily_ms()];
 }
 
 /** Level aus Gesamt-XP. Von Level L nach L+1 braucht man 100 + 50·(L−1) XP, jedes Level also 50 mehr. */
@@ -479,6 +530,9 @@ function trumpf_account_with_rank(PDO $db, array $row): array
     return trumpf_account_public($row) + [
         'collected' => (int) $collected->fetchColumn(),
         'totalCards' => count(trumpf_load_deck()),
+        'dailyAvailable' => trumpf_daily_available($row),
+        'dailyNextAt' => trumpf_next_daily_ms(),
+        'dailyCards' => DAILY_PACK_CARDS,
         'rank' => trumpf_account_rank($db, $row),
         'players' => (int) $db->query('SELECT COUNT(*) FROM accounts')->fetchColumn(),
     ];
@@ -499,6 +553,13 @@ function trumpf_account_action(string $action, array $input): void
                 trumpf_owned_cards($db, (int) $row['id']); // Startkarten auch für ältere Konten
             }
             respond($row ? ['ok' => true, 'account' => trumpf_account_with_rank($db, $row)] : ['ok' => false, 'code' => 'logged_out', 'message' => 'Bitte melde dich neu an.']);
+        }
+        if ($action === 'dailyClaim') {
+            $row = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
+            if (!$row) {
+                respond(['ok' => false, 'code' => 'logged_out', 'message' => 'Melde dich an, um dein Tagespack zu öffnen.']);
+            }
+            respond(trumpf_daily_claim($db, $row));
         }
         if ($action === 'collection') {
             // Nur die eigenen Karten: welche Autos es sonst noch gibt, bleibt geheim.
