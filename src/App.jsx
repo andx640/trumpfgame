@@ -2192,7 +2192,7 @@ function FinishPanel({ state, onLeave }) {
   );
 }
 
-// Belohnung gegen KI „Schwer“: die Karten werden nacheinander aufgedeckt
+// Belohnung für einen Sieg gegen die KI: die Karten werden nacheinander aufgedeckt
 function PackReveal({ awards, categories }) {
   return (
     <div className="pack-reveal">

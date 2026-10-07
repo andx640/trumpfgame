@@ -791,11 +791,11 @@ try {
     check($pick['ok'] && $pick['state']['risk']['done'] && $pick['state']['risk']['picks'][$rolfId]['c_id'] === $prey, 'Risiko: Karte gewählt');
     check(($rolfAfter[$prey] ?? 0) === $rolfBefore[$prey] - 1 && ($risaAfter[$prey] ?? 0) === ($risaBefore[$prey] ?? 0) + 1 && array_sum($rolfAfter) === 15 && array_sum($risaAfter) === 17, 'Risiko: Karte wechselt dauerhaft den Besitzer');
 
-    // Belohnung gegen KI Schwer
-    foreach ([[8, 0, 0], [16, 1, 1], [32, 3, 5]] as [$per, $min, $max]) {
+    // Belohnung gegen KI: Leicht 1–3, Mittel 1–3, Schwer 3–5, Schwer mit 32 Karten genau 3
+    foreach ([['easy', 8, 1, 3], ['medium', 16, 1, 3], ['hard', 8, 3, 5], ['hard', 16, 3, 5], ['hard', 32, 3, 3]] as [$level, $per, $min, $max]) {
         $currentRoom = null;
-        $kira = call($port, ['action' => 'register', 'name' => "Kira$per", 'password' => 'pw']);
-        $kr = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $kira['authToken'], 'create' => true, 'ai' => ['difficulty' => 'hard', 'opponents' => 1]]);
+        $kira = call($port, ['action' => 'register', 'name' => "Kira$level$per", 'password' => 'pw']);
+        $kr = call($port, ['action' => 'join', 'name' => 'x', 'authToken' => $kira['authToken'], 'create' => true, 'ai' => ['difficulty' => $level, 'opponents' => 1]]);
         $currentRoom = $kr['room'];
         call($port, ['action' => 'setCards', 'token' => $kr['token'], 'count' => $per]);
         call($port, ['action' => 'start', 'token' => $kr['token']]);
@@ -803,7 +803,7 @@ try {
         $won = call($port, ['action' => 'choose', 'token' => $kr['token'], 'category' => 'leistung'])['state'];
         $awards = $won['game']['cardAwards'];
         $after = call($port, ['action' => 'collection', 'authToken' => $kira['authToken']]);
-        check(count($awards) >= $min && count($awards) <= $max && array_sum(array_column($after['cards'], 'qty')) === 16 + count($awards) && (!$awards || isset($awards[0]['card']['name'], $awards[0]['isNew'])), "Belohnung KI Schwer mit $per Karten: " . count($awards) . ' Auto(s)');
+        check(count($awards) >= $min && count($awards) <= $max && array_sum(array_column($after['cards'], 'qty')) === 16 + count($awards) && (!$awards || isset($awards[0]['card']['name'], $awards[0]['isNew'])), "Belohnung KI $level mit $per Karten: " . count($awards) . ' Auto(s)');
     }
     $currentRoom = null;
 

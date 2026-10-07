@@ -216,12 +216,15 @@ function trumpf_starter_ids(): array
     return $ids;
 }
 
-/** Eine zufällige Karte: erst die Stufe nach DRAW_CHANCES, dann ein Auto dieser Stufe. */
-function trumpf_draw_card(): string
+/** Eine zufällige Karte: erst die Stufe nach DRAW_CHANCES (begrenzt auf minTier–maxTier), dann ein Auto dieser Stufe. */
+function trumpf_draw_card(int $minTier = 1, int $maxTier = 5): string
 {
-    $roll = random_int(1, 100);
-    $tier = 1;
-    foreach (DRAW_CHANCES as $level => $chance) {
+    $chances = array_filter(DRAW_CHANCES, static function ($level) use ($minTier, $maxTier) {
+        return $level >= $minTier && $level <= $maxTier;
+    }, ARRAY_FILTER_USE_KEY);
+    $roll = random_int(1, array_sum($chances));
+    $tier = $minTier;
+    foreach ($chances as $level => $chance) {
         if ($roll <= $chance) {
             $tier = $level;
             break;
@@ -642,14 +645,23 @@ function trumpf_record_results(TrumpfRoom $room): void
             $db->prepare('UPDATE accounts SET games_played = games_played + 1, wins = wins + ?, losses = losses + ?, xp = xp + ?, current_streak = ?, best_streak = ? WHERE id = ?')
                 ->execute([$won ? 1 : 0, $won ? 0 : 1, $xp, $streak, $best, $accountId]);
 
-            if ($won && !empty($room->data['solo']) && ($room->data['aiLevel'] ?? '') === 'hard') {
-                // Belohnung für einen Sieg gegen „Schwer“: 16 Karten → 1 Auto, 32 Karten → Pack mit 3–5 Autos
+            if ($won && !empty($room->data['solo'])) {
+                // Belohnung für einen Sieg gegen die KI, je nach Stufe (unabhängig von der Kartenzahl, nur Schwer mit 32 ist größer)
                 $per = (int) ($game['cardsPerPlayer'] ?? 0);
-                $count = $per >= 32 ? random_int(3, 5) : ($per >= 16 ? 1 : 0);
+                $level = $room->data['aiLevel'] ?? 'medium';
+                if ($level === 'hard' && $per >= 32) {
+                    [$count, $minTier, $maxTier] = [3, 4, 5];
+                } elseif ($level === 'hard') {
+                    [$count, $minTier, $maxTier] = [random_int(3, 5), 1, 5];
+                } elseif ($level === 'easy') {
+                    [$count, $minTier, $maxTier] = [random_int(1, 3), 1, 2];
+                } else {
+                    [$count, $minTier, $maxTier] = [random_int(1, 3), 1, 4];
+                }
                 $cards = [];
                 trumpf_owned_cards($db, (int) $accountId);
                 for ($i = 0; $i < $count; $i++) {
-                    $cardId = trumpf_draw_card();
+                    $cardId = trumpf_draw_card($minTier, $maxTier);
                     $cards[] = ['id' => $cardId, 'isNew' => trumpf_collection_add($db, (int) $accountId, $cardId)];
                 }
                 $room->data['game']['cardAwards'][$player['id']] = $cards;
