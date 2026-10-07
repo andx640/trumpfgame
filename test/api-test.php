@@ -407,21 +407,22 @@ try {
     $second = call($port, ['action' => 'choose', 'token' => $tokenById[$mover2], 'category' => 'leistung']);
     check($second['ok'] && count($second['state']['game']['tableCards']) === 3, 'nach der Rückkehr spielen wieder alle drei');
 
-    // KI-Stärke: gegen zufällige Gegnerkarten muss Schwer ≥ Mittel > Leicht gewinnen
+    // KI-Stärke: Karten kommen aus dem Spielpool (den kennt nur „Schwer“), dort muss Schwer ≥ Mittel > Leicht gewinnen
     $deckAll = trumpf_load_deck();
     $ids = array_keys($deckAll);
+    $inPlay = array_slice($ids, 0, 64);
     mt_srand(7);
     $rates = [];
     foreach (['easy', 'medium', 'hard'] as $level) {
         $wins = 0;
-        $games = 1500;
+        $games = 3000;
         for ($i = 0; $i < $games; $i++) {
-            $mine = $ids[mt_rand(0, count($ids) - 1)];
-            $theirs = $ids[mt_rand(0, count($ids) - 1)];
+            $mine = $inPlay[mt_rand(0, count($inPlay) - 1)];
+            $theirs = $inPlay[mt_rand(0, count($inPlay) - 1)];
             if ($mine === $theirs) {
                 continue;
             }
-            $category = ai_choose_category($mine, $level, array_slice($ids, 0, 64));
+            $category = ai_choose_category($mine, $level, $inPlay);
             $low = TRUMPF_CATEGORIES[$category]['direction'] === 'low';
             $mineValue = $deckAll[$mine][$category];
             $theirValue = $deckAll[$theirs][$category];
