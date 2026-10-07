@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
 import { disablePush, enablePush, pushPermission, pushSupported, syncPush } from "./push";
-import { chatSoundEnabled, playCardCharge, playChat, playFlip, playLose, playPackBurst, playPackCharge, playReveal, playTurn, playWin, setChatSoundEnabled, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
+import { chatSoundEnabled, playCardCharge, playChat, playFlip, playImpact, playLose, playPackBurst, playPackCharge, playReveal, playTurn, playWin, setChatSoundEnabled, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
 const SESSION_NAME = "pitlane-trumpf-name";
@@ -2236,6 +2236,7 @@ function RevealFx({ tier }) {
       <i className="reveal-glow" />
       <i className="reveal-ring" />
       {tier >= 4 && <i className="reveal-ring is-late" />}
+      {tier >= 4 && <i className={`quake-ring ${tier >= 5 ? "is-big" : ""}`} />}
       <Sparks count={sparks} color={`var(--tier-${tier})`} power={0.8 + tier * 0.25} />
     </span>
   );
@@ -2243,20 +2244,40 @@ function RevealFx({ tier }) {
 
 const PACK_CHARGE_MS = 2000;
 const PACK_BURST_MS = 1300;
-const CARD_CHARGE_MS = 1300;
+const CARD_CHARGE_MS = 800;
 const CARD_FLIP_MS = 800;
 
-// Belohnung nach dem Spiel: erst nur das Pack, dann Aufladen, Explosion, und jede Karte deckt sich einzeln auf.
-// Die seltensten Karten kommen zuletzt, damit die Spannung steigt.
-function PackOpening({ awards, categories, onDone }) {
-  const cards = useMemo(
-    () => [...awards].sort((a, b) => (a.card.raritaet - b.card.raritaet) || ((a.card.score || 0) - (b.card.score || 0))),
-    [awards]
+// Staubkörner, die beim Erdbeben von oben fallen
+function Dust({ count }) {
+  return (
+    <span className="quake-dust" aria-hidden="true">
+      {Array.from({ length: count }, (_, index) => (
+        <i key={index} style={{ "--x": `${(index * 37) % 100}%`, "--delay": `${(index % 7) * 45}ms`, "--size": `${3 + ((index * 5) % 6)}px` }} />
+      ))}
+    </span>
   );
+}
+
+// Belohnung nach dem Spiel: erst nur das Pack, dann Aufladen und Explosion.
+// Danach liegen die Karten verdeckt da und jede wird einzeln angetippt: Karte rüttelt kurz, dreht sich um und schlägt auf.
+// Legendary und Mythic lassen dabei den Bildschirm beben.
+function PackOpening({ awards, categories, onDone }) {
+  const cards = awards;
   const total = cards.length;
   const tierOf = (index) => Number(cards[index]?.card.raritaet) || 1;
-  const [phase, setPhase] = useState("idle"); // idle → charge → burst → reveal → done
-  const [seq, setSeq] = useState({ i: 0, step: "charge" }); // pro Karte: charge → flip → hold
+  const [phase, setPhase] = useState("idle"); // idle → charge → burst → pick
+  const [status, setStatus] = useState({}); // Karte → charging | flipping | landed | up
+  const [focus, setFocus] = useState(-1); // vergrößerte Karte
+  const [quake, setQuake] = useState(null); // { tier, n } beim Aufschlag von Legendary/Mythic
+  const [flash, setFlash] = useState(null); // { tier, n } Farbblitz beim Aufschlag
+  const timers = useRef([]);
+  const handRef = useRef(null);
+  const counter = useRef(0);
+
+  const later = (fn, ms) => {
+    timers.current.push(setTimeout(fn, ms));
+  };
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   useEffect(() => {
     let timer;
@@ -2265,40 +2286,61 @@ function PackOpening({ awards, categories, onDone }) {
       timer = setTimeout(() => setPhase("burst"), PACK_CHARGE_MS);
     } else if (phase === "burst") {
       playPackBurst();
-      timer = setTimeout(() => {
-        setSeq({ i: 0, step: "charge" });
-        setPhase("reveal");
-      }, PACK_BURST_MS);
+      timer = setTimeout(() => setPhase("pick"), PACK_BURST_MS);
     }
     return () => clearTimeout(timer);
   }, [phase]);
 
-  useEffect(() => {
-    if (phase !== "reveal") return undefined;
-    const { i, step } = seq;
-    let timer;
-    if (step === "charge") {
-      playCardCharge();
-      timer = setTimeout(() => setSeq({ i, step: "flip" }), CARD_CHARGE_MS);
-    } else if (step === "flip") {
-      playReveal(tierOf(i));
-      timer = setTimeout(() => setSeq({ i, step: "hold" }), CARD_FLIP_MS);
-    } else {
-      timer = setTimeout(() => {
-        if (i + 1 < total) setSeq({ i: i + 1, step: "charge" });
-        else setPhase("done");
-      }, tierOf(i) >= 4 ? 2400 : 1200);
-    }
-    return () => clearTimeout(timer);
-  }, [phase, seq]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const active = phase === "reveal" ? seq.i : -1;
-  const activeTier = active >= 0 ? tierOf(active) : 0;
-  const handRef = useRef(null);
   const startOpening = () => {
     unlockAudio(); // Browser erlauben Ton erst nach einer Berührung
     setPhase("charge");
   };
+
+  const mark = (index, value) => setStatus((current) => ({ ...current, [index]: value }));
+
+  // Eine Karte antippen: kurzes Aufladen (Rütteln), ruhiges Umdrehen, dann der Aufschlag
+  const openCard = (index) => {
+    if (phase !== "pick" || status[index]) return;
+    const tier = tierOf(index);
+    mark(index, "charging");
+    setFocus(index);
+    playCardCharge();
+    later(() => {
+      mark(index, "flipping");
+      playFlip();
+    }, CARD_CHARGE_MS);
+    later(() => {
+      counter.current += 1;
+      const n = counter.current;
+      mark(index, "landed");
+      playReveal(tier);
+      if (tier >= 3) setFlash({ tier, n });
+      if (tier >= 4) {
+        playImpact(tier);
+        setQuake({ tier, n });
+        later(() => setQuake((current) => (current?.n === n ? null : current)), tier >= 5 ? 1000 : 450);
+      }
+    }, CARD_CHARGE_MS + CARD_FLIP_MS);
+    const hold = tier >= 4 ? 2400 : 1600;
+    later(() => setFocus((current) => (current === index ? -1 : current)), CARD_CHARGE_MS + CARD_FLIP_MS + hold - 500);
+    later(() => mark(index, "up"), CARD_CHARGE_MS + CARD_FLIP_MS + hold);
+  };
+
+  const revealAll = () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    setQuake(null);
+    setFocus(-1);
+    setStatus(Object.fromEntries(cards.map((_, index) => [index, "up"])));
+    setPhase("pick");
+  };
+
+  const allSettled = phase === "pick" && cards.every((_, index) => status[index] === "up");
+  const opened = cards.filter((_, index) => status[index] && status[index] !== "charging").length;
+  const remaining = total - Object.keys(status).length;
+  const newCount = cards.filter((award) => award.isNew).length;
+  const showPack = phase === "idle" || phase === "charge" || phase === "burst";
+  const focusStatus = focus >= 0 ? status[focus] : null;
 
   // Die vergrößerte Karte darf nicht über den Bildschirmrand ragen: bei Bedarf nach innen schieben
   useLayoutEffect(() => {
@@ -2313,101 +2355,113 @@ function PackOpening({ awards, categories, onDone }) {
     if (center - half < margin) dx = margin - (center - half);
     else if (center + half > window.innerWidth - margin) dx = window.innerWidth - margin - (center + half);
     slot.style.setProperty("--dx", `${Math.round(dx)}px`);
-  }, [active]);
-  const revealing = active >= 0 && seq.step !== "charge";
-  const isUp = (index) => phase === "done" || (phase === "reveal" && (index < seq.i || (index === seq.i && seq.step !== "charge")));
-  const newCount = cards.filter((award) => award.isNew).length;
-  const showPack = phase === "idle" || phase === "charge" || phase === "burst";
+  }, [focus]);
 
   let eyebrow = "BELOHNUNG";
   let headline = <>Dein Pack wartet</>;
   if (phase === "charge") headline = <>Es lädt sich auf …</>;
   if (phase === "burst") headline = <>Jetzt!</>;
-  if (phase === "reveal") {
-    eyebrow = `KARTE ${seq.i + 1} VON ${total}`;
-    headline = revealing
-      ? <><span className={`pack-tier tier-${activeTier}`}>{TIER_NAMES[activeTier]}</span>{cards[active].isNew && <em className="pack-new">NEU!</em>}</>
-      : <>Wer kommt raus?</>;
+  if (phase === "pick") {
+    eyebrow = remaining > 0 ? `NOCH ${remaining} ${remaining === 1 ? "KARTE" : "KARTEN"} VERDECKT` : "ALLE KARTEN OFFEN";
+    headline = <>Tippe eine Karte an</>;
+    if (focusStatus === "charging" || focusStatus === "flipping") headline = <>Gleich …</>;
+    if (focusStatus === "landed") {
+      headline = <><span className={`pack-tier tier-${tierOf(focus)}`}>{TIER_NAMES[tierOf(focus)]}</span>{cards[focus].isNew && <em className="pack-new">NEU!</em>}</>;
+    }
   }
-  if (phase === "done") {
+  if (allSettled) {
     eyebrow = "DEIN FANG";
     headline = <>{total} {total === 1 ? "Auto" : "Autos"}{newCount > 0 ? ` · ${newCount} neu` : ""}</>;
   }
 
   return (
-    <div className={`pack-overlay is-${phase} ${revealing && activeTier >= 4 && seq.step === "flip" ? "is-quake" : ""}`} role="dialog" aria-label="Pack öffnen">
+    <div className={`pack-overlay is-${phase}`} role="dialog" aria-label="Pack öffnen">
       {phase === "burst" && <div className="pack-flash" />}
-      {revealing && activeTier >= 3 && <div className={`tier-flash tier-${activeTier}`} key={`flash-${seq.i}`} />}
-      <div className="pack-head">
-        <p className="eyebrow">{eyebrow}</p>
-        <h2 key={`${phase}-${active}-${revealing}`}>{headline}</h2>
-      </div>
+      {flash && <div className={`tier-flash tier-${flash.tier}`} key={`flash-${flash.n}`} />}
+      <div className={`pack-shaker ${quake ? `quake-${quake.tier}` : ""}`}>
+        {quake && <Dust count={quake.tier >= 5 ? 34 : 12} key={`dust-${quake.n}`} />}
+        <div className="pack-head">
+          <p className="eyebrow">{eyebrow}</p>
+          <h2 key={`${phase}-${focus}-${focusStatus}-${allSettled}`}>{headline}</h2>
+        </div>
 
-      <div className="pack-main">
-        <div className="pack-stage">
-          {(phase === "charge" || phase === "burst") && <div className="pack-rays" />}
-          {showPack && (
-            <button
-              type="button"
-              className={`pack ${phase === "charge" ? "is-charging" : ""} ${phase === "burst" ? "is-bursting" : ""}`}
-              onClick={phase === "idle" ? startOpening : undefined}
-              aria-label="Pack öffnen"
-            >
-              <span className="pack-body">
-                <LogoMark />
-                <b>ANDI</b>
-                <em>TRUMPF</em>
-                <small>SPORTWAGEN BOOSTER</small>
-                <span className="pack-count">{total} {total === 1 ? "KARTE" : "KARTEN"}</span>
-              </span>
-              <span className="pack-shine" />
-              <span className="pack-top" />
-            </button>
-          )}
-          {phase === "burst" && (
+        <div className="pack-main">
+          <div className="pack-stage">
+            {(phase === "charge" || phase === "burst") && <div className="pack-rays" />}
+            {showPack && (
+              <button
+                type="button"
+                className={`pack ${phase === "charge" ? "is-charging" : ""} ${phase === "burst" ? "is-bursting" : ""}`}
+                onClick={phase === "idle" ? startOpening : undefined}
+                aria-label="Pack öffnen"
+              >
+                <span className="pack-body">
+                  <LogoMark />
+                  <b>ANDI</b>
+                  <em>TRUMPF</em>
+                  <small>SPORTWAGEN BOOSTER</small>
+                  <span className="pack-count">{total} {total === 1 ? "KARTE" : "KARTEN"}</span>
+                </span>
+                <span className="pack-shine" />
+                <span className="pack-top" />
+              </button>
+            )}
+            {phase === "burst" && (
+              <>
+                <i className="shockwave" />
+                <i className="shockwave is-late" />
+                <Sparks count={48} color="#ffd166" power={1.7} />
+              </>
+            )}
+          </div>
+
+          {phase === "burst" || phase === "pick" ? (
+            <div className="pack-hand" data-n={Math.min(total, 5)} ref={handRef}>
+              {cards.map((award, index) => {
+                const tier = tierOf(index);
+                const state = status[index];
+                const isUp = state === "flipping" || state === "landed" || state === "up";
+                const waiting = phase === "pick" && !state;
+                return (
+                  <div
+                    className={`pack-slot tier-${tier} ${isUp ? "is-up" : ""} ${state === "landed" ? "is-landed" : ""} ${focus === index ? "is-active" : ""} ${state === "charging" ? "is-charging" : ""} ${waiting ? "is-waiting" : ""} ${phase === "burst" ? "is-entering" : ""}`}
+                    style={{ "--i": index, "--mid": (total - 1) / 2 }}
+                    key={`${award.card.c_id}-${index}`}
+                    role="button"
+                    tabIndex={waiting ? 0 : -1}
+                    aria-label={isUp ? award.card.name : "Karte aufdecken"}
+                    onClick={() => openCard(index)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openCard(index);
+                      }
+                    }}
+                  >
+                    <div className="pack-shake">
+                      <div className="pack-flip">
+                        <div className="pf-face pf-back"><ScaledCard><CardBack /></ScaledCard></div>
+                        <div className="pf-face pf-front"><CollectionCard card={award.card} categories={categories} isNew={award.isNew} /></div>
+                      </div>
+                    </div>
+                    {state === "landed" && <RevealFx tier={tier} />}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="pack-actions">
+          {allSettled ? (
+            <button type="button" className="primary-button" onClick={onDone}><span>Weiter</span><ArrowIcon /></button>
+          ) : (
             <>
-              <i className="shockwave" />
-              <i className="shockwave is-late" />
-              <Sparks count={48} color="#ffd166" power={1.7} />
+              {phase === "idle" && <button type="button" className="primary-button" onClick={startOpening}><span>Pack öffnen</span><ArrowIcon /></button>}
+              <button type="button" className="text-button" onClick={revealAll}>{phase === "pick" ? "Alle aufdecken" : "Überspringen"}</button>
             </>
           )}
         </div>
-
-        {!showPack || phase === "burst" ? (
-          <div className={`pack-hand ${active >= 0 ? "has-active" : ""}`} data-n={Math.min(total, 5)} ref={handRef}>
-            {cards.map((award, index) => {
-              const tier = tierOf(index);
-              const isActive = index === active;
-              const charging = isActive && seq.step === "charge";
-              return (
-                <div
-                  className={`pack-slot tier-${tier} ${isUp(index) ? "is-up" : ""} ${isActive ? "is-active" : ""} ${charging ? "is-charging" : ""} ${phase === "burst" ? "is-entering" : ""}`}
-                  style={{ "--i": index, "--mid": (total - 1) / 2 }}
-                  key={`${award.card.c_id}-${index}`}
-                >
-                  <div className="pack-shake">
-                    <div className="pack-flip">
-                      <div className="pf-face pf-back"><ScaledCard><CardBack /></ScaledCard></div>
-                      <div className="pf-face pf-front"><CollectionCard card={award.card} categories={categories} isNew={award.isNew} /></div>
-                    </div>
-                  </div>
-                  {isActive && seq.step !== "charge" && <RevealFx tier={tier} />}
-                </div>
-              );
-            })}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="pack-actions">
-        {phase === "done" ? (
-          <button type="button" className="primary-button" onClick={onDone}><span>Weiter</span><ArrowIcon /></button>
-        ) : (
-          <>
-            {phase === "idle" && <button type="button" className="primary-button" onClick={startOpening}><span>Pack öffnen</span><ArrowIcon /></button>}
-            <button type="button" className="text-button" onClick={() => setPhase("done")}>Überspringen</button>
-          </>
-        )}
       </div>
     </div>
   );

@@ -176,10 +176,20 @@ export function playReveal(tier = 1) {
     5: [523, 659, 784, 1047, 1319, 1568, 2093]
   }[tier] || [660];
   notes.forEach((frequency, index) => tone(ctx, frequency, 0.25 + index * 0.09, 0.4 + tier * 0.08, { type: "triangle", gain: 0.07 + tier * 0.008 }));
-  if (tier >= 3) boom(ctx, 0.2, { gain: 0.1 + tier * 0.05, duration: 0.6 });
   if (tier >= 4) tone(ctx, 261, 0.3, 1.2, { type: "sawtooth", gain: 0.04, slideTo: 523 });
+  if (tier >= 5) tone(ctx, 392, 0.35, 1.6, { type: "sawtooth", gain: 0.045, slideTo: 784 });
+}
+
+/** Aufschlag einer Legendary-/Mythic-Karte: kurzer dumpfer Schlag, bei Mythic tief, lang und mit Grollen */
+export function playImpact(tier = 4) {
+  const ctx = audio();
+  if (!ctx) return;
   if (tier >= 5) {
-    boom(ctx, 0.2, { from: 90, to: 25, gain: 0.4, duration: 1.1 });
-    tone(ctx, 392, 0.35, 1.6, { type: "sawtooth", gain: 0.045, slideTo: 784 });
+    boom(ctx, 0, { from: 110, to: 22, gain: 0.5, duration: 1.2 });
+    boom(ctx, 0.12, { from: 70, to: 20, gain: 0.35, duration: 1 });
+    whoosh(ctx, 0.05, 0.7);
+    tone(ctx, 55, 0.1, 1.1, { type: "sawtooth", gain: 0.06, slideTo: 30 });
+  } else {
+    boom(ctx, 0, { from: 120, to: 40, gain: 0.3, duration: 0.45 });
   }
 }
