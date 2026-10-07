@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
+import packArt from "./pack.webp";
 import { disablePush, enablePush, pushPermission, pushSupported, syncPush } from "./push";
 import { chatSoundEnabled, playCardCharge, playChat, playFlip, playImpact, playLose, playPackBurst, playPackCharge, playReveal, playTurn, playWin, setChatSoundEnabled, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
 
@@ -2327,6 +2328,10 @@ function PackOpening({ awards, categories, onDone }) {
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   useEffect(() => {
+    new Image().src = packArt; // Pack-Bild vorladen, damit es nach dem Sieg-Bildschirm sofort da ist
+  }, []);
+
+  useEffect(() => {
     let timer;
     if (phase === "win") {
       playWin();
@@ -2463,15 +2468,9 @@ function PackOpening({ awards, categories, onDone }) {
                 onClick={phase === "idle" ? startOpening : undefined}
                 aria-label="Pack öffnen"
               >
-                <span className="pack-body">
-                  <LogoMark />
-                  <b>ANDI</b>
-                  <em>TRUMPF</em>
-                  <small>SPORTWAGEN BOOSTER</small>
-                  <span className="pack-count">{total} {total === 1 ? "KARTE" : "KARTEN"}</span>
-                </span>
-                <span className="pack-shine" />
-                <span className="pack-top" />
+                <img className="pack-art pack-art-body" src={packArt} alt="" draggable="false" />
+                <img className="pack-art pack-art-top" src={packArt} alt="" draggable="false" />
+                <span className="pack-count">{total} {total === 1 ? "KARTE" : "KARTEN"}</span>
               </button>
             )}
             {phase === "burst" && (
