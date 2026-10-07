@@ -2365,15 +2365,16 @@ function Dust({ count }) {
 }
 
 // Belohnung nach dem Spiel: erst nur das Pack, dann Aufladen und Explosion.
-// Danach liegen die Karten verdeckt da und jede wird einzeln angetippt: Karte rüttelt kurz, dreht sich um und schlägt auf.
-// Legendary und Mythic lassen dabei den Bildschirm beben.
+// Danach kommt immer nur eine verdeckte Karte, die angetippt wird: Karte leuchtet kurz, dreht sich um und schlägt auf.
+// Danach erscheint die nächste. Legendary und Mythic lassen dabei den Bildschirm beben. Am Ende liegt der ganze Fang offen da.
 function PackOpening({ awards, categories, onDone, intro = "win" }) {
   const cards = awards;
   const total = cards.length;
   const tierOf = (index) => Number(cards[index]?.card.raritaet) || 1;
   const [phase, setPhase] = useState(intro === "win" ? "win" : "idle"); // win (nur nach einem Sieg) → idle → charge → burst → pick
   const [status, setStatus] = useState({}); // Karte → charging | flipping | landed | up
-  const [focus, setFocus] = useState(-1); // vergrößerte Karte
+  const [focus, setFocus] = useState(-1); // Karte, die gerade aufgedeckt wird oder zu sehen ist
+  const [current, setCurrent] = useState(0); // die eine Karte, die gerade verdeckt vor dir liegt
   const [quake, setQuake] = useState(null); // { tier, n, x, y } beim Einschlag von Legendary/Mythic
   const [flash, setFlash] = useState(null); // { tier, n } Farbblitz beim Aufschlag
   const timers = useRef([]);
@@ -2410,9 +2411,22 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
 
   const mark = (index, value) => setStatus((current) => ({ ...current, [index]: value }));
 
-  // Eine Karte antippen: kurzes Leuchten, ruhiges Umdrehen. Legendary/Mythic fallen dann auf den Hintergrund, der beim Einschlag bebt.
+  // Aufgedeckte Karte weg, die nächste verdeckte kommt (automatisch nach kurzer Zeit oder per Tippen)
+  const advance = (index) => {
+    mark(index, "up");
+    setFocus((value) => (value === index ? -1 : value));
+    setCurrent((value) => (value === index ? value + 1 : value));
+  };
+
+  // Die Karte antippen: kurzes Leuchten, ruhiges Umdrehen. Legendary/Mythic fallen dann auf den Hintergrund, der beim Einschlag bebt.
+  // Tippt man die schon aufgedeckte Karte an, kommt sofort die nächste.
   const openCard = (index) => {
-    if (phase !== "pick" || status[index]) return;
+    if (phase !== "pick") return;
+    if (status[index] === "landed") {
+      advance(index);
+      return;
+    }
+    if (status[index] || index !== current) return;
     const tier = tierOf(index);
     const drop = DROP_MS[tier] || 0;
     const landAt = CARD_CHARGE_MS + CARD_FLIP_MS;
@@ -2433,14 +2447,13 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
       if (tier >= 3) setFlash({ tier, n });
       if (tier >= 4) {
         playImpact(tier);
-        const rect = handRef.current?.children[index]?.getBoundingClientRect();
+        const rect = handRef.current?.querySelector(".pack-slot.is-active")?.getBoundingClientRect();
         setQuake({ tier, n, x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2, y: rect ? rect.top + rect.height / 2 : window.innerHeight / 2 });
         later(() => setQuake((current) => (current?.n === n ? null : current)), tier >= 5 ? 1600 : 900);
       }
     }, impactAt);
-    const hold = tier >= 4 ? 2400 : 1600;
-    later(() => setFocus((current) => (current === index ? -1 : current)), impactAt + hold - 500);
-    later(() => mark(index, "up"), impactAt + hold);
+    const hold = tier >= 4 ? 3200 : 2400;
+    later(() => advance(index), impactAt + hold);
   };
 
   const revealAll = () => {
@@ -2448,13 +2461,12 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
     timers.current = [];
     setQuake(null);
     setFocus(-1);
+    setCurrent(total);
     setStatus(Object.fromEntries(cards.map((_, index) => [index, "up"])));
     setPhase("pick");
   };
 
   const allSettled = phase === "pick" && cards.every((_, index) => status[index] === "up");
-  const opened = cards.filter((_, index) => status[index] && status[index] !== "charging").length;
-  const remaining = total - Object.keys(status).length;
   const newCount = cards.filter((award) => award.isNew).length;
   const showPack = phase === "idle" || phase === "charge" || phase === "burst";
   const focusStatus = focus >= 0 ? status[focus] : null;
@@ -2479,8 +2491,8 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
   if (phase === "charge") headline = <>Es lädt sich auf …</>;
   if (phase === "burst") headline = <>Jetzt!</>;
   if (phase === "pick") {
-    eyebrow = remaining > 0 ? `NOCH ${remaining} ${remaining === 1 ? "KARTE" : "KARTEN"} VERDECKT` : "ALLE KARTEN OFFEN";
-    headline = <>Tippe eine Karte an</>;
+    eyebrow = `KARTE ${Math.min(current + 1, total)} VON ${total}`;
+    headline = <>Tippe die Karte an</>;
     if (focusStatus === "charging" || focusStatus === "flipping" || focusStatus === "dropping") headline = <>Gleich …</>;
     if (focusStatus === "landed") {
       headline = <><span className={`pack-tier tier-${tierOf(focus)}`}>{TIER_NAMES[tierOf(focus)]}</span>{cards[focus].isNew && <em className="pack-new">NEU!</em>}</>;
@@ -2516,7 +2528,7 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
           <h2 key={`${phase}-${focus}-${focusStatus}-${allSettled}`}>{headline}</h2>
         </div>
 
-        <div className={`pack-main ${total > 5 ? "is-many" : ""}`}>
+        <div className={`pack-main ${allSettled && total > 5 ? "is-many" : ""}`}>
           <div className="pack-stage">
             {(phase === "charge" || phase === "burst") && <div className="pack-rays" />}
             {showPack && (
@@ -2541,20 +2553,22 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
           </div>
 
           {phase === "burst" || phase === "pick" ? (
-            <div className="pack-hand" data-n={total > 5 ? "many" : total} ref={handRef}>
+            <div className="pack-hand" data-n={allSettled ? (total > 5 ? "many" : total) : 1} ref={handRef}>
               {cards.map((award, index) => {
+                if (!allSettled && index !== Math.min(current, total - 1)) return null;
                 const tier = tierOf(index);
                 const state = status[index];
                 const isUp = state === "flipping" || state === "dropping" || state === "landed" || state === "up";
                 const waiting = phase === "pick" && !state;
+                const spread = allSettled; // einzeln in der Mitte, erst der fertige Fang liegt nebeneinander
                 return (
                   <div
                     className={`pack-slot tier-${tier} ${isUp ? "is-up" : ""} ${state === "dropping" ? "is-dropping" : ""} ${focus === index ? "is-active" : ""} ${state === "charging" ? "is-charging" : ""} ${waiting ? "is-waiting" : ""} ${phase === "burst" ? "is-entering" : ""}`}
-                    style={{ "--i": index, "--mid": (total - 1) / 2 }}
+                    style={{ "--i": spread ? index : 0, "--mid": spread ? (total - 1) / 2 : 0 }}
                     key={`${award.card.c_id}-${index}`}
                     role="button"
-                    tabIndex={waiting ? 0 : -1}
-                    aria-label={isUp ? award.card.name : "Karte aufdecken"}
+                    tabIndex={waiting || state === "landed" ? 0 : -1}
+                    aria-label={isUp ? `${award.card.name}, weiter zur nächsten Karte` : "Karte aufdecken"}
                     onClick={() => openCard(index)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
@@ -2582,6 +2596,16 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
             <button type="button" className="primary-button" onClick={onDone}><span>Weiter</span><ArrowIcon /></button>
           ) : (
             <>
+              {phase === "pick" && (
+                <>
+                  <p className="pack-hint">{focusStatus === "landed" ? (current < total - 1 ? "Tippen für die nächste Karte" : "Tippen zum Abschluss") : " "}</p>
+                  <div className="pack-dots" aria-hidden="true">
+                    {cards.map((_, index) => (
+                      <i key={index} className={`${index === current ? "is-current" : ""} ${status[index] === "landed" || status[index] === "up" ? `is-done tier-${tierOf(index)}` : ""}`} />
+                    ))}
+                  </div>
+                </>
+              )}
               {phase === "idle" && <button type="button" className="primary-button" onClick={startOpening}><span>Pack öffnen</span><ArrowIcon /></button>}
               <button type="button" className="text-button" onClick={revealAll}>{phase === "pick" ? "Alle aufdecken" : "Überspringen"}</button>
             </>
