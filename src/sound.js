@@ -159,8 +159,8 @@ export function playPackBurst() {
 export function playCardCharge() {
   const ctx = audio();
   if (!ctx) return;
-  tone(ctx, 220, 0, 1.2, { type: "sawtooth", gain: 0.035, slideTo: 880 });
-  for (let i = 0; i < 6; i += 1) tone(ctx, 1200 + i * 90, 0.3 + i * 0.15, 0.04, { type: "square", gain: 0.02 });
+  tone(ctx, 220, 0, 0.5, { type: "sawtooth", gain: 0.035, slideTo: 880 });
+  for (let i = 0; i < 3; i += 1) tone(ctx, 1200 + i * 90, 0.15 + i * 0.1, 0.04, { type: "square", gain: 0.02 });
 }
 
 /** Karte wird aufgedeckt: je seltener, desto größer der Auftritt */

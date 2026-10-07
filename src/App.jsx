@@ -2244,8 +2244,55 @@ function RevealFx({ tier }) {
 
 const PACK_CHARGE_MS = 2000;
 const PACK_BURST_MS = 1300;
-const CARD_CHARGE_MS = 800;
+const CARD_CHARGE_MS = 500;
 const CARD_FLIP_MS = 800;
+const DROP_MS = { 4: 240, 5: 320 }; // Legendary/Mythic: Karte fällt nach dem Umdrehen auf den Hintergrund, erst dann bebt er
+
+// Risse im Hintergrund, die vom Einschlag ausgehen (Legendary klein, Mythic groß)
+const CRACKS = [
+  "M0 0 L14 -6 L26 -4 L38 -16 L52 -14 L66 -30 L82 -34 L100 -52",
+  "M0 0 L8 12 L10 26 L24 34 L28 50 L42 60 L46 78 L58 100",
+  "M0 0 L-12 8 L-24 6 L-36 20 L-52 18 L-66 32 L-82 30 L-100 44",
+  "M0 0 L-6 -14 L-18 -22 L-16 -38 L-30 -48 L-34 -66 L-50 -80 L-54 -100",
+  "M0 0 L16 4 L30 14 L44 12 L58 26 L74 24 L90 38 L100 40",
+  "M0 0 L-14 -4 L-28 -14 L-44 -12 L-60 -26 L-76 -24 L-92 -38 L-100 -40",
+  "M0 0 L4 -16 L16 -28 L14 -44 L28 -58 L26 -74 L40 -90 L44 -100",
+  "M0 0 L-4 16 L-14 30 L-30 36 L-34 52 L-48 64 L-52 82 L-60 100",
+  "M26 -4 L34 8 L48 14",
+  "M-24 6 L-30 -8 L-44 -14",
+  "M10 26 L-2 36 L-8 52",
+  "M-18 -22 L-30 -26 L-40 -40"
+];
+
+function Cracks({ tier, x, y }) {
+  const paths = tier >= 5 ? CRACKS : CRACKS.slice(0, 5);
+  return (
+    <svg className={`pack-cracks tier-${tier}`} style={{ left: x + 70, top: y + 70 }} viewBox="-100 -100 200 200" aria-hidden="true">
+      {paths.map((d, index) => <path d={d} pathLength="1" style={{ "--d": `${index * 18}ms` }} key={index} />)}
+    </svg>
+  );
+}
+
+// Konfetti auf dem Sieg-Bildschirm
+function Confetti() {
+  const colors = ["#f9902a", "#ffe24a", "#3aa0ff", "#a66bff", "#3fbf6a", "#ff3b4e"];
+  return (
+    <span className="confetti" aria-hidden="true">
+      {Array.from({ length: 46 }, (_, index) => (
+        <i
+          key={index}
+          style={{
+            "--x": `${(index * 23) % 100}%`,
+            "--delay": `${(index % 12) * 260}ms`,
+            "--dur": `${2600 + ((index * 131) % 1600)}ms`,
+            "--color": colors[index % colors.length],
+            "--spin": `${(index % 2 ? 1 : -1) * (240 + ((index * 47) % 360))}deg`
+          }}
+        />
+      ))}
+    </span>
+  );
+}
 
 // Staubkörner, die beim Erdbeben von oben fallen
 function Dust({ count }) {
@@ -2265,10 +2312,10 @@ function PackOpening({ awards, categories, onDone }) {
   const cards = awards;
   const total = cards.length;
   const tierOf = (index) => Number(cards[index]?.card.raritaet) || 1;
-  const [phase, setPhase] = useState("idle"); // idle → charge → burst → pick
+  const [phase, setPhase] = useState("win"); // win → idle → charge → burst → pick
   const [status, setStatus] = useState({}); // Karte → charging | flipping | landed | up
   const [focus, setFocus] = useState(-1); // vergrößerte Karte
-  const [quake, setQuake] = useState(null); // { tier, n } beim Aufschlag von Legendary/Mythic
+  const [quake, setQuake] = useState(null); // { tier, n, x, y } beim Einschlag von Legendary/Mythic
   const [flash, setFlash] = useState(null); // { tier, n } Farbblitz beim Aufschlag
   const timers = useRef([]);
   const handRef = useRef(null);
@@ -2281,7 +2328,9 @@ function PackOpening({ awards, categories, onDone }) {
 
   useEffect(() => {
     let timer;
-    if (phase === "charge") {
+    if (phase === "win") {
+      playWin();
+    } else if (phase === "charge") {
       playPackCharge();
       timer = setTimeout(() => setPhase("burst"), PACK_CHARGE_MS);
     } else if (phase === "burst") {
@@ -2298,10 +2347,13 @@ function PackOpening({ awards, categories, onDone }) {
 
   const mark = (index, value) => setStatus((current) => ({ ...current, [index]: value }));
 
-  // Eine Karte antippen: kurzes Aufladen (Rütteln), ruhiges Umdrehen, dann der Aufschlag
+  // Eine Karte antippen: kurzes Leuchten, ruhiges Umdrehen. Legendary/Mythic fallen dann auf den Hintergrund, der beim Einschlag bebt.
   const openCard = (index) => {
     if (phase !== "pick" || status[index]) return;
     const tier = tierOf(index);
+    const drop = DROP_MS[tier] || 0;
+    const landAt = CARD_CHARGE_MS + CARD_FLIP_MS;
+    const impactAt = landAt + drop;
     mark(index, "charging");
     setFocus(index);
     playCardCharge();
@@ -2309,6 +2361,7 @@ function PackOpening({ awards, categories, onDone }) {
       mark(index, "flipping");
       playFlip();
     }, CARD_CHARGE_MS);
+    if (drop) later(() => mark(index, "dropping"), landAt);
     later(() => {
       counter.current += 1;
       const n = counter.current;
@@ -2317,13 +2370,14 @@ function PackOpening({ awards, categories, onDone }) {
       if (tier >= 3) setFlash({ tier, n });
       if (tier >= 4) {
         playImpact(tier);
-        setQuake({ tier, n });
-        later(() => setQuake((current) => (current?.n === n ? null : current)), tier >= 5 ? 1000 : 450);
+        const rect = handRef.current?.children[index]?.getBoundingClientRect();
+        setQuake({ tier, n, x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2, y: rect ? rect.top + rect.height / 2 : window.innerHeight / 2 });
+        later(() => setQuake((current) => (current?.n === n ? null : current)), tier >= 5 ? 1600 : 900);
       }
-    }, CARD_CHARGE_MS + CARD_FLIP_MS);
+    }, impactAt);
     const hold = tier >= 4 ? 2400 : 1600;
-    later(() => setFocus((current) => (current === index ? -1 : current)), CARD_CHARGE_MS + CARD_FLIP_MS + hold - 500);
-    later(() => mark(index, "up"), CARD_CHARGE_MS + CARD_FLIP_MS + hold);
+    later(() => setFocus((current) => (current === index ? -1 : current)), impactAt + hold - 500);
+    later(() => mark(index, "up"), impactAt + hold);
   };
 
   const revealAll = () => {
@@ -2364,7 +2418,7 @@ function PackOpening({ awards, categories, onDone }) {
   if (phase === "pick") {
     eyebrow = remaining > 0 ? `NOCH ${remaining} ${remaining === 1 ? "KARTE" : "KARTEN"} VERDECKT` : "ALLE KARTEN OFFEN";
     headline = <>Tippe eine Karte an</>;
-    if (focusStatus === "charging" || focusStatus === "flipping") headline = <>Gleich …</>;
+    if (focusStatus === "charging" || focusStatus === "flipping" || focusStatus === "dropping") headline = <>Gleich …</>;
     if (focusStatus === "landed") {
       headline = <><span className={`pack-tier tier-${tierOf(focus)}`}>{TIER_NAMES[tierOf(focus)]}</span>{cards[focus].isNew && <em className="pack-new">NEU!</em>}</>;
     }
@@ -2378,8 +2432,22 @@ function PackOpening({ awards, categories, onDone }) {
     <div className={`pack-overlay is-${phase}`} role="dialog" aria-label="Pack öffnen">
       {phase === "burst" && <div className="pack-flash" />}
       {flash && <div className={`tier-flash tier-${flash.tier}`} key={`flash-${flash.n}`} />}
-      <div className={`pack-shaker ${quake ? `quake-${quake.tier}` : ""}`}>
-        {quake && <Dust count={quake.tier >= 5 ? 34 : 12} key={`dust-${quake.n}`} />}
+      {quake && <Dust count={quake.tier >= 5 ? 34 : 12} key={`dust-${quake.n}`} />}
+      <div className={`pack-bg ${quake ? `quake-${quake.tier}` : ""}`} key={quake ? `bg-${quake.n}` : "bg"}>
+        {quake && <Cracks tier={quake.tier} x={quake.x} y={quake.y} />}
+      </div>
+      {phase === "win" ? (
+        <div className="pack-shaker win-screen">
+          <Confetti />
+          <div className="win-trophy" aria-hidden="true">🏆</div>
+          <p className="eyebrow">SIEG</p>
+          <h2 className="win-title">Gewonnen!</h2>
+          <p className="win-sub">Als Belohnung wartet ein Pack mit {total} {total === 1 ? "Karte" : "Karten"} auf dich.</p>
+          <button type="button" className="primary-button" onClick={() => { unlockAudio(); setPhase("idle"); }}><span>Pack abholen</span><ArrowIcon /></button>
+          <button type="button" className="text-button" onClick={revealAll}>Überspringen</button>
+        </div>
+      ) : (
+      <div className="pack-shaker">
         <div className="pack-head">
           <p className="eyebrow">{eyebrow}</p>
           <h2 key={`${phase}-${focus}-${focusStatus}-${allSettled}`}>{headline}</h2>
@@ -2420,11 +2488,11 @@ function PackOpening({ awards, categories, onDone }) {
               {cards.map((award, index) => {
                 const tier = tierOf(index);
                 const state = status[index];
-                const isUp = state === "flipping" || state === "landed" || state === "up";
+                const isUp = state === "flipping" || state === "dropping" || state === "landed" || state === "up";
                 const waiting = phase === "pick" && !state;
                 return (
                   <div
-                    className={`pack-slot tier-${tier} ${isUp ? "is-up" : ""} ${state === "landed" ? "is-landed" : ""} ${focus === index ? "is-active" : ""} ${state === "charging" ? "is-charging" : ""} ${waiting ? "is-waiting" : ""} ${phase === "burst" ? "is-entering" : ""}`}
+                    className={`pack-slot tier-${tier} ${isUp ? "is-up" : ""} ${state === "dropping" ? "is-dropping" : ""} ${focus === index ? "is-active" : ""} ${state === "charging" ? "is-charging" : ""} ${waiting ? "is-waiting" : ""} ${phase === "burst" ? "is-entering" : ""}`}
                     style={{ "--i": index, "--mid": (total - 1) / 2 }}
                     key={`${award.card.c_id}-${index}`}
                     role="button"
@@ -2463,6 +2531,7 @@ function PackOpening({ awards, categories, onDone }) {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
