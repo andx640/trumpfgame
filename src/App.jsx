@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
 import { disablePush, enablePush, pushPermission, pushSupported, syncPush } from "./push";
-import { chatSoundEnabled, playChat, playFlip, playLose, playTurn, playWin, setChatSoundEnabled, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
+import { chatSoundEnabled, playCardCharge, playChat, playFlip, playLose, playPackBurst, playPackCharge, playReveal, playTurn, playWin, setChatSoundEnabled, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
 const SESSION_NAME = "pitlane-trumpf-name";
@@ -2113,6 +2113,11 @@ function UserIcon() {
 
 function FinishPanel({ state, onLeave }) {
   const { players, game, selfId } = state;
+  const [packSeen, setPackSeen] = useState(false);
+  // Gewinnt man ein Pack, ist erst nur das Pack zu sehen; das Ergebnis kommt danach
+  if (game.cardAwards?.length > 0 && !packSeen) {
+    return <PackOpening awards={game.cardAwards} categories={state.categories} onDone={() => setPackSeen(true)} />;
+  }
   const stats = state.stats || {};
   const winner = players.find((player) => player.id === game.winnerId);
   const winnerIds = game.winnerIds?.length ? game.winnerIds : game.winnerId ? [game.winnerId] : [];
@@ -2190,21 +2195,219 @@ function FinishPanel({ state, onLeave }) {
   );
 }
 
-// Belohnung für einen Sieg gegen die KI: die Karten werden nacheinander aufgedeckt
+// Zusammenfassung der gewonnenen Karten im Ergebnisfenster (die Show läuft vorher in PackOpening)
 function PackReveal({ awards, categories }) {
   return (
     <div className="pack-reveal">
       <p className="eyebrow">{awards.length > 1 ? `PACK MIT ${awards.length} AUTOS` : "NEUES AUTO"}</p>
       <div className="pack-cards">
         {awards.map((award, index) => (
-          <CollectionCard
-            card={award.card}
-            categories={categories}
-            isNew={award.isNew}
-            style={{ "--reveal-delay": `${400 + index * 700}ms` }}
-            key={`${award.card.c_id}-${index}`}
-          />
+          <CollectionCard card={award.card} categories={categories} isNew={award.isNew} key={`${award.card.c_id}-${index}`} />
         ))}
+      </div>
+    </div>
+  );
+}
+
+// Funken für Explosion und Aufdecken. Werte kommen aus dem Index, damit die Verteilung bei jedem Rendern gleich bleibt.
+function Sparks({ count, color, power = 1 }) {
+  return (
+    <span className="sparks" style={{ "--spark-color": color }} aria-hidden="true">
+      {Array.from({ length: count }, (_, index) => (
+        <i
+          key={index}
+          style={{
+            "--a": `${(index * 137.5) % 360}deg`,
+            "--d": `${(90 + ((index * 53) % 150)) * power}px`,
+            "--size": `${4 + ((index * 7) % 8)}px`,
+            "--delay": `${(index % 6) * 25}ms`
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function RevealFx({ tier }) {
+  const sparks = [0, 10, 16, 26, 44, 76][tier] || 10;
+  return (
+    <span className={`reveal-fx tier-${tier}`} aria-hidden="true">
+      {tier >= 5 && <i className="reveal-rays" />}
+      <i className="reveal-glow" />
+      <i className="reveal-ring" />
+      {tier >= 4 && <i className="reveal-ring is-late" />}
+      <Sparks count={sparks} color={`var(--tier-${tier})`} power={0.8 + tier * 0.25} />
+    </span>
+  );
+}
+
+const PACK_CHARGE_MS = 2000;
+const PACK_BURST_MS = 1300;
+const CARD_CHARGE_MS = 1300;
+const CARD_FLIP_MS = 800;
+
+// Belohnung nach dem Spiel: erst nur das Pack, dann Aufladen, Explosion, und jede Karte deckt sich einzeln auf.
+// Die seltensten Karten kommen zuletzt, damit die Spannung steigt.
+function PackOpening({ awards, categories, onDone }) {
+  const cards = useMemo(
+    () => [...awards].sort((a, b) => (a.card.raritaet - b.card.raritaet) || ((a.card.score || 0) - (b.card.score || 0))),
+    [awards]
+  );
+  const total = cards.length;
+  const tierOf = (index) => Number(cards[index]?.card.raritaet) || 1;
+  const [phase, setPhase] = useState("idle"); // idle → charge → burst → reveal → done
+  const [seq, setSeq] = useState({ i: 0, step: "charge" }); // pro Karte: charge → flip → hold
+
+  useEffect(() => {
+    let timer;
+    if (phase === "charge") {
+      playPackCharge();
+      timer = setTimeout(() => setPhase("burst"), PACK_CHARGE_MS);
+    } else if (phase === "burst") {
+      playPackBurst();
+      timer = setTimeout(() => {
+        setSeq({ i: 0, step: "charge" });
+        setPhase("reveal");
+      }, PACK_BURST_MS);
+    }
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase !== "reveal") return undefined;
+    const { i, step } = seq;
+    let timer;
+    if (step === "charge") {
+      playCardCharge();
+      timer = setTimeout(() => setSeq({ i, step: "flip" }), CARD_CHARGE_MS);
+    } else if (step === "flip") {
+      playReveal(tierOf(i));
+      timer = setTimeout(() => setSeq({ i, step: "hold" }), CARD_FLIP_MS);
+    } else {
+      timer = setTimeout(() => {
+        if (i + 1 < total) setSeq({ i: i + 1, step: "charge" });
+        else setPhase("done");
+      }, tierOf(i) >= 4 ? 2400 : 1200);
+    }
+    return () => clearTimeout(timer);
+  }, [phase, seq]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const active = phase === "reveal" ? seq.i : -1;
+  const activeTier = active >= 0 ? tierOf(active) : 0;
+  const handRef = useRef(null);
+  const startOpening = () => {
+    unlockAudio(); // Browser erlauben Ton erst nach einer Berührung
+    setPhase("charge");
+  };
+
+  // Die vergrößerte Karte darf nicht über den Bildschirmrand ragen: bei Bedarf nach innen schieben
+  useLayoutEffect(() => {
+    const slot = handRef.current?.querySelector(".pack-slot.is-active");
+    if (!slot) return;
+    const zoom = parseFloat(getComputedStyle(handRef.current).getPropertyValue("--zoom")) || 1.5;
+    const rect = slot.getBoundingClientRect();
+    const half = (slot.offsetWidth * zoom) / 2;
+    const center = rect.left + rect.width / 2;
+    const margin = 10;
+    let dx = 0;
+    if (center - half < margin) dx = margin - (center - half);
+    else if (center + half > window.innerWidth - margin) dx = window.innerWidth - margin - (center + half);
+    slot.style.setProperty("--dx", `${Math.round(dx)}px`);
+  }, [active]);
+  const revealing = active >= 0 && seq.step !== "charge";
+  const isUp = (index) => phase === "done" || (phase === "reveal" && (index < seq.i || (index === seq.i && seq.step !== "charge")));
+  const newCount = cards.filter((award) => award.isNew).length;
+  const showPack = phase === "idle" || phase === "charge" || phase === "burst";
+
+  let eyebrow = "BELOHNUNG";
+  let headline = <>Dein Pack wartet</>;
+  if (phase === "charge") headline = <>Es lädt sich auf …</>;
+  if (phase === "burst") headline = <>Jetzt!</>;
+  if (phase === "reveal") {
+    eyebrow = `KARTE ${seq.i + 1} VON ${total}`;
+    headline = revealing
+      ? <><span className={`pack-tier tier-${activeTier}`}>{TIER_NAMES[activeTier]}</span>{cards[active].isNew && <em className="pack-new">NEU!</em>}</>
+      : <>Wer kommt raus?</>;
+  }
+  if (phase === "done") {
+    eyebrow = "DEIN FANG";
+    headline = <>{total} {total === 1 ? "Auto" : "Autos"}{newCount > 0 ? ` · ${newCount} neu` : ""}</>;
+  }
+
+  return (
+    <div className={`pack-overlay is-${phase} ${revealing && activeTier >= 4 && seq.step === "flip" ? "is-quake" : ""}`} role="dialog" aria-label="Pack öffnen">
+      {phase === "burst" && <div className="pack-flash" />}
+      {revealing && activeTier >= 3 && <div className={`tier-flash tier-${activeTier}`} key={`flash-${seq.i}`} />}
+      <div className="pack-head">
+        <p className="eyebrow">{eyebrow}</p>
+        <h2 key={`${phase}-${active}-${revealing}`}>{headline}</h2>
+      </div>
+
+      <div className="pack-main">
+        <div className="pack-stage">
+          {(phase === "charge" || phase === "burst") && <div className="pack-rays" />}
+          {showPack && (
+            <button
+              type="button"
+              className={`pack ${phase === "charge" ? "is-charging" : ""} ${phase === "burst" ? "is-bursting" : ""}`}
+              onClick={phase === "idle" ? startOpening : undefined}
+              aria-label="Pack öffnen"
+            >
+              <span className="pack-body">
+                <LogoMark />
+                <b>ANDI</b>
+                <em>TRUMPF</em>
+                <small>SPORTWAGEN BOOSTER</small>
+                <span className="pack-count">{total} {total === 1 ? "KARTE" : "KARTEN"}</span>
+              </span>
+              <span className="pack-shine" />
+              <span className="pack-top" />
+            </button>
+          )}
+          {phase === "burst" && (
+            <>
+              <i className="shockwave" />
+              <i className="shockwave is-late" />
+              <Sparks count={48} color="#ffd166" power={1.7} />
+            </>
+          )}
+        </div>
+
+        {!showPack || phase === "burst" ? (
+          <div className={`pack-hand ${active >= 0 ? "has-active" : ""}`} data-n={Math.min(total, 5)} ref={handRef}>
+            {cards.map((award, index) => {
+              const tier = tierOf(index);
+              const isActive = index === active;
+              const charging = isActive && seq.step === "charge";
+              return (
+                <div
+                  className={`pack-slot tier-${tier} ${isUp(index) ? "is-up" : ""} ${isActive ? "is-active" : ""} ${charging ? "is-charging" : ""} ${phase === "burst" ? "is-entering" : ""}`}
+                  style={{ "--i": index, "--mid": (total - 1) / 2 }}
+                  key={`${award.card.c_id}-${index}`}
+                >
+                  <div className="pack-shake">
+                    <div className="pack-flip">
+                      <div className="pf-face pf-back"><ScaledCard><CardBack /></ScaledCard></div>
+                      <div className="pf-face pf-front"><CollectionCard card={award.card} categories={categories} isNew={award.isNew} /></div>
+                    </div>
+                  </div>
+                  {isActive && seq.step !== "charge" && <RevealFx tier={tier} />}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="pack-actions">
+        {phase === "done" ? (
+          <button type="button" className="primary-button" onClick={onDone}><span>Weiter</span><ArrowIcon /></button>
+        ) : (
+          <>
+            {phase === "idle" && <button type="button" className="primary-button" onClick={startOpening}><span>Pack öffnen</span><ArrowIcon /></button>}
+            <button type="button" className="text-button" onClick={() => setPhase("done")}>Überspringen</button>
+          </>
+        )}
       </div>
     </div>
   );

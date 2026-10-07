@@ -129,3 +129,57 @@ export function playChat() {
   tone(ctx, 1046, 0, 0.09, { gain: 0.09 });
   tone(ctx, 1568, 0.08, 0.14, { gain: 0.08 });
 }
+
+// ---- Pack-Öffnung: Aufladen, Explosion und je nach Seltenheit ein größerer Auftritt ----
+
+function boom(ctx, start, { from = 140, to = 32, gain = 0.3, duration = 0.8 } = {}) {
+  tone(ctx, from, start, duration, { type: "sine", gain, slideTo: to });
+}
+
+/** Das Pack lädt sich auf: tiefes Grollen, das ansteigt, dazu ein schneller werdendes Ticken */
+export function playPackCharge() {
+  const ctx = audio();
+  if (!ctx) return;
+  tone(ctx, 55, 0, 2, { type: "sawtooth", gain: 0.08, slideTo: 240 });
+  tone(ctx, 110, 0.1, 1.9, { type: "triangle", gain: 0.06, slideTo: 720 });
+  whoosh(ctx, 0.2, 1.8);
+  for (let i = 0; i < 12; i += 1) tone(ctx, 900 + i * 70, 0.2 + i * 0.15, 0.05, { type: "square", gain: 0.025 });
+}
+
+/** Das Pack explodiert */
+export function playPackBurst() {
+  const ctx = audio();
+  if (!ctx) return;
+  boom(ctx, 0, { gain: 0.34 });
+  whoosh(ctx, 0, 0.55);
+  [1047, 1319, 1568, 2093, 2637].forEach((frequency, index) => tone(ctx, frequency, 0.1 + index * 0.07, 0.35, { type: "triangle", gain: 0.07 }));
+}
+
+/** Die nächste Karte lädt sich auf: ansteigende Spannung */
+export function playCardCharge() {
+  const ctx = audio();
+  if (!ctx) return;
+  tone(ctx, 220, 0, 1.2, { type: "sawtooth", gain: 0.035, slideTo: 880 });
+  for (let i = 0; i < 6; i += 1) tone(ctx, 1200 + i * 90, 0.3 + i * 0.15, 0.04, { type: "square", gain: 0.02 });
+}
+
+/** Karte wird aufgedeckt: je seltener, desto größer der Auftritt */
+export function playReveal(tier = 1) {
+  const ctx = audio();
+  if (!ctx) return;
+  whoosh(ctx, 0, 0.35);
+  const notes = {
+    1: [660],
+    2: [784, 988],
+    3: [659, 880, 1175],
+    4: [523, 659, 784, 1047, 1319],
+    5: [523, 659, 784, 1047, 1319, 1568, 2093]
+  }[tier] || [660];
+  notes.forEach((frequency, index) => tone(ctx, frequency, 0.25 + index * 0.09, 0.4 + tier * 0.08, { type: "triangle", gain: 0.07 + tier * 0.008 }));
+  if (tier >= 3) boom(ctx, 0.2, { gain: 0.1 + tier * 0.05, duration: 0.6 });
+  if (tier >= 4) tone(ctx, 261, 0.3, 1.2, { type: "sawtooth", gain: 0.04, slideTo: 523 });
+  if (tier >= 5) {
+    boom(ctx, 0.2, { from: 90, to: 25, gain: 0.4, duration: 1.1 });
+    tone(ctx, 392, 0.35, 1.6, { type: "sawtooth", gain: 0.045, slideTo: 784 });
+  }
+}
