@@ -2472,6 +2472,7 @@ function PackOpening({ awards, categories, onDone }) {
                 </span>
                 <span className="pack-shine" />
                 <span className="pack-top" />
+                <span className="pack-bottom" />
               </button>
             )}
             {phase === "burst" && (
