@@ -5637,6 +5637,7 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 .pack-shaker {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   justify-items: center;
@@ -5644,16 +5645,19 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
 }
 
-.pack-shaker::before {
-  content: "";
+/* Nur der Hintergrund bebt (wie bei einem Meteoriteneinschlag), die Karten bleiben ruhig. Größer als der Bildschirm, damit beim Beben keine Ränder aufblitzen. */
+.pack-bg {
   position: absolute;
   inset: -70px;
-  z-index: -1;
-  background: radial-gradient(ellipse at 50% 46%, #1d2536 0%, #0b0f18 55%, #04060a 100%);
+  z-index: 0;
+  background:
+    radial-gradient(ellipse at 50% 46%, rgba(34, 44, 66, 0.55) 0%, rgba(4, 6, 10, 0.9) 72%),
+    url("/images/carbon_background.jpg") center / 520px repeat,
+    #04060a;
 }
 
-.pack-shaker.quake-4 { animation: quake-4 380ms linear; }
-.pack-shaker.quake-5 { animation: quake-5 950ms linear; }
+.pack-bg.quake-4 { animation: quake-4 380ms linear; }
+.pack-bg.quake-5 { animation: quake-5 950ms linear; }
 
 @keyframes quake-4 {
   0%, 100% { transform: none; }
@@ -6042,19 +6046,6 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 .pack-slot.is-up .pf-back { visibility: hidden; }
 
 /* Karte lädt sich auf */
-.pack-slot.is-charging { --amp: 1px; animation: amp-card 800ms ease-in forwards; }
-.pack-slot.is-charging .pack-shake { animation: card-jitter 80ms linear infinite; }
-
-@keyframes amp-card { from { --amp: 1px; } to { --amp: 7px; } }
-
-@keyframes card-jitter {
-  0% { transform: translate(calc(var(--amp) * -1), 0) rotate(-0.6deg); }
-  25% { transform: translate(var(--amp), calc(var(--amp) * -0.5)); }
-  50% { transform: translate(calc(var(--amp) * -0.6), calc(var(--amp) * 0.6)) rotate(0.6deg); }
-  75% { transform: translate(calc(var(--amp) * 0.8), calc(var(--amp) * 0.3)); }
-  100% { transform: translate(calc(var(--amp) * -1), 0) rotate(-0.6deg); }
-}
-
 .pack-slot.is-charging::before {
   content: "";
   position: absolute;
@@ -6062,7 +6053,7 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   z-index: -1;
   background: radial-gradient(circle, rgba(255, 214, 120, 0.7) 0%, rgba(255, 170, 60, 0) 62%);
   opacity: 0;
-  animation: card-glow 800ms ease-in forwards;
+  animation: card-glow 500ms ease-in forwards;
 }
 
 @keyframes card-glow {
@@ -6183,22 +6174,18 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   50% { box-shadow: 0 0 0 2px rgba(249, 144, 42, 0.8), 0 0 22px rgba(249, 144, 42, 0.5); }
 }
 
-/* Aufschlag: die Karte knallt auf den Hintergrund */
-.pack-slot.is-landed.tier-4 .pack-shake { animation: slam-4 380ms cubic-bezier(0.2, 0.9, 0.3, 1); }
-.pack-slot.is-landed.tier-5 .pack-shake { animation: slam-5 650ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+/* Die Karte fällt auf den Hintergrund: schnell größer → klein, ohne Wackeln. Beim Einschlag bebt der Hintergrund. */
+.pack-slot.is-dropping.tier-4 .pack-shake { animation: slam-4 240ms cubic-bezier(0.6, 0, 1, 0.5) both; }
+.pack-slot.is-dropping.tier-5 .pack-shake { animation: slam-5 320ms cubic-bezier(0.6, 0, 1, 0.5) both; }
 
 @keyframes slam-4 {
-  0% { transform: scale(1.12); }
-  55% { transform: scale(0.98); }
-  100% { transform: scale(1); }
+  from { transform: scale(1.16); }
+  to { transform: scale(1); }
 }
 
 @keyframes slam-5 {
-  0% { transform: scale(1.4) rotate(-2.4deg); }
-  38% { transform: scale(0.94) rotate(0.8deg); }
-  60% { transform: scale(1.04) rotate(-0.4deg); }
-  80% { transform: scale(0.99); }
-  100% { transform: scale(1); }
+  from { transform: scale(1.6); }
+  to { transform: scale(1); }
 }
 
 /* Druckwelle, die vom Aufschlag über den Bildschirm läuft */
@@ -6254,3 +6241,108 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 }
 
 .tier-flash.tier-5 { background: radial-gradient(circle at 50% 50%, #fff 0%, var(--tier-5) 38%, transparent 76%); }
+
+/* Risse im Hintergrund */
+.pack-cracks {
+  position: absolute;
+  width: 70vmin;
+  height: 70vmin;
+  margin: -35vmin 0 0 -35vmin;
+  overflow: visible;
+  pointer-events: none;
+  animation: cracks-fade 1500ms ease-out forwards;
+}
+
+.pack-cracks.tier-5 { width: 150vmin; height: 150vmin; margin: -75vmin 0 0 -75vmin; animation-duration: 2200ms; }
+
+.pack-cracks path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 0.9;
+  stroke-linejoin: bevel;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  filter: drop-shadow(0 0 2px var(--tier-4));
+  animation: crack-draw 220ms ease-out var(--d) forwards;
+}
+
+.pack-cracks.tier-5 path { stroke-width: 1.5; filter: drop-shadow(0 0 3px var(--tier-5)) drop-shadow(0 0 8px var(--tier-5)); }
+
+@keyframes crack-draw { to { stroke-dashoffset: 0; } }
+
+@keyframes cracks-fade {
+  0%, 35% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Sieg-Bildschirm vor dem Pack */
+.win-screen {
+  grid-template-rows: none;
+  align-content: center;
+  gap: 14px;
+  padding-inline: 24px;
+}
+
+.win-trophy {
+  font-size: clamp(72px, 18vw, 120px);
+  line-height: 1;
+  filter: drop-shadow(0 0 30px rgba(255, 200, 70, 0.7));
+  animation: trophy-in 800ms cubic-bezier(0.2, 1.4, 0.3, 1) both, trophy-bob 2.4s ease-in-out 800ms infinite;
+}
+
+.win-title {
+  margin: 0;
+  background: linear-gradient(180deg, #fff 10%, #ffd166 45%, #f9902a 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-family: var(--display);
+  font-size: clamp(44px, 12vw, 96px);
+  font-style: italic;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: none;
+  filter: drop-shadow(0 6px 22px rgba(249, 144, 42, 0.55));
+  animation: win-pop 700ms cubic-bezier(0.2, 1.3, 0.3, 1) 200ms both;
+}
+
+.win-sub { margin: 0; color: #cdd5e2; font-size: clamp(14px, 3.6vw, 18px); animation: head-pop 500ms ease-out 600ms both; }
+.win-screen .primary-button { min-width: 240px; margin-top: 10px; animation: head-pop 500ms ease-out 900ms both; }
+
+@keyframes trophy-in {
+  from { opacity: 0; transform: translateY(-80px) scale(0.3) rotate(-25deg); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes trophy-bob {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-10px) rotate(2deg); }
+}
+
+@keyframes win-pop {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: none; }
+}
+
+.confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.confetti i {
+  position: absolute;
+  left: var(--x);
+  top: -20px;
+  width: 9px;
+  height: 16px;
+  background: var(--color);
+  opacity: 0;
+  animation: confetti-fall var(--dur) linear var(--delay) infinite;
+}
+
+@keyframes confetti-fall {
+  0% { opacity: 1; transform: translateY(0) rotate(0); }
+  100% { opacity: 1; transform: translateY(110vh) rotate(var(--spin)); }
+}
