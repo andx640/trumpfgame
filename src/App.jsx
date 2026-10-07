@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
+import packArt from "./pack.webp";
 import { disablePush, enablePush, pushPermission, pushSupported, syncPush } from "./push";
-import { chatSoundEnabled, playChat, playFlip, playImpact, playLose, playPackBurst, playPackCharge, playReveal, playTurn, playWin, setChatSoundEnabled, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
+import { chatSoundEnabled, playCardCharge, playChat, playFlip, playImpact, playLose, playPackBurst, playPackCharge, playReveal, playTurn, playWin, setChatSoundEnabled, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
 const SESSION_NAME = "pitlane-trumpf-name";
@@ -2244,6 +2245,7 @@ function RevealFx({ tier }) {
 
 const PACK_CHARGE_MS = 2000;
 const PACK_BURST_MS = 1300;
+const CARD_CHARGE_MS = 500;
 const CARD_FLIP_MS = 800;
 const DROP_MS = { 4: 240, 5: 320 }; // Legendary/Mythic: Karte fällt nach dem Umdrehen auf den Hintergrund, erst dann bebt er
 
@@ -2312,7 +2314,7 @@ function PackOpening({ awards, categories, onDone }) {
   const total = cards.length;
   const tierOf = (index) => Number(cards[index]?.card.raritaet) || 1;
   const [phase, setPhase] = useState("win"); // win → idle → charge → burst → pick
-  const [status, setStatus] = useState({}); // Karte → flipping | dropping | landed | up
+  const [status, setStatus] = useState({}); // Karte → charging | flipping | landed | up
   const [focus, setFocus] = useState(-1); // vergrößerte Karte
   const [quake, setQuake] = useState(null); // { tier, n, x, y } beim Einschlag von Legendary/Mythic
   const [flash, setFlash] = useState(null); // { tier, n } Farbblitz beim Aufschlag
@@ -2324,6 +2326,10 @@ function PackOpening({ awards, categories, onDone }) {
     timers.current.push(setTimeout(fn, ms));
   };
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  useEffect(() => {
+    new Image().src = packArt; // Pack-Bild vorladen, damit es nach dem Sieg-Bildschirm sofort da ist
+  }, []);
 
   useEffect(() => {
     let timer;
@@ -2346,16 +2352,21 @@ function PackOpening({ awards, categories, onDone }) {
 
   const mark = (index, value) => setStatus((current) => ({ ...current, [index]: value }));
 
-  // Eine Karte antippen: sie dreht sich sofort um, nichts davor. Legendary/Mythic fallen danach auf den Hintergrund, der beim Einschlag bebt.
+  // Eine Karte antippen: kurzes Leuchten, ruhiges Umdrehen. Legendary/Mythic fallen dann auf den Hintergrund, der beim Einschlag bebt.
   const openCard = (index) => {
     if (phase !== "pick" || status[index]) return;
     const tier = tierOf(index);
     const drop = DROP_MS[tier] || 0;
-    const impactAt = CARD_FLIP_MS + drop;
-    mark(index, "flipping");
+    const landAt = CARD_CHARGE_MS + CARD_FLIP_MS;
+    const impactAt = landAt + drop;
+    mark(index, "charging");
     setFocus(index);
-    playFlip();
-    if (drop) later(() => mark(index, "dropping"), CARD_FLIP_MS);
+    playCardCharge();
+    later(() => {
+      mark(index, "flipping");
+      playFlip();
+    }, CARD_CHARGE_MS);
+    if (drop) later(() => mark(index, "dropping"), landAt);
     later(() => {
       counter.current += 1;
       const n = counter.current;
@@ -2384,10 +2395,26 @@ function PackOpening({ awards, categories, onDone }) {
   };
 
   const allSettled = phase === "pick" && cards.every((_, index) => status[index] === "up");
-    const remaining = total - Object.keys(status).length;
+  const opened = cards.filter((_, index) => status[index] && status[index] !== "charging").length;
+  const remaining = total - Object.keys(status).length;
   const newCount = cards.filter((award) => award.isNew).length;
   const showPack = phase === "idle" || phase === "charge" || phase === "burst";
   const focusStatus = focus >= 0 ? status[focus] : null;
+
+  // Die vergrößerte Karte darf nicht über den Bildschirmrand ragen: bei Bedarf nach innen schieben
+  useLayoutEffect(() => {
+    const slot = handRef.current?.querySelector(".pack-slot.is-active");
+    if (!slot) return;
+    const zoom = parseFloat(getComputedStyle(handRef.current).getPropertyValue("--zoom")) || 1.5;
+    const rect = slot.getBoundingClientRect();
+    const half = (slot.offsetWidth * zoom) / 2;
+    const center = rect.left + rect.width / 2;
+    const margin = 10;
+    let dx = 0;
+    if (center - half < margin) dx = margin - (center - half);
+    else if (center + half > window.innerWidth - margin) dx = window.innerWidth - margin - (center + half);
+    slot.style.setProperty("--dx", `${Math.round(dx)}px`);
+  }, [focus]);
 
   let eyebrow = "BELOHNUNG";
   let headline = <>Dein Pack wartet</>;
@@ -2396,7 +2423,7 @@ function PackOpening({ awards, categories, onDone }) {
   if (phase === "pick") {
     eyebrow = remaining > 0 ? `NOCH ${remaining} ${remaining === 1 ? "KARTE" : "KARTEN"} VERDECKT` : "ALLE KARTEN OFFEN";
     headline = <>Tippe eine Karte an</>;
-    if (focusStatus === "flipping" || focusStatus === "dropping") headline = <>Gleich …</>;
+    if (focusStatus === "charging" || focusStatus === "flipping" || focusStatus === "dropping") headline = <>Gleich …</>;
     if (focusStatus === "landed") {
       headline = <><span className={`pack-tier tier-${tierOf(focus)}`}>{TIER_NAMES[tierOf(focus)]}</span>{cards[focus].isNew && <em className="pack-new">NEU!</em>}</>;
     }
@@ -2441,15 +2468,9 @@ function PackOpening({ awards, categories, onDone }) {
                 onClick={phase === "idle" ? startOpening : undefined}
                 aria-label="Pack öffnen"
               >
-                <span className="pack-body">
-                  <LogoMark />
-                  <b>ANDI</b>
-                  <em>TRUMPF</em>
-                  <small>SPORTWAGEN BOOSTER</small>
-                  <span className="pack-count">{total} {total === 1 ? "KARTE" : "KARTEN"}</span>
-                </span>
-                <span className="pack-shine" />
-                <span className="pack-top" />
+                <img className="pack-art pack-art-body" src={packArt} alt="" draggable="false" />
+                <img className="pack-art pack-art-top" src={packArt} alt="" draggable="false" />
+                <span className="pack-count">{total} {total === 1 ? "KARTE" : "KARTEN"}</span>
               </button>
             )}
             {phase === "burst" && (
@@ -2470,7 +2491,7 @@ function PackOpening({ awards, categories, onDone }) {
                 const waiting = phase === "pick" && !state;
                 return (
                   <div
-                    className={`pack-slot tier-${tier} ${isUp ? "is-up" : ""} ${state === "dropping" ? "is-dropping" : ""} ${waiting ? "is-waiting" : ""} ${phase === "burst" ? "is-entering" : ""}`}
+                    className={`pack-slot tier-${tier} ${isUp ? "is-up" : ""} ${state === "dropping" ? "is-dropping" : ""} ${focus === index ? "is-active" : ""} ${state === "charging" ? "is-charging" : ""} ${waiting ? "is-waiting" : ""} ${phase === "burst" ? "is-entering" : ""}`}
                     style={{ "--i": index, "--mid": (total - 1) / 2 }}
                     key={`${award.card.c_id}-${index}`}
                     role="button"
