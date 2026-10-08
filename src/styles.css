@@ -6631,7 +6631,7 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 .friend-view-collection { width: 100%; min-height: 46px; margin-bottom: 8px; }
 
 /* Kartentyp (Common … Mythic) im Feld oben in der Mitte des Rahmens, in der Farbe der Seltenheit.
-   Legendary und Mythic leuchten wie ihre Karten: das Leuchten ist eine eigene Ebene, von der sich nur die Deckkraft ändert. */
+   Epic schimmert leicht, Legendary und Mythic haben eine durchlaufende Spiegelung (siehe unten). */
 .gt-type {
   position: absolute;
   z-index: 2;
@@ -6667,23 +6667,26 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 
 .portrait-card.tier-3 .gt-type span { text-shadow: 0 0 14px rgba(166, 107, 255, 0.7), 0 2px 4px rgba(0, 0, 0, 0.85); }
 
-.portrait-card.tier-4 .gt-type::before,
-.portrait-card.tier-5 .gt-type::before {
-  content: "";
+/* Legendary und Mythic: kein Schatten-Leuchten, sondern eine Spiegelung, die durch die Buchstaben läuft.
+   Eine zweite Textebene mit durchsichtigem Verlauf liegt genau auf dem Text und ist auf die Buchstaben zugeschnitten (background-clip: text);
+   der Verlauf läuft an beiden Seiten auf 0 aus, daher gibt es keine harte Kante. */
+.portrait-card.tier-4 .gt-type span::after,
+.portrait-card.tier-5 .gt-type span::after {
+  content: attr(data-text);
   position: absolute;
-  inset: -6px -16px;
-  background: radial-gradient(ellipse at center, var(--tier-color) 0%, transparent 70%);
-  opacity: 0.35;
-  will-change: opacity;
-  animation: type-glow 2.4s ease-in-out infinite;
+  inset: 0;
+  color: transparent;
+  text-shadow: none;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, 0.95) 50%, rgba(255, 255, 255, 0) 62%) 100% 0 / 260% 100% no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: type-shine 3.6s ease-in-out infinite;
 }
 
-.portrait-card.tier-5 .gt-type::before { animation-duration: 1.7s; }
+.portrait-card.tier-5 .gt-type span::after { animation-duration: 2.8s; }
 
-.portrait-card.tier-4 .gt-type span { text-shadow: 0 0 12px rgba(255, 178, 60, 0.9), 0 0 3px rgba(255, 240, 200, 0.8), 0 2px 4px rgba(0, 0, 0, 0.8); }
-.portrait-card.tier-5 .gt-type span { text-shadow: 0 0 14px rgba(255, 74, 94, 0.95), 0 0 3px rgba(255, 220, 224, 0.85), 0 2px 4px rgba(0, 0, 0, 0.8); }
-
-@keyframes type-glow {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 0.85; }
+@keyframes type-shine {
+  0% { background-position: 100% 0; }
+  55%, 100% { background-position: 0% 0; }
 }
+
