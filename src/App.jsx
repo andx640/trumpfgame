@@ -1332,7 +1332,9 @@ function ScaledCard({ children }) {
     const element = ref.current;
     const inner = innerRef.current;
     if (!element || !inner) return undefined;
-    const update = () => { inner.style.transform = `scale(${element.offsetWidth / CARD_DESIGN_WIDTH})`; };
+    // zoom statt transform: scale – so wird die Karte in ihrer echten Größe gezeichnet. Mit scale hält der Browser jede Karte als
+    // 906 × 1405 px große Textur im Grafikspeicher (rund 45 MB je Karte auf dem Handy) und skaliert sie nur herunter.
+    const update = () => { inner.style.zoom = String(element.offsetWidth / CARD_DESIGN_WIDTH); };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(element);
