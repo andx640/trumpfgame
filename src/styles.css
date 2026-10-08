@@ -6414,6 +6414,13 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   mask-image: url("./card-shape.webp");
 }
 
+/* Drehendes Licht: ein Winkel, der sich nahtlos von 0 auf 360 Grad dreht (kein Schnitt, keine Wiederholung) */
+@property --spin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
 /* Common: silbergrauer Rand, kein Leuchten */
 .portrait-card.tier-1 .card-rim {
   background: linear-gradient(135deg, #7d838b 0%, #d9dde2 28%, #959ba3 52%, #eceef1 74%, #787e86 100%);
@@ -6436,47 +6443,51 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 
 .portrait-card.tier-3 .card-glow::before { background: #a66bff; }
 
-/* Legendary: goldoranger Rand, über den ein Glanz läuft, dazu ein pulsierendes Leuchten */
+/* Legendary: Goldrand mit einem Lichtpunkt, der gleichmäßig um die Karte wandert, dazu ruhig pulsierendes Leuchten */
 .portrait-card.tier-4 .card-rim {
-  background: linear-gradient(100deg, #b35f08 0%, #ffb23c 14%, #fff0a8 24%, #ff9a1f 36%, #c86a0a 50%, #ffcf66 66%, #fff0a8 76%, #ff9a1f 88%, #b35f08 100%) 0 0 / 1800px 100%;
-  animation: rim-run 3.4s linear infinite;
+  background:
+    conic-gradient(from var(--spin), rgba(255, 252, 225, 0) 0deg, rgba(255, 252, 225, 0.95) 28deg, rgba(255, 252, 225, 0) 62deg, rgba(255, 252, 225, 0) 180deg, rgba(255, 244, 190, 0.55) 208deg, rgba(255, 252, 225, 0) 240deg),
+    linear-gradient(135deg, #a8530a 0%, #ffb23c 25%, #ffd978 40%, #e8821a 58%, #ffc04d 78%, #a8530a 100%);
+  animation: spin 4.2s linear infinite;
 }
 
 .portrait-card.tier-4 .card-glow {
   filter: blur(14px);
-  opacity: 0.5;
-  animation: glow-pulse 2.2s ease-in-out infinite alternate;
+  opacity: 0.55;
+  animation: glow-pulse 2.6s ease-in-out infinite alternate;
 }
 
 .portrait-card.tier-4 .card-glow::before {
-  background: linear-gradient(100deg, #ff8a1c, #ffd25a, #ff8a1c, #ffb23c) 0 0 / 1800px 100%;
-  animation: rim-run 3.4s linear infinite;
+  background: conic-gradient(from var(--spin), #ff8a1c, #ffd25a, #ff8a1c, #ffb23c, #ff8a1c);
+  animation: spin 4.2s linear infinite;
 }
 
-/* Mythic: schimmernder Regenbogen-Rand, starkes Leuchten, ein Glanzstreifen, der immer wieder über die Karte läuft, und Funkeln */
+/* Mythic: rot glänzendes Metall mit zwei kreisenden Lichtpunkten, starkes rotes Leuchten, ein Glanzstreifen über der Karte und Funkeln */
 .portrait-card.tier-5 .card-rim {
-  background: linear-gradient(100deg, #ff2d6f 0%, #ffb42d 14%, #f6ff7a 26%, #3dff9a 40%, #33c9ff 54%, #8a5cff 68%, #ff4fd8 82%, #ff2d6f 100%) 0 0 / 1800px 100%;
-  animation: rim-run 2.4s linear infinite;
+  background:
+    conic-gradient(from var(--spin), rgba(255, 235, 235, 0) 0deg, rgba(255, 235, 235, 1) 22deg, rgba(255, 235, 235, 0) 52deg, rgba(255, 235, 235, 0) 180deg, rgba(255, 200, 200, 0.9) 202deg, rgba(255, 235, 235, 0) 232deg),
+    linear-gradient(135deg, #5a0010 0%, #d3162e 22%, #ff5a6a 38%, #8a0618 55%, #e0233a 75%, #5a0010 100%);
+  animation: spin 3s linear infinite;
 }
 
 .portrait-card.tier-5 .card-glow {
   filter: blur(16px);
-  opacity: 0.7;
-  animation: glow-pulse 1.6s ease-in-out infinite alternate;
+  opacity: 0.75;
+  animation: glow-pulse 1.8s ease-in-out infinite alternate;
 }
 
 .portrait-card.tier-5 .card-glow::before {
-  background: linear-gradient(100deg, #ff2d6f 0%, #ffb42d 16%, #3dff9a 34%, #33c9ff 52%, #8a5cff 70%, #ff4fd8 86%, #ff2d6f 100%) 0 0 / 1800px 100%;
-  animation: rim-run 2.4s linear infinite;
+  background: conic-gradient(from var(--spin), #ff1f3d, #ff6a5a, #ff1f3d, #c40a24, #ff1f3d);
+  animation: spin 3s linear infinite;
 }
 
 .portrait-card.tier-5 .card-shine {
   z-index: 5;
   background:
-    linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0) 42%, rgba(255, 255, 255, 0.62) 50%, rgba(255, 255, 255, 0) 58%, transparent 62%) 100% 0 / 230% 100% no-repeat,
-    linear-gradient(115deg, rgba(255, 45, 111, 0.16), rgba(255, 180, 45, 0.16), rgba(61, 255, 154, 0.16), rgba(51, 201, 255, 0.16), rgba(138, 92, 255, 0.16), rgba(255, 45, 111, 0.16)) 0 0 / 1800px 100%;
+    linear-gradient(105deg, transparent 40%, rgba(255, 190, 190, 0) 43%, rgba(255, 255, 255, 0.55) 50%, rgba(255, 190, 190, 0) 57%, transparent 60%) 100% 0 / 300% 100% no-repeat,
+    linear-gradient(160deg, rgba(255, 60, 80, 0.2) 0%, rgba(255, 60, 80, 0) 35%, rgba(255, 60, 80, 0.12) 100%);
   mix-blend-mode: screen;
-  animation: shine-sweep 4.2s linear infinite;
+  animation: shine-sweep 4.6s ease-in-out infinite;
 }
 
 .portrait-card.tier-5 .card-shine::after {
@@ -6484,21 +6495,20 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 18% 12%, #fff 0 3px, transparent 7px),
-    radial-gradient(circle at 82% 30%, #fff 0 2.5px, transparent 6px),
-    radial-gradient(circle at 34% 58%, #fff 0 2px, transparent 5px),
-    radial-gradient(circle at 74% 74%, #fff 0 3px, transparent 7px),
-    radial-gradient(circle at 12% 88%, #fff 0 2.5px, transparent 6px),
-    radial-gradient(circle at 58% 92%, #fff 0 2px, transparent 5px);
-  animation: twinkle 1.7s ease-in-out infinite alternate;
+    radial-gradient(circle at 18% 12%, #fff 0 2px, rgba(255, 120, 130, 0.5) 3px, transparent 8px),
+    radial-gradient(circle at 82% 30%, #fff 0 1.5px, rgba(255, 120, 130, 0.5) 3px, transparent 7px),
+    radial-gradient(circle at 34% 58%, #fff 0 1.5px, rgba(255, 120, 130, 0.5) 3px, transparent 6px),
+    radial-gradient(circle at 74% 74%, #fff 0 2px, rgba(255, 120, 130, 0.5) 3px, transparent 8px),
+    radial-gradient(circle at 12% 88%, #fff 0 1.5px, rgba(255, 120, 130, 0.5) 3px, transparent 7px);
+  animation: twinkle 2.1s ease-in-out infinite alternate;
 }
 
-@keyframes rim-run { to { background-position: 1800px 0; } }
+@keyframes spin { to { --spin: 360deg; } }
 @keyframes glow-pulse { from { opacity: 0.35; } to { opacity: 0.95; } }
-@keyframes twinkle { from { opacity: 0.15; } to { opacity: 1; } }
+@keyframes twinkle { from { opacity: 0.1; } to { opacity: 0.9; } }
 
 @keyframes shine-sweep {
   0% { background-position: 100% 0, 0 0; }
-  50% { background-position: 0% 0, 900px 0; }
-  100% { background-position: 0% 0, 1800px 0; }
+  55%, 100% { background-position: 0% 0, 0 0; }
 }
+
