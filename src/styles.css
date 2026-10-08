@@ -6529,7 +6529,7 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   opacity: 1;
   background: radial-gradient(circle, rgba(255, 252, 225, 0.95) 0%, rgba(255, 244, 190, 0.6) 25%, rgba(255, 252, 225, 0) 62%);
   will-change: transform;
-  animation: rim-lap 4.2s linear infinite;
+  animation: rim-lap 9s linear infinite;
 }
 
 .portrait-card.tier-4 .card-glow {
@@ -6551,10 +6551,10 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   opacity: 1;
   background: radial-gradient(circle, rgba(255, 240, 240, 1) 0%, rgba(255, 200, 200, 0.65) 25%, rgba(255, 235, 235, 0) 62%);
   will-change: transform;
-  animation: rim-lap 3s linear infinite;
+  animation: rim-lap 9s linear infinite;
 }
 
-.portrait-card.tier-5 .card-rim::after { animation-delay: -1.5s; }
+.portrait-card.tier-5 .card-rim::after { animation-delay: -4.5s; }
 
 .portrait-card.tier-5 .card-glow {
   filter: blur(18px);
@@ -6582,9 +6582,8 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   width: 85%;
   height: 130%;
   background:
-    linear-gradient(106deg, transparent 41%, rgba(255, 255, 255, 0.5) 49.5%, rgba(255, 255, 255, 0.85) 50%, rgba(255, 255, 255, 0.5) 50.5%, transparent 59%),
+    linear-gradient(106deg, transparent 38%, rgba(255, 255, 255, 0.06) 44%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.06) 56%, transparent 62%),
     linear-gradient(106deg, transparent 0%, rgba(255, 150, 160, 0.05) 14%, rgba(255, 175, 185, 0.16) 30%, rgba(255, 205, 210, 0.3) 42%, rgba(255, 235, 238, 0.38) 50%, rgba(255, 205, 210, 0.3) 58%, rgba(255, 175, 185, 0.16) 70%, rgba(255, 150, 160, 0.05) 86%, transparent 100%);
-  mix-blend-mode: screen;
   transform: translateX(-130%);
   will-change: transform;
   animation: shine-t 7s cubic-bezier(0.45, 0.05, 0.35, 1) infinite;
