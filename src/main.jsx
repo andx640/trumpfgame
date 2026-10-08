@@ -5,7 +5,8 @@ import "@fontsource/barlow-condensed/latin-700-italic.css";
 import "@fontsource/barlow-condensed/latin-800-italic.css";
 import "@fontsource/barlow/latin-700-italic.css";
 import "@fontsource/barlow/latin-800-italic.css";
-import "./styles.css";
+import "./ui.css";
+import "./game.css";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
