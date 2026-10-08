@@ -2156,9 +2156,8 @@ input:focus-visible {
 .portrait-stat.is-selectable:focus-visible,
 .portrait-stat.is-highlighted {
   outline: 0;
-  background:
-    linear-gradient(180deg, rgba(249,144,42,.34), rgba(249,144,42,.1)),
-    linear-gradient(180deg, #2b2123, #0e0a0b);
+  /* nur ein Farbschleier, damit Beschriftung und Symbol aus dem Kartenbild sichtbar bleiben */
+  background: linear-gradient(180deg, rgba(249,144,42,.34), rgba(249,144,42,.1));
   box-shadow: inset 0 0 0 5px var(--acid), 0 0 24px rgba(249,144,42,.55);
 }
 
@@ -6373,3 +6372,17 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 .pack-dots i.tier-3 { --dot-color: var(--tier-3); }
 .pack-dots i.tier-4 { --dot-color: var(--tier-4); }
 .pack-dots i.tier-5 { --dot-color: var(--tier-5); }
+
+/* nur für Screenreader sichtbar (Beschriftung steht im Kartenbild) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
