@@ -1351,8 +1351,9 @@ function cardValue(card, key) {
 const VehicleCard = memo(function VehicleCard({ card, categories, selectable = false, highlight = null }) {
   const [imageFailed, setImageFailed] = useState(false);
   const nameSize = Math.min(58, 700 / (card.name.length * 0.43));
+  const tier = Math.min(5, Math.max(1, Number(card.raritaet) || 1)); // Seltenheit bestimmt den Rand (Common … Mythic)
   return (
-    <article className="portrait-card">
+    <article className={`portrait-card tier-${tier}`}>
       <div className="gt-photo">
         {card.image && !imageFailed ? (
           <img src={card.image} alt={card.name} loading="lazy" decoding="async" onError={() => setImageFailed(true)} />
@@ -1397,6 +1398,9 @@ const VehicleCard = memo(function VehicleCard({ card, categories, selectable = f
           );
         })}
       </div>
+      <span className="card-rim" aria-hidden="true" />
+      {tier >= 3 && <span className="card-glow" aria-hidden="true" />}
+      {tier >= 5 && <span className="card-shine" aria-hidden="true" />}
     </article>
   );
 });
