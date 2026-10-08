@@ -6629,3 +6629,61 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 .player-modal.friend-collection { width: min(100%, 760px); }
 .player-modal.friend-collection .collection-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 125px), 1fr)); gap: 12px; margin-top: 14px; padding-bottom: 6px; }
 .friend-view-collection { width: 100%; min-height: 46px; margin-bottom: 8px; }
+
+/* Kartentyp (Common … Mythic) im Feld oben in der Mitte des Rahmens, in der Farbe der Seltenheit.
+   Legendary und Mythic leuchten wie ihre Karten: das Leuchten ist eine eigene Ebene, von der sich nur die Deckkraft ändert. */
+.gt-type {
+  position: absolute;
+  z-index: 2;
+  top: 11px;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 276px;
+  height: 52px;
+  margin-left: -138px;
+  pointer-events: none;
+}
+
+.gt-type span {
+  position: relative;
+  z-index: 1;
+  color: var(--tier-color);
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 44px;
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.85);
+}
+
+.portrait-card.tier-1 { --tier-color: #cdd3da; }
+.portrait-card.tier-2 { --tier-color: #4aa8ff; }
+.portrait-card.tier-3 { --tier-color: #b583ff; }
+.portrait-card.tier-4 { --tier-color: #ffb23c; }
+.portrait-card.tier-5 { --tier-color: #ff4a5e; }
+
+.portrait-card.tier-3 .gt-type span { text-shadow: 0 0 14px rgba(166, 107, 255, 0.7), 0 2px 4px rgba(0, 0, 0, 0.85); }
+
+.portrait-card.tier-4 .gt-type::before,
+.portrait-card.tier-5 .gt-type::before {
+  content: "";
+  position: absolute;
+  inset: -6px -16px;
+  background: radial-gradient(ellipse at center, var(--tier-color) 0%, transparent 70%);
+  opacity: 0.35;
+  will-change: opacity;
+  animation: type-glow 2.4s ease-in-out infinite;
+}
+
+.portrait-card.tier-5 .gt-type::before { animation-duration: 1.7s; }
+
+.portrait-card.tier-4 .gt-type span { text-shadow: 0 0 12px rgba(255, 178, 60, 0.9), 0 0 3px rgba(255, 240, 200, 0.8), 0 2px 4px rgba(0, 0, 0, 0.8); }
+.portrait-card.tier-5 .gt-type span { text-shadow: 0 0 14px rgba(255, 74, 94, 0.95), 0 0 3px rgba(255, 220, 224, 0.85), 0 2px 4px rgba(0, 0, 0, 0.8); }
+
+@keyframes type-glow {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.85; }
+}

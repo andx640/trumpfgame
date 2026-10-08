@@ -461,10 +461,6 @@ function Home({ onNew, onJoin, onCollection, onLeaderboard, onDaily, dailyBusy =
 
 const TIER_NAMES = { 1: "Common", 2: "Rare", 3: "Epic", 4: "Legendary", 5: "Mythic" };
 
-function TierBadge({ tier }) {
-  return <span className={`tier-badge tier-${tier}`}>{TIER_NAMES[tier] || "Common"}</span>;
-}
-
 // Karte mit Seltenheitsrahmen, optional Anzahl (×3) und „NEU“
 // In langen Listen (Sammlung, Deckbau) wird die Karte nur gebaut, solange sie in der Nähe des Bildschirms ist.
 // Jede Karte besteht aus über hundert Elementen mit Bildern; 400 davon gleichzeitig machen das Handy langsam.
@@ -498,7 +494,6 @@ function CollectionCard({ card, categories, qty = 0, isNew = false, onClick, dim
       ) : (
         <div className="scaled-card" />
       )}
-      <TierBadge tier={tier} />
       {qty > 1 && <b className="card-qty">×{qty}</b>}
       {card.score !== undefined && <span className="card-score" title="Kartenstärke (0–100)">{Math.round(card.score)}</span>}
       {isNew && <b className="card-new">NEU!</b>}
@@ -1364,7 +1359,7 @@ const CARD_FIELDS = [
 
 // Felder, deren Beschriftung und Symbol schon im Rahmenbild (src/card-frame.webp) stehen. Nur der Wert kommt aus dem HTML.
 // Sobald Rarität und Performance ebenfalls im Bild stehen, hier „raritaet“ und „performance“ ergänzen.
-const BAKED_FIELDS = new Set(["leistung", "hubraum", "drehmoment", "drehzahl", "beschleunigung", "hoechstgeschwindigkeit", "gewicht", "preis"]);
+const BAKED_FIELDS = new Set(["leistung", "hubraum", "drehmoment", "drehzahl", "beschleunigung", "hoechstgeschwindigkeit", "gewicht", "preis", "raritaet", "performance"]);
 
 function cardValue(card, key) {
   const value = Number(card[key]);
@@ -1389,6 +1384,7 @@ const VehicleCard = memo(function VehicleCard({ card, categories, selectable = f
         )}
         {selectable && <div className="choose-hint">WERT ANKLICKEN</div>}
       </div>
+      <div className="gt-type"><span>{TIER_NAMES[tier]}</span></div>
       <div className="gt-plate"><h2 style={{ fontSize: `${nameSize}px` }}>{card.name}</h2></div>
       <div className="gt-stats">
         {CARD_FIELDS.map((field) => {
