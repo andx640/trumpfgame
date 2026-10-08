@@ -2567,8 +2567,10 @@ input:focus-visible {
   position: absolute;
   inset: 0;
   z-index: 50;
-  display: grid;
-  place-items: center;
+  display: flex;
+  overflow-y: auto; /* bei vielen Karten im Pack lässt sich das Fenster scrollen */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 20px;
   background: rgba(5, 8, 14, 0.62);
   backdrop-filter: blur(8px);
@@ -5557,6 +5559,8 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 
 .mode-options.is-three { grid-template-columns: repeat(3, 1fr); }
 .mode-options.is-three button span { font-size: 9px; }
+
+.finish-overlay > .finish-panel { flex: none; margin: auto; } /* mittig, aber nie über den Rand hinaus abgeschnitten */
 
 .finish-panel:has(.risk-cards),
 .finish-panel:has(.pack-cards) {
