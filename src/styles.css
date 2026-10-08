@@ -3313,8 +3313,6 @@ body:has(.app-shell.is-home) {
   width: var(--deck-w);
   aspect-ratio: 906 / 1405;
   margin-left: calc(var(--deck-w) / -2);
-  backface-visibility: hidden;
-  transform-style: preserve-3d;
   will-change: transform;
   transition: transform 480ms cubic-bezier(0.22, 0.8, 0.25, 1), opacity 480ms ease;
 }
@@ -6504,29 +6502,20 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 .portrait-card.tier-3 .card-glow::before { background: #a66bff; }
 
 /* Legendary: Goldrand mit einem Lichtpunkt, der gleichmäßig um die Karte wandert, dazu ruhig pulsierendes Leuchten.
-   Performance: Es bewegen sich nur transform und opacity (laufen auf der Grafikkarte, kein Neuzeichnen pro Bild).
-   Das Licht ist ein großes drehendes Element, das vom Rand-Ausschnitt (mask) begrenzt wird. */
-.card-rim::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  /* Quadrat knapp größer als die Kartendiagonale (Karte ist 906:1405) statt fester 1700px:
-     ein riesiger drehender Layer sprengt auf Handys den Grafikspeicher, dann fehlen Kacheln der Karte (Flackern) */
-  width: 190%;
-  aspect-ratio: 1;
-  margin: -95% 0 0 -95%;
-  will-change: transform;
-  pointer-events: none;
+   Performance: Das Licht ist ein Kegelverlauf direkt auf dem Rand, nur sein Winkel (--rim-a) wird animiert. Die Karte wird mit
+   transform: scale() von 906 px verkleinert; ein eigener, drehender Riesen-Layer (früher 1700 px) sprengte auf Handys den
+   Grafikspeicher, dann fehlten Kacheln der Karte (Flackern). Ohne @property bleibt der Rand einfach still. */
+@property --rim-a {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
 }
 
 .portrait-card.tier-4 .card-rim {
-  background: linear-gradient(135deg, #a8530a 0%, #ffb23c 25%, #ffd978 40%, #e8821a 58%, #ffc04d 78%, #a8530a 100%);
-}
-
-.portrait-card.tier-4 .card-rim::before {
-  background: conic-gradient(rgba(255, 252, 225, 0) 0deg, rgba(255, 252, 225, 0.95) 28deg, rgba(255, 252, 225, 0) 62deg, rgba(255, 252, 225, 0) 180deg, rgba(255, 244, 190, 0.55) 208deg, rgba(255, 252, 225, 0) 240deg);
-  animation: spin-t 4.2s linear infinite;
+  background:
+    conic-gradient(from var(--rim-a), rgba(255, 252, 225, 0) 0deg, rgba(255, 252, 225, 0.95) 28deg, rgba(255, 252, 225, 0) 62deg, rgba(255, 252, 225, 0) 180deg, rgba(255, 244, 190, 0.55) 208deg, rgba(255, 252, 225, 0) 240deg),
+    linear-gradient(135deg, #a8530a 0%, #ffb23c 25%, #ffd978 40%, #e8821a 58%, #ffc04d 78%, #a8530a 100%);
+  animation: rim-spin 4.2s linear infinite;
 }
 
 .portrait-card.tier-4 .card-glow {
@@ -6540,12 +6529,10 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 
 /* Mythic: rot glänzendes Metall mit zwei kreisenden Lichtpunkten, starkes rotes Leuchten, ein Glanzstreifen über der Karte und Funkeln */
 .portrait-card.tier-5 .card-rim {
-  background: linear-gradient(135deg, #5a0010 0%, #d3162e 22%, #ff5a6a 38%, #8a0618 55%, #e0233a 75%, #5a0010 100%);
-}
-
-.portrait-card.tier-5 .card-rim::before {
-  background: conic-gradient(rgba(255, 235, 235, 0) 0deg, rgba(255, 235, 235, 1) 22deg, rgba(255, 235, 235, 0) 52deg, rgba(255, 235, 235, 0) 180deg, rgba(255, 200, 200, 0.9) 202deg, rgba(255, 235, 235, 0) 232deg);
-  animation: spin-t 3s linear infinite;
+  background:
+    conic-gradient(from var(--rim-a), rgba(255, 235, 235, 0) 0deg, rgba(255, 235, 235, 1) 22deg, rgba(255, 235, 235, 0) 52deg, rgba(255, 235, 235, 0) 180deg, rgba(255, 200, 200, 0.9) 202deg, rgba(255, 235, 235, 0) 232deg),
+    linear-gradient(135deg, #5a0010 0%, #d3162e 22%, #ff5a6a 38%, #8a0618 55%, #e0233a 75%, #5a0010 100%);
+  animation: rim-spin 3s linear infinite;
 }
 
 .portrait-card.tier-5 .card-glow {
@@ -6591,7 +6578,7 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
   animation: twinkle 2.1s ease-in-out infinite alternate;
 }
 
-@keyframes spin-t { to { transform: rotate(360deg); } }
+@keyframes rim-spin { to { --rim-a: 360deg; } }
 @keyframes glow-pulse { from { opacity: 0.35; } to { opacity: 0.95; } }
 @keyframes twinkle { from { opacity: 0.1; } to { opacity: 0.9; } }
 
