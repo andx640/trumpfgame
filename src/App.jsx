@@ -1,8 +1,12 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
 import packArt from "./pack.webp";
 import { disablePush, enablePush, pushPermission, pushSupported, syncPush } from "./push";
 import { chatSoundEnabled, playCardCharge, playChat, playFlip, playImpact, playLose, playPackBurst, playPackCharge, playReveal, playTurn, playWin, setChatSoundEnabled, setSoundEnabled, soundEnabled, unlockAudio } from "./sound";
+import {
+  ArrowIcon, Button, Card, ChatIcon, CheckIcon, CloseIcon, ConnectionContext, CopyIcon, EmptyState, Field, FlagIcon, IconButton, InfoIcon,
+  Loading, LogoMark, Modal, Note, Page, PlusIcon, SendIcon, Segmented, ShieldIcon, SoundIcon, Spinner, ToastProvider, UserIcon, useToast
+} from "./ui";
 
 const SESSION_TOKEN = "pitlane-trumpf-token";
 const SESSION_NAME = "pitlane-trumpf-name";
@@ -80,19 +84,30 @@ function TurnBanner({ target, duration }) {
   );
 }
 
+const PAGE_RANK = { home: 0, new: 1, join: 1, collection: 1, leaderboard: 1, account: 1, profile: 1 };
+
 function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
+  );
+}
+
+function AppContent() {
+  const notify = useToast();
   const [state, setState] = useState(null);
   const [connected, setConnected] = useState(socket.connected);
   const [joining, setJoining] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [view, setView] = useState("home"); // home | new | join | collection | account | profile
+  const [view, setView] = useState("home"); // home | new | join | collection | leaderboard | account | profile
   const [authToken, setAuthToken] = useState(readAuthToken);
   const [account, setAccount] = useState(null);
   const [invites, setInvites] = useState([]);
-  const [banner, setBanner] = useState(null);
   const [daily, setDaily] = useState(null); // geöffnetes Tagespack: { cards, categories }
   const [dailyBusy, setDailyBusy] = useState(false);
   const notifiedInvites = useRef(new Set());
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const loadProfile = useCallback((token) => {
     if (!token) return;
@@ -121,17 +136,59 @@ function App() {
       if (result.ok) {
         setDaily(result);
       } else {
-        setNotice(result.message || "Das Tagespack ist gerade nicht verfügbar.");
+        notify(result.message || "Das Tagespack ist gerade nicht verfügbar.");
         loadProfile(authToken);
       }
-    }).catch(() => setNotice("Keine Verbindung zum Server.")).finally(() => setDailyBusy(false));
+    }).catch(() => notify("Keine Verbindung zum Server.", { type: "error" })).finally(() => setDailyBusy(false));
   };
   // nach einer Partie die neue Statistik holen
   useEffect(() => {
     if (state?.status === "finished") loadProfile(authToken);
   }, [state?.status, authToken, loadProfile]);
 
-  // Lebenszeichen: macht mich für Freunde „on“ und holt offene Einladungen
+  const doJoin = useCallback((name, room, ai, create) => {
+    setJoining(true);
+    socket.emit("joinGame", { name, room, create, authToken: account ? authToken : undefined, ai }, (response) => {
+      setJoining(false);
+      if (!response?.ok) {
+        notify(response?.message || "Beitritt fehlgeschlagen.", { type: "error" });
+        return;
+      }
+      sessionStorage.setItem(SESSION_TOKEN, response.token);
+      sessionStorage.setItem(SESSION_ROOM, response.room);
+      sessionStorage.setItem(SESSION_NAME, name.trim());
+    });
+  }, [account, authToken, notify]);
+  const join = (name, room, ai) => doJoin(name, room, ai, view === "new");
+
+  const declineInvite = useCallback((invite) => {
+    setInvites((list) => list.filter((entry) => entry.id !== invite.id));
+    socket.request("inviteDecline", { authToken, id: invite.id }).then((result) => result.ok && setInvites(result.invites)).catch(() => {});
+  }, [authToken]);
+
+  const acceptInvite = useCallback((invite) => {
+    const current = stateRef.current;
+    if (current && current.status !== "lobby") {
+      notify("Beende erst die laufende Partie, dann kannst du der Einladung folgen.");
+      return;
+    }
+    const go = () => doJoin(account.name, invite.room, undefined, false);
+    if (current) {
+      // aus der aktuellen Lobby wechseln
+      socket.emit("leaveLobby", undefined, () => {
+        sessionStorage.removeItem(SESSION_TOKEN);
+        sessionStorage.removeItem(SESSION_ROOM);
+        go();
+      });
+    } else {
+      go();
+    }
+  }, [account, doJoin, notify]);
+
+  const inviteHandlers = useRef({ acceptInvite, declineInvite });
+  inviteHandlers.current = { acceptInvite, declineInvite };
+
+  // Lebenszeichen: macht mich für Freunde „on“ und holt offene Einladungen. Neue Einladungen erscheinen kurz als Meldung.
   useEffect(() => {
     if (!authToken) {
       setInvites([]);
@@ -146,7 +203,13 @@ function App() {
           const fresh = result.invites.filter((invite) => !notifiedInvites.current.has(invite.id));
           result.invites.forEach((invite) => notifiedInvites.current.add(invite.id));
           if (fresh.length && !document.hidden) {
-            setBanner(fresh[0]);
+            const invite = fresh[0];
+            const canJoin = !stateRef.current || stateRef.current.status === "lobby";
+            notify(canJoin ? "Komm in die Lobby und spiel mit." : "Du kannst nach der Partie beitreten (siehe Profil).", {
+              title: `${invite.from} lädt dich ein`,
+              duration: 10_000,
+              actions: canJoin ? [{ label: "Beitreten", onClick: () => inviteHandlers.current.acceptInvite(invite) }] : []
+            });
             playTurn();
           }
         })
@@ -162,19 +225,14 @@ function App() {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [authToken]);
-
-  useEffect(() => {
-    if (!banner) return undefined;
-    const timer = window.setTimeout(() => setBanner(null), 12_000);
-    return () => window.clearTimeout(timer);
-  }, [banner]);
+  }, [authToken, notify]);
 
   const signedIn = (token, data) => {
     storeAuthToken(token);
     setAuthToken(token);
     setAccount(data);
     setView("profile");
+    notify(`Willkommen, ${data.name}!`, { type: "success" });
   };
 
   const signOut = () => {
@@ -182,6 +240,7 @@ function App() {
     setAuthToken(null);
     setAccount(null);
     setView("home");
+    notify("Du bist abgemeldet.");
   };
 
   useEffect(() => {
@@ -190,12 +249,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    let noticeTimer;
-    const showError = ({ message }) => {
-      setNotice(message);
-      window.clearTimeout(noticeTimer);
-      noticeTimer = window.setTimeout(() => setNotice(""), 4_500);
-    };
+    const showError = ({ message }) => notify(message, { type: "error" });
     const restoreSession = () => {
       setConnected(true);
       const token = sessionStorage.getItem(SESSION_TOKEN);
@@ -223,53 +277,12 @@ function App() {
     if (socket.connected) restoreSession();
 
     return () => {
-      window.clearTimeout(noticeTimer);
       socket.off("connect", restoreSession);
       socket.off("disconnect", loseConnection);
       socket.off("state", setState);
       socket.off("gameError", showError);
     };
-  }, []);
-
-  const doJoin = (name, room, ai, create) => {
-    setJoining(true);
-    socket.emit("joinGame", { name, room, create, authToken: account ? authToken : undefined, ai }, (response) => {
-      setJoining(false);
-      if (!response?.ok) {
-        setNotice(response?.message || "Beitritt fehlgeschlagen.");
-        return;
-      }
-      sessionStorage.setItem(SESSION_TOKEN, response.token);
-      sessionStorage.setItem(SESSION_ROOM, response.room);
-      sessionStorage.setItem(SESSION_NAME, name.trim());
-    });
-  };
-  const join = (name, room, ai) => doJoin(name, room, ai, view === "new");
-
-  const declineInvite = (invite) => {
-    setBanner((current) => (current?.id === invite.id ? null : current));
-    setInvites((list) => list.filter((entry) => entry.id !== invite.id));
-    socket.request("inviteDecline", { authToken, id: invite.id }).then((result) => result.ok && setInvites(result.invites)).catch(() => {});
-  };
-
-  const acceptInvite = (invite) => {
-    setBanner(null);
-    if (state && state.status !== "lobby") {
-      setNotice("Beende erst die laufende Partie, dann kannst du der Einladung folgen.");
-      return;
-    }
-    const go = () => doJoin(account.name, invite.room, undefined, false);
-    if (state) {
-      // aus der aktuellen Lobby wechseln
-      socket.emit("leaveLobby", undefined, () => {
-        sessionStorage.removeItem(SESSION_TOKEN);
-        sessionStorage.removeItem(SESSION_ROOM);
-        go();
-      });
-    } else {
-      go();
-    }
-  };
+  }, [notify]);
 
   const leave = () => {
     socket.emit("leaveLobby");
@@ -280,78 +293,77 @@ function App() {
     setView("home");
   };
 
+  const goHome = () => setView("home");
   const isPlaying = state && state.status !== "lobby";
-  const fullScreenView = !state && ["home", "new", "join", "account", "profile", "leaderboard"].includes(view);
+  const hasChat = Boolean(state && !state.solo);
 
   // Seitenwechsel: das neue Fenster schiebt sich von rechts herein, beim Zurück von links.
   const pageKey = state ? (state.status === "lobby" ? "lobby" : state.status === "deckbuild" ? "deckbuild" : "game") : view;
-  const pageRank = state ? (state.status === "lobby" ? 2 : state.status === "deckbuild" ? 2.5 : 3) : view === "home" ? 0 : 1;
-  const headerInside = !state && view === "collection";
+  const pageRank = state ? (state.status === "lobby" ? 2 : state.status === "deckbuild" ? 2.5 : 3) : PAGE_RANK[view] ?? 1;
+
+  let page;
+  if (state) {
+    page = state.status === "lobby"
+      ? <Lobby state={state} onLeave={leave} account={account} />
+      : state.status === "deckbuild" && state.deckbuild
+        ? <DeckBuilder state={state} authToken={authToken} />
+        : <Game state={state} onLeave={leave} />;
+  } else if (view === "home") {
+    page = (
+      <Home
+        onNew={() => setView("new")}
+        onJoin={() => setView("join")}
+        onCollection={() => setView("collection")}
+        onLeaderboard={() => setView("leaderboard")}
+        onDaily={openDaily}
+        dailyBusy={dailyBusy}
+        account={account}
+        inviteCount={invites.length}
+        onAccount={() => setView(account ? "profile" : "account")}
+      />
+    );
+  } else if (view === "collection") {
+    page = <Collection onBack={goHome} authToken={account ? authToken : null} onSignIn={() => setView("account")} />;
+  } else if (view === "leaderboard") {
+    page = <Leaderboard onBack={goHome} selfName={account?.name} />;
+  } else if (view === "profile" && account) {
+    page = (
+      <Profile
+        account={account}
+        authToken={authToken}
+        invites={invites}
+        onAcceptInvite={acceptInvite}
+        onDeclineInvite={declineInvite}
+        onBack={goHome}
+        onSignOut={signOut}
+      />
+    );
+  } else if (view === "account" || view === "profile") {
+    page = <AccountForm onBack={goHome} onSignedIn={signedIn} />;
+  } else {
+    page = <Welcome mode={view} onBack={goHome} onJoin={join} joining={joining} account={account} />;
+  }
 
   return (
-    <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${fullScreenView ? "is-home" : ""} ${state && !state.solo ? "has-chat" : ""}`}>
-      {!isPlaying && !fullScreenView && !headerInside && <Header connected={connected} state={state} />}
-      <main>
-        <SlideStage pageKey={pageKey} rank={pageRank}>
-        {!state && view === "home" ? (
-          <Home
-            onNew={() => setView("new")}
-            onJoin={() => setView("join")}
-            onCollection={() => setView("collection")}
-            onLeaderboard={() => setView("leaderboard")}
-            onDaily={openDaily}
-            dailyBusy={dailyBusy}
-            account={account}
-            inviteCount={invites.length}
-            onAccount={() => setView(account ? "profile" : "account")}
+    <ConnectionContext.Provider value={connected}>
+      <div className={`app-shell ${isPlaying ? "is-playing" : ""} ${!state && view === "home" ? "is-home" : ""} ${hasChat ? "has-chat" : ""}`}>
+        <main>
+          <SlideStage pageKey={pageKey} rank={pageRank}>{page}</SlideStage>
+        </main>
+        {hasChat && <ChatWidget chat={state.chat || []} selfId={state.selfId} sessionId={state.sessionId} />}
+        {daily && (
+          <PackOpening
+            awards={daily.cards}
+            categories={daily.categories}
+            intro="daily"
+            onDone={() => {
+              setDaily(null);
+              loadProfile(authToken);
+            }}
           />
-        ) : !state && view === "collection" ? (
-          <>
-            <Header connected={connected} state={state} />
-            <Collection onBack={() => setView("home")} authToken={account ? authToken : null} />
-          </>
-        ) : !state && view === "leaderboard" ? (
-          <Leaderboard onBack={() => setView("home")} selfName={account?.name} />
-        ) : !state && view === "account" ? (
-          <AccountForm onBack={() => setView("home")} onSignedIn={signedIn} connected={connected} />
-        ) : !state && view === "profile" ? (
-          account ? (
-            <Profile
-              account={account}
-              authToken={authToken}
-              invites={invites}
-              onAcceptInvite={acceptInvite}
-              onDeclineInvite={declineInvite}
-              onBack={() => setView("home")}
-              onSignOut={signOut}
-            />
-          ) : <AccountForm onBack={() => setView("home")} onSignedIn={signedIn} connected={connected} />
-        ) : !state ? (
-          <Welcome mode={view} onBack={() => setView("home")} onJoin={join} joining={joining} connected={connected} account={account} />
-        ) : state.status === "lobby" ? (
-          <Lobby state={state} onLeave={leave} account={account} />
-        ) : state.status === "deckbuild" && state.deckbuild ? (
-          <DeckBuilder state={state} authToken={authToken} />
-        ) : (
-          <Game state={state} onLeave={leave} />
         )}
-        </SlideStage>
-      </main>
-      {banner && <InviteBanner invite={banner} canJoin={!state || state.status === "lobby"} onAccept={() => acceptInvite(banner)} onDecline={() => declineInvite(banner)} onClose={() => setBanner(null)} />}
-      {state && !state.solo && <ChatWidget chat={state.chat || []} selfId={state.selfId} sessionId={state.sessionId} />}
-      {notice && <div className="toast" role="alert">{notice}</div>}
-      {daily && (
-        <PackOpening
-          awards={daily.cards}
-          categories={daily.categories}
-          intro="daily"
-          onDone={() => {
-            setDaily(null);
-            loadProfile(authToken);
-          }}
-        />
-      )}
-    </div>
+      </div>
+    </ConnectionContext.Provider>
   );
 }
 
@@ -386,7 +398,7 @@ function SlideStage({ pageKey, rank, children }) {
 
   const panes = [];
   if (leaving && leaving.key !== pageKey) {
-    panes.push(<div className={`slide-pane is-leaving is-${direction}`} key={leaving.key} inert="" aria-hidden="true">{leaving.node}</div>);
+    panes.push(<div className={`slide-pane is-leaving is-${direction}`} key={leaving.key} inert aria-hidden="true">{leaving.node}</div>);
   }
   panes.push(<div className={`slide-pane ${leaving ? `is-entering is-${direction}` : ""}`} key={pageKey}>{children}</div>);
   return <div className="slide-stage">{panes}</div>;
@@ -409,13 +421,15 @@ function Home({ onNew, onJoin, onCollection, onLeaderboard, onDaily, dailyBusy =
   const dailyWait = account && !dailyReady ? formatWait(account.dailyNextAt - socket.now()) : "";
   return (
     <section className="home">
-      <button type="button" className="home-account" onClick={onAccount}>
+      <div className="home-top">
         {account ? (
-          <><LevelBadge level={account.level} /><span>{account.name}</span>{inviteCount > 0 && <b className="home-account-badge" aria-label={`${inviteCount} Einladungen`}>{inviteCount}</b>}</>
+          <Button size="sm" className="home-account" onClick={onAccount} iconStart={<LevelBadge level={account.level} />} icon={inviteCount > 0 ? <b className="count-badge" aria-label={`${inviteCount} Einladungen`}>{inviteCount}</b> : null}>
+            {account.name}
+          </Button>
         ) : (
-          <><UserIcon /><span>Anmelden</span></>
+          <Button size="sm" className="home-account" onClick={onAccount} iconStart={<UserIcon />}>Anmelden</Button>
         )}
-      </button>
+      </div>
       <div className="home-inner">
         <div className="home-logo" role="img" aria-label="Andi Trumpf">
           <div className="home-logo-top"><span>ANDI</span><FlagPattern /></div>
@@ -423,12 +437,12 @@ function Home({ onNew, onJoin, onCollection, onLeaderboard, onDaily, dailyBusy =
         </div>
 
         <nav className="home-menu" aria-label="Hauptmenü">
-          <button type="button" className="home-primary" onClick={onNew}>
+          <button type="button" className="menu-tile is-primary" onClick={onNew}>
             <CardsIcon />
             <span><strong>Neues Spiel</strong><small>Mit Freunden oder gegen KI</small></span>
             <HomeArrow />
           </button>
-          <button type="button" className={`home-card home-daily ${dailyReady ? "is-ready" : ""} ${account && !dailyReady ? "is-done" : ""}`} onClick={onDaily} disabled={dailyBusy}>
+          <button type="button" className={`menu-tile home-daily ${dailyReady ? "is-ready" : ""} ${account && !dailyReady ? "is-done" : ""}`} onClick={onDaily} disabled={dailyBusy}>
             <img className="home-pack" src={packArt} alt="" draggable="false" />
             <span>
               <strong>Tagespack</strong>
@@ -436,19 +450,19 @@ function Home({ onNew, onJoin, onCollection, onLeaderboard, onDaily, dailyBusy =
                 {!account ? "Anmelden und alle 24 Std Karten holen" : dailyReady ? "Gratis: 1–5 Karten, alle 24 Std" : `Schon geöffnet · nächstes in ${dailyWait}`}
               </small>
             </span>
-            {dailyReady ? <b className="home-daily-badge">1×</b> : <HomeArrow />}
+            {dailyReady ? <b className="count-badge home-daily-badge">1×</b> : <HomeArrow />}
           </button>
-          <button type="button" className="home-card" onClick={onJoin}>
+          <button type="button" className="menu-tile" onClick={onJoin}>
             <PeopleIcon />
             <span><strong>Spiel beitreten</strong><small>Einer Lobby beitreten</small></span>
             <HomeArrow />
           </button>
-          <button type="button" className="home-card" onClick={onCollection}>
+          <button type="button" className="menu-tile" onClick={onCollection}>
             <CollectionIcon />
             <span><strong>Sammlung</strong><small>Deine gesammelten Autos</small></span>
             <HomeArrow />
           </button>
-          <button type="button" className="home-card" onClick={onLeaderboard}>
+          <button type="button" className="menu-tile" onClick={onLeaderboard}>
             <TrophyIcon />
             <span><strong>Rangliste</strong><small>Die Top 10 Spieler</small></span>
             <HomeArrow />
@@ -536,68 +550,89 @@ function sortCards(cards, order) {
   return [...cards].sort((a, b) => (order === "name" ? a.name.localeCompare(b.name, "de") : (b.raritaet - a.raritaet) || a.name.localeCompare(b.name, "de")));
 }
 
-function Collection({ onBack, authToken }) {
-  const [data, failed] = useOwnCollection(authToken);
+const SORT_OPTIONS = [
+  { value: "tier", label: "Nach Seltenheit" },
+  { value: "score", label: "Nach Stärke" },
+  { value: "name", label: "Nach Name" }
+];
+
+function SortSelect({ value, onChange }) {
+  return (
+    <select className="select" value={value} onChange={(event) => onChange(event.target.value)} aria-label="Sortierung">
+      {SORT_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+    </select>
+  );
+}
+
+// Suche und Sortierung über einer Kartenliste
+function useCardFilter(allCards) {
   const [query, setQuery] = useState("");
   const [order, setOrder] = useState("tier");
-
   const cards = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("de");
-    return sortCards((data?.cards || []).filter((card) => !needle || card.name.toLocaleLowerCase("de").includes(needle)), order);
-  }, [data, query, order]);
+    return sortCards((allCards || []).filter((card) => !needle || card.name.toLocaleLowerCase("de").includes(needle)), order);
+  }, [allCards, query, order]);
+  const toolbar = (
+    <div className="toolbar">
+      <input className="input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Auto suchen" aria-label="Auto suchen" />
+      <SortSelect value={order} onChange={setOrder} />
+    </div>
+  );
+  return [cards, toolbar];
+}
+
+function CollectionSummary({ data }) {
+  return (
+    <p className="summary-line">
+      <span><b>{data.collected}</b> / {data.total} Autos</span>
+      {data.cards.length > 0 && <span>Ø Stärke <b>{deckRating(data.cards)}</b></span>}
+    </p>
+  );
+}
+
+function Collection({ onBack, authToken, onSignIn }) {
+  const [data, failed] = useOwnCollection(authToken);
+  const [cards, toolbar] = useCardFilter(data?.cards);
 
   return (
-    <section className="collection page-width">
-      <div className="collection-head">
-        <div className="card-head-row">
-          <h1>Meine Sammlung</h1>
-          <button type="button" className="text-button" onClick={onBack}>← Zurück</button>
+    <Page
+      width="wide"
+      eyebrow="Sammlung"
+      title="Meine Sammlung"
+      lead={!authToken ? "Melde dich an, um Autos zu sammeln. Neue Konten starten mit 16 Autos." : data ? <CollectionSummary data={data} /> : null}
+      onBack={onBack}
+    >
+      {!authToken ? (
+        <div className="page-actions">
+          <Button variant="primary" size="lg" onClick={onSignIn} icon={<ArrowIcon />}>Anmelden</Button>
         </div>
-        {!authToken ? (
-          <p className="muted">Melde dich an, um Autos zu sammeln. Neue Konten starten mit 16 Autos.</p>
-        ) : (
-          <>
-            <p className="collection-count">
-              {data ? <><b>{data.collected}</b> / {data.total} Autos{data.cards.length > 0 && <span className="collection-rating"> · Ø Stärke <b>{deckRating(data.cards)}</b></span>}</> : "Lädt …"}
-            </p>
-            <div className="collection-tools">
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="In deiner Sammlung suchen"
-                aria-label="Auto suchen"
-              />
-              <select value={order} onChange={(event) => setOrder(event.target.value)} aria-label="Sortierung">
-                <option value="tier">Nach Seltenheit</option>
-                <option value="score">Nach Stärke</option>
-                <option value="name">Nach Name</option>
-              </select>
-            </div>
-          </>
-        )}
-      </div>
-      {failed && <p className="collection-empty">{failed}</p>}
-      {data && cards.length === 0 && <p className="collection-empty">Kein Auto gefunden.</p>}
-      <div className="collection-grid">
-        {cards.map((card) => (
-          <CollectionCard card={card} categories={data.categories} qty={card.qty} key={card.c_id} lazy />
-        ))}
-      </div>
-      {data && data.cards.length > 0 && (
-        <details className="photo-credits">
-          <summary>Bildnachweise</summary>
-          <ul>
-            {data.cards.filter((card) => card.imageMeta?.pageUrl).map((card) => (
-              <li key={card.c_id}>
-                {card.name}: <a href={card.imageMeta.pageUrl} target="_blank" rel="noreferrer">{card.imageMeta.author || "Wikimedia Commons"}</a>
-                {card.imageMeta.license ? `, ${card.imageMeta.license}` : ""}
-              </li>
+      ) : (
+        <>
+          {toolbar}
+          {failed && <Note tone="danger" role="alert">{failed}</Note>}
+          {!data && !failed && <Loading />}
+          {data && cards.length === 0 && <EmptyState>Kein Auto gefunden.</EmptyState>}
+          <div className="card-grid">
+            {cards.map((card) => (
+              <CollectionCard card={card} categories={data.categories} qty={card.qty} key={card.c_id} lazy />
             ))}
-          </ul>
-        </details>
+          </div>
+          {data && data.cards.length > 0 && (
+            <details className="photo-credits">
+              <summary>Bildnachweise</summary>
+              <ul>
+                {data.cards.filter((card) => card.imageMeta?.pageUrl).map((card) => (
+                  <li key={card.c_id}>
+                    {card.name}: <a href={card.imageMeta.pageUrl} target="_blank" rel="noreferrer">{card.imageMeta.author || "Wikimedia Commons"}</a>
+                    {card.imageMeta.license ? `, ${card.imageMeta.license}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
       )}
-    </section>
+    </Page>
   );
 }
 
@@ -647,50 +682,40 @@ function DeckBuilder({ state, authToken }) {
     }
     change([...picks, ...pool.slice(0, need - picks.length)]);
   };
-  const done = () => {
-    send(picks, true);
-  };
+  const done = () => send(picks, true);
   const readyPlayers = state.players.filter((player) => build.readyIds.includes(player.id)).length;
 
   return (
-    <section className="deckbuilder">
-      <div className="deckbuilder-head page-width">
-        <div className="card-head-row">
-          <p className="eyebrow">RISIKO-MODUS</p>
-          <span className={`deck-timer ${secondsLeft <= LOW_SECONDS ? "is-low" : ""}`}>{secondsLeft} s</span>
-        </div>
-        <h1>Deck zusammenstellen</h1>
-        <p className="muted">Wähle {need} Karten aus deiner Sammlung. Wenn die Zeit um ist, wird der Rest zufällig gewählt. Achtung: Der Gewinner darf sich eine Karte aus deinem Deck aussuchen.</p>
-        <div className="deck-picks" aria-label="Dein Deck">
-          <b className="deck-count">{picks.length} / {need}</b>
-          {picks.length > 0 && <span className="deck-rating">Deckwertung <b>{deckRating(picks.map((id) => byId.get(id)))}</b></span>}
-          {picks.map((id, index) => {
-            const card = byId.get(id);
-            return (
-              <button type="button" className={`deck-chip tier-${card?.raritaet || 1}`} key={`${id}-${index}`} onClick={() => remove(index)} disabled={isReady} title="Aus dem Deck nehmen">
-                {card?.name || id} <span aria-hidden="true">×</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="deck-actions">
-          {isReady ? (
-            <p className="deck-wait"><SpinnerIcon /> Fertig. Warte auf die anderen ({readyPlayers}/{state.players.length}) …</p>
-          ) : (
-            <>
-              <button type="button" className="team-shuffle" onClick={fillRandom} disabled={picks.length >= need || !data}>Rest zufällig</button>
-              <button type="button" className="primary-button deck-done" onClick={done}><span>{picks.length < need ? "Fertig (Rest zufällig)" : "Fertig"}</span><FlagIcon /></button>
-            </>
-          )}
-          <select value={order} onChange={(event) => setOrder(event.target.value)} aria-label="Sortierung">
-            <option value="tier">Nach Seltenheit</option>
-            <option value="score">Nach Stärke</option>
-                <option value="name">Nach Name</option>
-          </select>
-        </div>
+    <Page
+      width="wide"
+      eyebrow="Risiko-Modus"
+      title="Deck zusammenstellen"
+      lead={`Wähle ${need} Karten aus deiner Sammlung. Wenn die Zeit um ist, wird der Rest zufällig gewählt.`}
+      start={<span className={`timer-pill ${secondsLeft <= LOW_SECONDS ? "is-low" : ""}`} role="timer" aria-label={`Noch ${secondsLeft} Sekunden`}>{secondsLeft} s</span>}
+    >
+      <Note tone="accent" icon={<InfoIcon />}>Achtung: Der Gewinner darf sich eine Karte aus deinem Deck aussuchen.</Note>
+      <Card className="deck-panel" title="Dein Deck" meta={<>{picks.length} / {need}{picks.length > 0 && <> · Deckwertung <b>{deckRating(picks.map((id) => byId.get(id)))}</b></>}</>}>
+        {picks.length > 0 ? (
+          <div className="chip-list" aria-label="Dein Deck">
+            {picks.map((id, index) => {
+              const card = byId.get(id);
+              return (
+                <button type="button" className={`chip tier-${card?.raritaet || 1}`} key={`${id}-${index}`} onClick={() => remove(index)} disabled={isReady} aria-label={`${card?.name || id} aus dem Deck nehmen`}>
+                  {card?.name || id} <span aria-hidden="true">×</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="muted">Tippe unten auf Karten, um sie ins Deck zu legen. Tippe auf eine gewählte Karte, um sie wieder herauszunehmen.</p>
+        )}
+      </Card>
+      <div className="toolbar">
+        <SortSelect value={order} onChange={setOrder} />
       </div>
-      {failed && <p className="collection-empty page-width">{failed}</p>}
-      <div className="collection-grid page-width deck-grid">
+      {failed && <Note tone="danger" role="alert">{failed}</Note>}
+      {!data && !failed && <Loading />}
+      <div className="card-grid">
         {cards.map((card) => {
           const left = card.qty - (used.get(card.c_id) || 0);
           return (
@@ -706,29 +731,17 @@ function DeckBuilder({ state, authToken }) {
           );
         })}
       </div>
-    </section>
-  );
-}
-
-function Header({ connected, state }) {
-  return (
-    <header className="site-header">
-      <div className="brand" aria-label="Andi Trumpf">
-        <LogoMark />
-        <div>
-          <strong>ANDI</strong>
-          <span>TRUMPF</span>
-        </div>
-      </div>
-      <div className="header-meta">
-        {state?.status !== "lobby" && state?.game && (
-          <span className="round-chip">Runde {state.game.round}</span>
+      <div className="sticky-action">
+        {isReady ? (
+          <p className="waiting-bar" role="status"><Spinner /> Fertig. Warte auf die anderen ({readyPlayers}/{state.players.length}) …</p>
+        ) : (
+          <div className="button-row is-split">
+            <Button size="lg" onClick={fillRandom} disabled={picks.length >= need || !data}>Rest zufällig</Button>
+            <Button variant="primary" size="lg" onClick={done} icon={<FlagIcon />}>{picks.length < need ? `Fertig (${picks.length}/${need})` : "Fertig"}</Button>
+          </div>
         )}
-        <span className={`connection ${connected ? "is-online" : ""}`}>
-          <i /> {connected ? "Live" : "Verbindung …"}
-        </span>
       </div>
-    </header>
+    </Page>
   );
 }
 
@@ -738,7 +751,27 @@ const AI_LEVEL_INFO = [
   { id: "hard", label: "Schwer" }
 ];
 
-function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) {
+const AI_XP_NOTES = {
+  easy: "Gegen „Leicht“ gibt es nur 20 % der XP.",
+  medium: "Gegen „Mittel“ gibt es nur 50 % der XP.",
+  hard: "Sieg mit 16 Karten: 1 neues Auto. Mit 32 Karten: Pack mit 3–5 Autos."
+};
+
+// Zeile mit Kürzel, Name und Zusatz, z. B. „Angemeldet als“
+function IdentityRow({ account }) {
+  return (
+    <div className="list-row">
+      <span className="avatar">{initials(account.name)}</span>
+      <span className="list-row-main">
+        <span className="list-row-title">{account.name} <LevelBadge level={account.level} /></span>
+        <span className="list-row-sub">Siege und XP werden gespeichert</span>
+      </span>
+    </div>
+  );
+}
+
+function Welcome({ mode = "new", onBack, onJoin, joining, account }) {
+  const connected = useContext(ConnectionContext);
   const [typedName, setName] = useState(sessionStorage.getItem(SESSION_NAME) || "");
   const [sessionId, setSessionId] = useState("");
   const [vsAi, setVsAi] = useState(false);
@@ -746,49 +779,39 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
   const [opponents, setOpponents] = useState(1);
   const name = account ? account.name : typedName;
   const ai = mode === "new" && vsAi;
+  const canSubmit = connected && !joining && Boolean(name.trim()) && (mode !== "join" || sessionId.length >= 4);
   const submit = (event) => {
     event.preventDefault();
-    if (!name.trim() || (mode === "join" && !sessionId)) return;
+    if (!canSubmit) return;
     onJoin(name.trim(), sessionId, ai ? { difficulty, opponents } : undefined);
   };
 
+  const lead = mode === "join"
+    ? "Gib die Session-ID ein, die du von deinen Freunden bekommen hast."
+    : ai
+      ? "Wähle die Stärke und die Zahl der Gegner."
+      : "Eröffne eine Lobby und schick deinen Freunden die Session-ID.";
+
   return (
-    <section className="welcome page-width">
-      <div className="join-card panel">
-        <div className="card-head-row">
-          <p className="eyebrow">STARTAUFSTELLUNG</p>
-          {onBack && <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>}
-        </div>
-        <h2>{mode === "join" ? "Spiel beitreten" : "Neues Spiel"}</h2>
-        {mode === "new" && (
-          <div className="account-tabs" role="tablist" aria-label="Spielart">
-            <button type="button" role="tab" aria-selected={!vsAi} onClick={() => setVsAi(false)}>Mit Freunden</button>
-            <button type="button" role="tab" aria-selected={vsAi} onClick={() => setVsAi(true)}>Gegen KI</button>
-          </div>
-        )}
-        <p className="muted">
-          {mode === "join"
-            ? (account ? "Gib die Session-ID ein." : "Gib einen Spielernamen und die Session-ID ein.")
-            : ai
-              ? "Wähle die Stärke und die Zahl der Gegner."
-              : account
-                ? "Danach schickst du Freunden die Session-ID."
-                : "Gib einen Spielernamen ein, danach schickst du Freunden die Session-ID."}
-        </p>
-        <form onSubmit={submit}>
+    <Page eyebrow="Spielen" title={mode === "join" ? "Spiel beitreten" : "Neues Spiel"} lead={lead} onBack={onBack}>
+      <Card>
+        <form className="form-stack" onSubmit={submit}>
+          {mode === "new" && (
+            <Segmented
+              label="Spielart"
+              value={vsAi}
+              onChange={setVsAi}
+              options={[{ value: false, label: "Mit Freunden" }, { value: true, label: "Gegen KI" }]}
+            />
+          )}
           {account ? (
-            <>
-              <span className="field-label">Angemeldet als</span>
-              <div className="signed-in-profile">
-                <UserIcon />
-                <b>{account.name}</b>
-                <span className="muted">Level {account.level}</span>
-              </div>
-            </>
+            <Field label="Angemeldet als">
+              <IdentityRow account={account} />
+            </Field>
           ) : (
-            <>
-              <label htmlFor="player-name">Fahrername</label>
+            <Field label="Fahrername" htmlFor="player-name">
               <input
+                className="input"
                 id="player-name"
                 value={name}
                 onChange={(event) => setName(event.target.value.slice(0, 20))}
@@ -796,66 +819,47 @@ function Welcome({ mode = "new", onBack, onJoin, joining, connected, account }) 
                 autoComplete="nickname"
                 autoFocus={typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches}
               />
-            </>
+            </Field>
           )}
           {mode === "join" && (
-            <>
-              <label htmlFor="session-id">Session-ID</label>
+            <Field label="Session-ID" htmlFor="session-id">
               <input
+                className="input input-code"
                 id="session-id"
                 value={sessionId}
                 onChange={(event) => setSessionId(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
-                placeholder="Session-ID eingeben"
+                placeholder="z. B. K4ZN7"
                 autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck="false"
               />
-            </>
+            </Field>
           )}
           {ai && (
             <>
-              <span className="field-label">Schwierigkeit</span>
-              <div className="ai-levels" role="radiogroup" aria-label="Schwierigkeit">
-                {AI_LEVEL_INFO.map((level) => (
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={difficulty === level.id}
-                    className={`ai-level is-${level.id}`}
-                    key={level.id}
-                    onClick={() => setDifficulty(level.id)}
-                  >
-                    {level.label}
-                  </button>
-                ))}
-              </div>
-              {difficulty === "easy" && <p className="ai-note" role="status">Gegen „Leicht“ gibt es nur 20 % der XP.</p>}
-              {difficulty === "medium" && <p className="ai-note" role="status">Gegen „Mittel“ gibt es nur 50 % der XP.</p>}
-              {difficulty === "hard" && <p className="ai-note" role="status">Sieg mit 16 Karten: 1 neues Auto. Mit 32 Karten: Pack mit 3–5 Autos.{account ? "" : " Nur mit Konto."}</p>}
-              <span className="field-label">Gegner</span>
-              <div className="ai-opponents" role="radiogroup" aria-label="Anzahl der Gegner">
-                {[1, 2, 3].map((count) => (
-                  <button type="button" role="radio" aria-checked={opponents === count} key={count} onClick={() => setOpponents(count)}>
-                    {count} Gegner
-                  </button>
-                ))}
-              </div>
+              <Field label="Schwierigkeit">
+                <Segmented label="Schwierigkeit" value={difficulty} onChange={setDifficulty} options={AI_LEVEL_INFO.map((level) => ({ value: level.id, label: level.label }))} />
+              </Field>
+              <Note tone={difficulty === "hard" ? "accent" : "neutral"} icon={<InfoIcon />}>
+                {AI_XP_NOTES[difficulty]}{difficulty === "hard" && !account ? " Nur mit Konto." : ""}
+              </Note>
+              <Field label="Gegner">
+                <Segmented label="Anzahl der Gegner" value={opponents} onChange={setOpponents} options={[1, 2, 3].map((count) => ({ value: count, label: `${count} Gegner` }))} />
+              </Field>
             </>
           )}
-          <button className="primary-button" disabled={!connected || joining || !name.trim() || (mode === "join" && sessionId.length < 4)}>
-            <span>{joining ? "Beitritt läuft …" : mode === "join" ? "Lobby beitreten" : ai ? "Gegen KI spielen" : "Lobby eröffnen"}</span>
-            <ArrowIcon />
-          </button>
+          <Button type="submit" variant="primary" size="lg" block disabled={!canSubmit} icon={<ArrowIcon />}>
+            {joining ? "Beitritt läuft …" : mode === "join" ? "Lobby beitreten" : ai ? "Gegen KI spielen" : "Lobby eröffnen"}
+          </Button>
         </form>
-        <div className="secure-note">
-          <ShieldIcon />
-          {account ? `Angemeldet als ${account.name}: Siege und XP werden gespeichert.` : "Als Gast spielen. Mit Anmeldung werden Siege und XP gespeichert."}
-        </div>
-      </div>
-    </section>
+      </Card>
+      {!account && <p className="footnote"><ShieldIcon /> Du spielst als Gast. Mit Anmeldung werden Siege und XP gespeichert.</p>}
+    </Page>
   );
 }
 
 const DECK_MODE_INFO = [
-  { id: "friendly", label: "Freundschaft", short: "Pool-Karten", text: "Alle spielen mit Karten aus dem gemeinsamen Pool. Niemand gewinnt oder verliert Karten." },
+  { id: "friendly", label: "Freund\u00ADschaft", short: "Pool-Karten", text: "Alle spielen mit Karten aus dem gemeinsamen Pool. Niemand gewinnt oder verliert Karten." },
   { id: "auto", label: "Eigene Karten", short: "zufällig", text: "Jeder spielt mit zufälligen Karten aus seiner Sammlung. Kein Verlust. Alle brauchen ein Konto und genug Karten." },
   { id: "risk", label: "Risiko", short: "eigenes Deck", text: "Jeder stellt in 90 Sekunden sein Deck zusammen. Der Gewinner darf sich von jedem Verlierer eine Karte aus dessen Deck nehmen." }
 ];
@@ -867,158 +871,165 @@ function TeamTag({ team }) {
   return <span className={`team-tag team-${team}`}>{TEAM_INFO[team].short}</span>;
 }
 
+const RULES = [
+  { title: "Stapel ansehen", text: "Deine oberste Karte ist spielbar." },
+  { title: "Wert ansagen", text: "Wer dran ist, wählt eine Kategorie." },
+  { title: "Stich gewinnen", text: "Der beste Wert erhält alle Tischkarten. Meist zählt der höchste, bei Gewicht und Beschleunigung der niedrigste." }
+];
+
 function Lobby({ state, onLeave, account }) {
+  const notify = useToast();
   const [inviting, setInviting] = useState(false);
+  const closeInvite = useCallback(() => setInviting(false), []);
   const selfIsHost = state.selfId === state.hostId;
   const canStart = state.players.length >= 2;
   const canTeams = !state.solo && state.players.length === state.maxPlayers;
   const openSeats = state.solo ? [] : Array.from({ length: state.maxPlayers - state.players.length });
   const cardCountOptions = state.cardCountOptions || [8, 16, 32];
   const totalCards = state.players.length * state.cardsPerPlayer;
+  const deckMode = DECK_MODE_INFO.find((mode) => mode.id === state.deckMode) || DECK_MODE_INFO[0];
+  const aiLevel = AI_LEVEL_INFO.find((level) => level.id === state.aiLevel)?.label || "Mittel";
+  const hostHint = selfIsHost ? null : "Nur der Host kann das ändern.";
+
+  const copyCode = () => {
+    navigator.clipboard?.writeText(state.sessionId)
+      .then(() => notify("Session-ID kopiert.", { type: "success" }))
+      .catch(() => notify(`Session-ID: ${state.sessionId}`));
+  };
+
+  const setDeckMode = (mode) => {
+    socket.request("setDeckMode", { mode })
+      .then((result) => (result.ok ? socket.applyResult(result) : notify(result.message, { type: "error" })))
+      .catch(() => notify("Keine Verbindung zum Server.", { type: "error" }));
+  };
 
   return (
-    <section className="lobby page-width">
-      <div className="lobby-heading">
-        <div>
-          <p className="eyebrow"><span /> BOXENGASSE OFFEN</p>
-          <h1>Die Startaufstellung</h1>
-          <p className="muted">{state.solo ? "Du spielst gegen die KI. Wähle die Kartenzahl und starte." : "Sobald mindestens zwei Fahrer bereit sind, kann der Host austeilen."}</p>
+    <Page
+      width="wide"
+      eyebrow="Lobby"
+      title="Startaufstellung"
+      lead={state.solo
+        ? `Du spielst gegen die KI (Stufe ${aiLevel}). Wähle die Kartenzahl und starte.`
+        : "Sobald mindestens zwei Fahrer da sind, kann der Host austeilen."}
+      onBack={onLeave}
+      backLabel="Verlassen"
+    >
+      {!state.solo && (
+        <div className="session-bar">
+          <div className="session-code">
+            <span>Session-ID</span>
+            <b>{state.sessionId}</b>
+          </div>
+          <Button size="sm" onClick={copyCode} iconStart={<CopyIcon />}>Kopieren</Button>
+          {account && state.players.length < state.maxPlayers && (
+            <Button size="sm" onClick={() => setInviting(true)} iconStart={<PlusIcon />}>Freunde einladen</Button>
+          )}
         </div>
-        <button className="text-button" onClick={onLeave}>Lobby verlassen</button>
-      </div>
-      {state.solo ? (
-        <>
-        <p className="muted session-code">Spiel gegen KI · Stufe <b>{AI_LEVEL_INFO.find((level) => level.id === state.aiLevel)?.label || "Mittel"}</b></p>
-        {account && <p className="ai-note">Du spielst mit Autos aus deiner Sammlung, die KI bekommt ein Deck mit ähnlicher Deckwertung{state.aiLevel === "hard" ? " (etwas stärker)" : state.aiLevel === "easy" ? " (schwächer)" : ""}. Fehlen dir Karten, wird mit ähnlich starken Leihkarten aufgefüllt.</p>}
-        </>
-      ) : (
-        <p className="muted session-code">Session-ID zum Beitreten: <b>{state.sessionId}</b></p>
       )}
-      {account && !state.solo && state.players.length < state.maxPlayers && (
-        <button type="button" className="invite-open" onClick={() => setInviting(true)}>Freunde einladen</button>
+      {state.solo && account && (
+        <Note icon={<InfoIcon />}>
+          Du spielst mit Autos aus deiner Sammlung, die KI bekommt ein Deck mit ähnlicher Deckwertung{state.aiLevel === "hard" ? " (etwas stärker)" : state.aiLevel === "easy" ? " (schwächer)" : ""}. Fehlen dir Karten, wird mit ähnlich starken Leihkarten aufgefüllt.
+        </Note>
       )}
-      {inviting && <InviteModal players={state.players} onClose={() => setInviting(false)} />}
+      {inviting && <InviteModal players={state.players} onClose={closeInvite} />}
 
       <div className="lobby-grid">
-        <div className="players-panel panel">
-          <div className="section-label">
-            <span>FAHRER</span>
-            <b>{state.players.length} / {state.maxPlayers}</b>
-          </div>
-          <div className="seat-list">
-            {state.players.map((player, index) => (
-              <div className="seat is-filled" key={player.id}>
-                <div className="avatar">{initials(player.name)}</div>
-                <div className="seat-copy">
-                  <strong>{player.name} {player.level && <LevelBadge level={player.level} />} {player.id === state.selfId && <small>DU</small>}</strong>
-                  <span>{player.isBot ? "Computergegner" : player.isHost ? "Rennleitung · Host" : `Startplatz ${index + 1}`}</span>
-                </div>
+        <Card title="Fahrer" meta={`${state.players.length} / ${state.maxPlayers}`}>
+          <ul className="list">
+            {state.players.map((player) => (
+              <li className="list-row" key={player.id}>
+                <span className="avatar">{initials(player.name)}</span>
+                <span className="list-row-main">
+                  <span className="list-row-title">
+                    {player.name} {player.level && <LevelBadge level={player.level} />} {player.id === state.selfId && <span className="badge">Du</span>}
+                  </span>
+                  <span className="list-row-sub">{player.isBot ? "Computergegner" : player.isHost ? "Host" : "Bereit"}</span>
+                </span>
                 <TeamTag team={player.team} />
-                <i className="ready-light" aria-label="Bereit" />
-              </div>
+                <i className="ready-light" aria-hidden="true" />
+              </li>
             ))}
             {openSeats.map((_, index) => (
-              <div className="seat" key={`open-${index}`}>
-                <div className="avatar is-empty">+</div>
-                <div className="seat-copy">
-                  <strong>Freier Startplatz</strong>
-                  <span>Wartet auf Fahrer …</span>
-                </div>
-              </div>
+              <li className="list-row is-empty" key={`open-${index}`}>
+                <span className="avatar is-empty" aria-hidden="true">+</span>
+                <span className="list-row-main">
+                  <span className="list-row-title">Freier Startplatz</span>
+                  <span className="list-row-sub">Wartet auf Fahrer …</span>
+                </span>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </Card>
 
-        <aside className="rules-panel">
-          <div className="deal-settings">
-            <div>
-              <span>KARTEN PRO SPIELER</span>
-              <b>{totalCards} Karten gesamt</b>
-            </div>
-            <div className="card-count-options" role="group" aria-label="Karten pro Spieler">
-              {cardCountOptions.map((count) => (
-                <button
-                  className={state.cardsPerPlayer === count ? "is-selected" : ""}
+        <div className="lobby-side">
+          <Card title="Einstellungen">
+            <div className="form-stack">
+              <Field label="Karten pro Spieler" hint={`${totalCards} Karten im Spiel`}>
+                <Segmented
+                  label="Karten pro Spieler"
+                  value={state.cardsPerPlayer}
                   disabled={!selfIsHost}
-                  onClick={() => socket.emit("setCardsPerPlayer", count)}
-                  type="button"
-                  key={count}
-                >
-                  <strong>{count}</strong>
-                  <span>Karten</span>
-                </button>
-              ))}
-            </div>
-            <small>{selfIsHost ? "Du legst als Host die Stapelgröße fest." : "Der Host legt die Stapelgröße fest."}</small>
-          </div>
-          {!state.solo && (
-            <div className="mode-settings">
-              <div>
-                <span>KARTEN</span>
-                <b>{DECK_MODE_INFO.find((mode) => mode.id === state.deckMode)?.label || "Freundschaft"}</b>
-              </div>
-              <div className="mode-options is-three" role="group" aria-label="Kartenmodus">
-                {DECK_MODE_INFO.map((mode) => (
-                  <button
-                    type="button"
-                    className={state.deckMode === mode.id ? "is-selected" : ""}
+                  onChange={(count) => socket.emit("setCardsPerPlayer", count)}
+                  options={cardCountOptions.map((count) => ({ value: count, label: count, hint: "Karten" }))}
+                />
+              </Field>
+              {!state.solo && (
+                <Field label="Kartenmodus" hint={deckMode.text}>
+                  <Segmented
+                    label="Kartenmodus"
+                    value={deckMode.id}
                     disabled={!selfIsHost}
-                    key={mode.id}
-                    onClick={() => socket.request("setDeckMode", { mode: mode.id }).then((result) => (result.ok ? socket.applyResult(result) : window.alert(result.message))).catch(() => {})}
-                  >
-                    <strong>{mode.label}</strong><span>{mode.short}</span>
-                  </button>
-                ))}
-              </div>
-              <small>{DECK_MODE_INFO.find((mode) => mode.id === state.deckMode)?.text}</small>
-            </div>
-          )}
-          {canTeams && (
-            <div className="mode-settings">
-              <div>
-                <span>SPIELMODUS</span>
-                <b>{state.teamMode ? "2 gegen 2" : "Jeder gegen jeden"}</b>
-              </div>
-              <div className="mode-options" role="group" aria-label="Spielmodus">
-                <button type="button" className={!state.teamMode ? "is-selected" : ""} disabled={!selfIsHost} onClick={() => socket.emit("setTeams", { on: false })}>
-                  <strong>Alle</strong><span>gegeneinander</span>
-                </button>
-                <button type="button" className={state.teamMode ? "is-selected" : ""} disabled={!selfIsHost} onClick={() => socket.emit("setTeams", { on: true })}>
-                  <strong>2 vs 2</strong><span>im Team</span>
-                </button>
-              </div>
-              {state.teamMode && (
-                <>
-                  <div className="team-lineup">
-                    {[0, 1].map((team) => (
-                      <p className={`team-${team}`} key={team}>
-                        <b>{TEAM_INFO[team].name}</b>
-                        {state.players.filter((player) => player.team === team).map((player) => player.name).join(" + ")}
-                      </p>
-                    ))}
-                  </div>
-                  {selfIsHost && <button type="button" className="team-shuffle" onClick={() => socket.emit("setTeams", { on: true, shuffle: true })}>Teams neu mischen</button>}
-                  <small>Die beste Karte im Team zählt. Gewonnene Karten gehen an beide im Team. Die Teams sind abwechselnd dran.</small>
-                </>
+                    onChange={setDeckMode}
+                    options={DECK_MODE_INFO.map((mode) => ({ value: mode.id, label: mode.label, hint: mode.short }))}
+                  />
+                </Field>
               )}
-              {!selfIsHost && !state.teamMode && <small>Der Host kann 2 gegen 2 einstellen.</small>}
+              {canTeams && (
+                <Field label="Spielmodus" hint={state.teamMode ? "Die beste Karte im Team zählt. Gewonnene Karten gehen an beide im Team. Die Teams sind abwechselnd dran." : null}>
+                  <Segmented
+                    label="Spielmodus"
+                    value={Boolean(state.teamMode)}
+                    disabled={!selfIsHost}
+                    onChange={(on) => socket.emit("setTeams", { on })}
+                    options={[{ value: false, label: "Alle", hint: "gegeneinander" }, { value: true, label: "2 vs 2", hint: "im Team" }]}
+                  />
+                </Field>
+              )}
+              {canTeams && state.teamMode && (
+                <div className="team-lineup">
+                  {[0, 1].map((team) => (
+                    <p className={`team-${team}`} key={team}>
+                      <b>{TEAM_INFO[team].name}</b>
+                      {state.players.filter((player) => player.team === team).map((player) => player.name).join(" + ")}
+                    </p>
+                  ))}
+                  {selfIsHost && <Button size="sm" onClick={() => socket.emit("setTeams", { on: true, shuffle: true })}>Teams neu mischen</Button>}
+                </div>
+              )}
+              {hostHint && <p className="field-hint">{hostHint}</p>}
             </div>
-          )}
-          <div className="rule-line"><span>01</span><p><b>Stapel ansehen</b>Wische durch alle deine eigenen Karten.</p></div>
-          <div className="rule-line"><span>02</span><p><b>Wert ansagen</b>Der aktive Fahrer wählt die Kategorie.</p></div>
-          <div className="rule-line"><span>03</span><p><b>Stich gewinnen</b>Der beste Wert erhält alle Tischkarten.</p></div>
-          <div className="direction-note"><b>↑</b> Karte 1 ist spielbar. Meist gewinnt der höchste Wert; bei Gewicht und 0–100 der niedrigste.</div>
-          {selfIsHost ? (
-            <button className="primary-button start-button" disabled={!canStart} onClick={() => socket.emit("startGame")}>
-              <span>{canStart ? "Karten austeilen" : "Warte auf Mitspieler"}</span>
-              <FlagIcon />
-            </button>
-          ) : (
-            <div className="host-wait"><SpinnerIcon /><span>Der Host startet das Spiel.</span></div>
-          )}
-        </aside>
+          </Card>
+
+          <div className="sticky-action">
+            {selfIsHost ? (
+              <Button variant="primary" size="lg" block disabled={!canStart} onClick={() => socket.emit("startGame")} icon={<FlagIcon />}>
+                {canStart ? "Karten austeilen" : "Warte auf Mitspieler"}
+              </Button>
+            ) : (
+              <p className="waiting-bar" role="status"><Spinner /> Der Host startet das Spiel.</p>
+            )}
+          </div>
+          <Card title="So geht’s">
+            <ol className="steps">
+              {RULES.map((rule) => (
+                <li key={rule.title}><b>{rule.title}</b><span>{rule.text}</span></li>
+              ))}
+            </ol>
+          </Card>
+
+        </div>
       </div>
-    </section>
+    </Page>
   );
 }
 
@@ -1078,7 +1089,7 @@ function Game({ state, onLeave }) {
         <div className="arena-inlay" />
         {isPaused && (
           <div className="arena-notice" role="status">
-            <SpinnerIcon /> Mitspieler fehlen – das Spiel endet in <Seconds target={timerTarget} /> s, wenn niemand zurückkommt
+            <Spinner /> Mitspieler fehlen – das Spiel endet in <Seconds target={timerTarget} /> s, wenn niemand zurückkommt
           </div>
         )}
         {game.potCount > 0 && game.phase !== "finished" && <div className="arena-pot">Pott <b>{game.potCount}</b></div>}
@@ -1259,24 +1270,20 @@ const HandStack = memo(function HandStack({ hand, categories, canChoose, choosin
           <strong>{hand.length} {hand.length === 1 ? "Karte" : "Karten"}</strong>
         </div>
         <div className="stack-actions">
-          <button
-            type="button"
-            className="sound-toggle"
+          <IconButton
+            label={soundOn ? "Ton ausschalten" : "Ton einschalten"}
+            variant="secondary"
+            size="sm"
+            className={soundOn ? "" : "is-muted"}
             onClick={onToggleSound}
-            aria-label={soundOn ? "Ton ausschalten" : "Ton einschalten"}
             aria-pressed={soundOn}
           >
             <SoundIcon on={soundOn} />
-          </button>
+          </IconButton>
           {revealTarget && (
-            <button
-              type="button"
-              className={`ready-button ${isReady ? "is-ready" : ""}`}
-              disabled={isReady}
-              onClick={() => socket.emit("readyForNext")}
-            >
-              {isReady ? `Bereit ${readyCount}/${readyTotal}` : "Weiter"}
-            </button>
+            isReady
+              ? <Button size="sm" disabled iconStart={<CheckIcon />}>Bereit {readyCount}/{readyTotal}</Button>
+              : <Button variant="primary" size="sm" onClick={() => socket.emit("readyForNext")} icon={<ArrowIcon />}>Weiter</Button>
           )}
         </div>
       </div>
@@ -1292,7 +1299,7 @@ const HandStack = memo(function HandStack({ hand, categories, canChoose, choosin
             <ScaledCard>
               <VehicleCard card={top} categories={categories} selectable={canChoose && choosing} highlight={null} />
               {choosing && !canChoose && self?.eliminated && (
-                <div className="not-playable"><SpinnerIcon /> Du schaust zu</div>
+                <div className="not-playable"><Spinner /> Du schaust zu</div>
               )}
             </ScaledCard>
           </div>
@@ -1301,19 +1308,6 @@ const HandStack = memo(function HandStack({ hand, categories, canChoose, choosin
     </aside>
   );
 });
-
-function SoundIcon({ on }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
-      {on ? (
-        <path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      ) : (
-        <path d="m16 9 5 6m0-6-5 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      )}
-    </svg>
-  );
-}
 
 // Spielkarten werden immer in der Entwurfsgröße 906 × 1405 gezeichnet und gleichmäßig auf die verfügbare
 // Breite skaliert. So bleibt der Text auf jeder Kartengröße gleich gut lesbar.
@@ -1558,13 +1552,14 @@ function GtIcon({ type }) {
 
 // Session-Chat: Symbol oben rechts, Klick öffnet das Chatfenster (Lobby und Spiel)
 function ChatWidget({ chat, selfId, sessionId }) {
+  const notify = useToast();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
-  const [error, setError] = useState("");
   const [seenId, setSeenId] = useState(() => (chat.length ? chat[chat.length - 1].id : 0));
   const [soundOn, setSoundOn] = useState(chatSoundEnabled);
   const notifiedId = useRef(chat.length ? chat[chat.length - 1].id : 0);
   const listRef = useRef(null);
+  const inputRef = useRef(null);
   const lastId = chat.length ? chat[chat.length - 1].id : 0;
   const unread = open ? 0 : chat.filter((message) => message.id > seenId && message.playerId !== selfId).length;
 
@@ -1591,6 +1586,7 @@ function ChatWidget({ chat, selfId, sessionId }) {
   }, [open, lastId]);
   useEffect(() => {
     if (!open) return undefined;
+    if (window.matchMedia("(pointer: fine)").matches) inputRef.current?.focus();
     const onKey = (event) => event.key === "Escape" && setOpen(false);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1601,18 +1597,17 @@ function ChatWidget({ chat, selfId, sessionId }) {
     const message = text.trim();
     if (!message) return;
     setText("");
-    setError("");
     socket.request("chat", { text: message })
       .then((result) => {
         if (!result.ok) {
-          setError(result.message || "Nachricht nicht gesendet.");
+          notify(result.message || "Nachricht nicht gesendet.", { type: "error" });
           setText(message);
         } else if (result.state) {
           socket.applyResult(result);
         }
       })
       .catch(() => {
-        setError("Keine Verbindung zum Server.");
+        notify("Keine Verbindung zum Server.", { type: "error" });
         setText(message);
       });
   };
@@ -1621,31 +1616,36 @@ function ChatWidget({ chat, selfId, sessionId }) {
 
   return (
     <>
-      <button type="button" className={`chat-button ${unread ? "has-unread" : ""}`} onClick={() => setOpen((value) => !value)} aria-label={unread ? `Chat öffnen, ${unread} neue Nachrichten` : "Chat öffnen"} aria-expanded={open}>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-8l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="currentColor" />
-        </svg>
-        {unread > 0 && <b>{unread > 9 ? "9+" : unread}</b>}
-      </button>
+      <IconButton
+        label={unread ? `Chat öffnen, ${unread} neue Nachrichten` : open ? "Chat schließen" : "Chat öffnen"}
+        variant="secondary"
+        className={`chat-button ${unread ? "has-unread" : ""}`}
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+      >
+        <ChatIcon />
+        {unread > 0 && <b className="count-badge">{unread > 9 ? "9+" : unread}</b>}
+      </IconButton>
       {open && (
         <div className="chat-window" role="dialog" aria-label="Session-Chat">
           <div className="chat-head">
-            <strong>Chat</strong>
-            {sessionId && <small>Session {sessionId}</small>}
-            <button
-              type="button"
-              className={`chat-sound ${soundOn ? "is-on" : ""}`}
+            <div>
+              <strong>Chat</strong>
+              {sessionId && <small>Session {sessionId}</small>}
+            </div>
+            <IconButton
+              label={soundOn ? "Chat-Ton ausschalten" : "Chat-Ton einschalten"}
+              size="sm"
+              className={soundOn ? "" : "is-muted"}
               onClick={toggleSound}
               aria-pressed={soundOn}
-              aria-label={soundOn ? "Chat-Ton ausschalten" : "Chat-Ton einschalten"}
-              title={soundOn ? "Ton an" : "Ton aus"}
             >
               <SoundIcon on={soundOn} />
-            </button>
-            <button type="button" className="chat-close" onClick={() => setOpen(false)} aria-label="Chat schließen">✕</button>
+            </IconButton>
+            <IconButton label="Chat schließen" size="sm" onClick={() => setOpen(false)}><CloseIcon /></IconButton>
           </div>
           <div className="chat-list" ref={listRef} aria-live="polite">
-            {chat.length === 0 && <p className="chat-empty">Noch keine Nachrichten. Schreib den anderen Spielern etwas!</p>}
+            {chat.length === 0 && <EmptyState>Noch keine Nachrichten. Schreib den anderen Spielern etwas!</EmptyState>}
             {chat.map((message) => (
               <div className={`chat-message ${message.playerId === selfId ? "is-own" : ""}`} key={message.id}>
                 {message.playerId !== selfId && <span className="chat-author">{message.name}</span>}
@@ -1654,9 +1654,10 @@ function ChatWidget({ chat, selfId, sessionId }) {
               </div>
             ))}
           </div>
-          {error && <p className="chat-error" role="alert">{error}</p>}
           <form className="chat-form" onSubmit={send}>
             <input
+              className="input"
+              ref={inputRef}
               value={text}
               onChange={(event) => setText(event.target.value.slice(0, 200))}
               placeholder="Nachricht schreiben …"
@@ -1664,7 +1665,7 @@ function ChatWidget({ chat, selfId, sessionId }) {
               maxLength={200}
               autoComplete="off"
             />
-            <button type="submit" disabled={!text.trim()} aria-label="Senden">➤</button>
+            <IconButton label="Senden" variant="primary" type="submit" disabled={!text.trim()}><SendIcon /></IconButton>
           </form>
         </div>
       )}
@@ -1674,33 +1675,19 @@ function ChatWidget({ chat, selfId, sessionId }) {
 
 function PresenceDot({ online }) {
   return (
-    <span className={`presence ${online ? "is-on" : "is-off"}`} aria-label={online ? "online" : "offline"}>
-      <i />
-      {online ? "on" : "off"}
+    <span className={`presence ${online ? "is-on" : "is-off"}`}>
+      <i aria-hidden="true" />
+      {online ? "online" : "offline"}
     </span>
   );
 }
 
-// Meldung von oben, wenn ein Freund einlädt
-function InviteBanner({ invite, canJoin, onAccept, onDecline, onClose }) {
-  return (
-    <div className="invite-banner" role="alert">
-      <div className="invite-banner-copy">
-        <strong>{invite.from} lädt dich ein</strong>
-        <span>{canJoin ? "Komm in die Lobby und spiel mit." : "Du kannst nach der Partie beitreten (siehe Postfach)."}</span>
-      </div>
-      {canJoin && <button type="button" className="friend-accept" onClick={onAccept}>Beitreten</button>}
-      <button type="button" className="friend-ghost" onClick={canJoin ? onDecline : onClose} aria-label={canJoin ? "Einladung ablehnen" : "Meldung schließen"}>✕</button>
-    </div>
-  );
-}
-
-// Posteingang für Einladungen und Schalter für Push-Nachrichten aufs Handy
+// Einladungen und Schalter für Push-Nachrichten aufs Handy
 function Inbox({ invites, authToken, onAccept, onDecline }) {
+  const notify = useToast();
   const [permission, setPermission] = useState(pushPermission);
   const [pushOn, setPushOn] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -1712,11 +1699,13 @@ function Inbox({ invites, authToken, onAccept, onDecline }) {
 
   const togglePush = () => {
     setBusy(true);
-    setMessage("");
     const work = pushOn ? disablePush(authToken).then(() => false) : enablePush(authToken).then(() => true);
     work
-      .then((on) => setPushOn(on))
-      .catch((error) => setMessage(error.message || "Das hat nicht geklappt."))
+      .then((on) => {
+        setPushOn(on);
+        notify(on ? "Benachrichtigungen sind an." : "Benachrichtigungen sind aus.", { type: "success" });
+      })
+      .catch((error) => notify(error.message || "Das hat nicht geklappt.", { type: "error" }))
       .finally(() => {
         setBusy(false);
         setPermission(pushPermission());
@@ -1724,38 +1713,47 @@ function Inbox({ invites, authToken, onAccept, onDecline }) {
   };
 
   return (
-    <div className="inbox">
-      <h3>Einladungen{invites.length > 0 ? ` (${invites.length})` : ""}</h3>
-      {invites.length === 0 && <p className="muted">Keine Einladungen. Wenn ein Freund dich einlädt, erscheint sie hier.</p>}
-      {invites.map((invite) => (
-        <div className="friend-row" key={invite.id}>
-          <div className="friend-copy"><strong>{invite.from}</strong><small>lädt dich zu einem Spiel ein</small></div>
-          <button type="button" className="friend-accept" onClick={() => onAccept(invite)}>Beitreten</button>
-          <button type="button" className="friend-ghost" onClick={() => onDecline(invite)} aria-label={`Einladung von ${invite.from} ablehnen`}>✕</button>
-        </div>
-      ))}
+    <Card title="Einladungen" meta={invites.length > 0 ? `${invites.length} offen` : null}>
+      {invites.length === 0 ? (
+        <EmptyState>Keine Einladungen. Wenn ein Freund dich einlädt, erscheint sie hier.</EmptyState>
+      ) : (
+        <ul className="list">
+          {invites.map((invite) => (
+            <li className="list-row" key={invite.id}>
+              <span className="avatar">{initials(invite.from)}</span>
+              <span className="list-row-main">
+                <span className="list-row-title">{invite.from}</span>
+                <span className="list-row-sub">lädt dich zu einem Spiel ein</span>
+              </span>
+              <span className="list-row-actions">
+                <Button variant="primary" size="sm" onClick={() => onAccept(invite)}>Beitreten</Button>
+                <IconButton label={`Einladung von ${invite.from} ablehnen`} size="sm" variant="secondary" onClick={() => onDecline(invite)}><CloseIcon /></IconButton>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {pushSupported() ? (
-        <div className="push-row">
-          <div className="friend-copy">
-            <strong>Benachrichtigungen aufs Handy</strong>
-            <small>{pushOn ? "An: Einladungen kommen auch, wenn die App zu ist." : permission === "denied" ? "Im Browser blockiert." : "Aus"}</small>
-          </div>
-          <button type="button" className={`push-toggle ${pushOn ? "is-on" : ""}`} onClick={togglePush} disabled={busy || permission === "denied"} aria-pressed={pushOn}>
+        <div className="list-row setting-row">
+          <span className="list-row-main">
+            <span className="list-row-title">Benachrichtigungen aufs Handy</span>
+            <span className="list-row-sub">{pushOn ? "An: Einladungen kommen auch, wenn die App zu ist." : permission === "denied" ? "Im Browser blockiert." : "Aus"}</span>
+          </span>
+          <Button size="sm" variant={pushOn ? "secondary" : "primary"} onClick={togglePush} disabled={busy || permission === "denied"} aria-pressed={pushOn}>
             {pushOn ? "Ausschalten" : "Einschalten"}
-          </button>
+          </Button>
         </div>
       ) : (
-        <p className="muted push-note">Push-Benachrichtigungen gibt es auf diesem Gerät nicht. Auf dem iPhone: App zum Home-Bildschirm hinzufügen.</p>
+        <p className="field-hint">Push-Benachrichtigungen gibt es auf diesem Gerät nicht. Auf dem iPhone: App zum Home-Bildschirm hinzufügen.</p>
       )}
-      {message && <p className="form-error" role="alert">{message}</p>}
-    </div>
+    </Card>
   );
 }
 
 // Freunde in die Lobby einladen
 function InviteModal({ players, onClose }) {
+  const notify = useToast();
   const [data, setData] = useState(null);
-  const [message, setMessage] = useState("");
   const [invited, setInvited] = useState(() => new Set());
 
   const load = useCallback(() => {
@@ -1765,72 +1763,66 @@ function InviteModal({ players, onClose }) {
   useEffect(() => {
     load();
     const timer = window.setInterval(load, 8_000);
-    const onKey = (event) => event.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [load, onClose]);
+    return () => window.clearInterval(timer);
+  }, [load]);
 
   const invite = (name) => {
-    setMessage("");
     socket.request("invite", { name })
       .then((result) => {
-        setMessage(result.message || "");
+        if (result.message) notify(result.message, { type: result.ok ? "success" : "error" });
         if (result.ok) setInvited((set) => new Set(set).add(name));
       })
-      .catch(() => setMessage("Keine Verbindung zum Server."));
+      .catch(() => notify("Keine Verbindung zum Server.", { type: "error" }));
   };
 
   const inLobby = new Set(players.map((player) => player.name.toLocaleLowerCase("de")));
 
   return (
-    <div className="player-modal-backdrop" onClick={onClose}>
-      <div className="player-modal panel" role="dialog" aria-modal="true" aria-label="Freunde einladen" onClick={(event) => event.stopPropagation()}>
-        <button type="button" className="player-modal-close" onClick={onClose} aria-label="Schließen">✕</button>
-        <p className="eyebrow">EINLADEN</p>
-        <h2>Freunde einladen</h2>
-        {!data && <p className="muted">Lädt …</p>}
-        {data && data.friends.length === 0 && <p className="muted">Du hast noch keine Freunde. Füge sie im Profil hinzu.</p>}
-        <div className="friend-group">
-          {data?.friends.map((friend) => {
+    <Modal eyebrow="Lobby" title="Freunde einladen" onClose={onClose}>
+      {!data && <Loading />}
+      {data && data.friends.length === 0 && <EmptyState>Du hast noch keine Freunde. Füge sie im Profil hinzu.</EmptyState>}
+      {data?.friends.length > 0 && (
+        <ul className="list">
+          {data.friends.map((friend) => {
             const there = inLobby.has(friend.name.toLocaleLowerCase("de"));
             const done = invited.has(friend.name);
             return (
-              <div className="friend-row" key={friend.name}>
-                <div className="friend-copy">
-                  <strong>{friend.name} <LevelBadge level={friend.level} /></strong>
+              <li className="list-row" key={friend.name}>
+                <span className="avatar">{initials(friend.name)}</span>
+                <span className="list-row-main">
+                  <span className="list-row-title">{friend.name} <LevelBadge level={friend.level} /></span>
                   <PresenceDot online={friend.online} />
-                </div>
-                <button type="button" className="friend-accept" disabled={there || done} onClick={() => invite(friend.name)}>
+                </span>
+                <Button size="sm" variant={there || done ? "secondary" : "primary"} disabled={there || done} onClick={() => invite(friend.name)}>
                   {there ? "In der Lobby" : done ? "Eingeladen" : "Einladen"}
-                </button>
-              </div>
+                </Button>
+              </li>
             );
           })}
-        </div>
-        {message && <p className="friend-message" role="status">{message}</p>}
-      </div>
-    </div>
+        </ul>
+      )}
+    </Modal>
   );
 }
 
 function LevelBadge({ level }) {
-  return <span className="level-badge" title={`Level ${level}`}>Lv {level}</span>;
+  return <span className="badge badge-level" title={`Level ${level}`}>Lv {level}</span>;
 }
 
-function XpBar({ level, xpInLevel, xpForLevel }) {
+function XpBar({ level, xpInLevel, xpForLevel, total }) {
   const percent = Math.min(100, Math.round((100 * xpInLevel) / Math.max(1, xpForLevel)));
   return (
-    <div className="xp-bar" aria-label={`Level ${level}: ${xpInLevel} von ${xpForLevel} XP`}>
-      <div className="xp-bar-track"><i style={{ width: `${percent}%` }} /></div>
-      <small>{xpInLevel} / {xpForLevel} XP bis Level {level + 1}</small>
+    <div className="xp-bar">
+      <div className="xp-bar-track" role="progressbar" aria-label={`Fortschritt bis Level ${level + 1}`} aria-valuemin={0} aria-valuemax={xpForLevel} aria-valuenow={xpInLevel}>
+        <i style={{ width: `${percent}%` }} />
+      </div>
+      <small>{xpInLevel} / {xpForLevel} XP bis Level {level + 1}{total !== undefined ? ` · ${total} XP gesamt` : ""}</small>
     </div>
   );
 }
 
-function AccountForm({ onBack, onSignedIn, connected }) {
+function AccountForm({ onBack, onSignedIn }) {
+  const connected = useContext(ConnectionContext);
   const [mode, setMode] = useState("login"); // login | register
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -1851,39 +1843,41 @@ function AccountForm({ onBack, onSignedIn, connected }) {
       .finally(() => setBusy(false));
   };
 
+  // Fehler gelten nur für die aktuelle Eingabe
+  const edit = (setter) => (event) => {
+    setter(event);
+    setError("");
+  };
+
   return (
-    <section className="welcome page-width">
-      <div className="join-card panel account-card">
-        <div className="card-head-row">
-          <p className="eyebrow">SPIELERKONTO</p>
-          <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
-        </div>
-        <h2>{mode === "login" ? "Anmelden" : "Registrieren"}</h2>
-        <div className="account-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={mode === "login"} onClick={() => setMode("login")}>Anmelden</button>
-          <button type="button" role="tab" aria-selected={mode === "register"} onClick={() => setMode("register")}>Registrieren</button>
-        </div>
-        <p className="muted">Freiwillig: Mit Konto werden deine Spiele, Siege und XP gespeichert.</p>
-        <form onSubmit={submit}>
-          <label htmlFor="account-name">Spielername</label>
-          <input id="account-name" value={name} onChange={(event) => setName(event.target.value.slice(0, 20))} autoComplete="username" placeholder="z. B. Niki" />
-          <label htmlFor="account-password">Passwort</label>
-          <input id="account-password" type="password" value={password} onChange={(event) => setPassword(event.target.value.slice(0, 100))} autoComplete={mode === "login" ? "current-password" : "new-password"} />
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <button className="primary-button" disabled={!connected || busy || !name.trim() || !password}>
-            <span>{busy ? "Moment …" : mode === "login" ? "Anmelden" : "Konto erstellen"}</span>
-            <ArrowIcon />
-          </button>
+    <Page eyebrow="Spielerkonto" title={mode === "login" ? "Anmelden" : "Registrieren"} lead="Freiwillig: Mit Konto werden deine Spiele, Siege und XP gespeichert." onBack={onBack}>
+      <Card>
+        <form className="form-stack" onSubmit={submit}>
+          <Segmented
+            label="Konto"
+            value={mode}
+            onChange={(next) => {
+              setMode(next);
+              setError("");
+            }}
+            options={[{ value: "login", label: "Anmelden" }, { value: "register", label: "Registrieren" }]}
+          />
+          <Field label="Spielername" htmlFor="account-name">
+            <input className="input" id="account-name" value={name} onChange={edit((event) => setName(event.target.value.slice(0, 20)))} autoComplete="username" placeholder="z. B. Niki" />
+          </Field>
+          <Field label="Passwort" htmlFor="account-password" hint={mode === "register" ? "Nimm ein Passwort, das du sonst nirgends verwendest." : null}>
+            <input className="input" id="account-password" type="password" value={password} onChange={edit((event) => setPassword(event.target.value.slice(0, 100)))} autoComplete={mode === "login" ? "current-password" : "new-password"} />
+          </Field>
+          {error && <Note tone="danger" role="alert">{error}</Note>}
+          <Button type="submit" variant="primary" size="lg" block disabled={!connected || busy || !name.trim() || !password} icon={<ArrowIcon />}>
+            {busy ? "Moment …" : mode === "login" ? "Anmelden" : "Konto erstellen"}
+          </Button>
         </form>
-        {mode === "register" && (
-          <div className="secure-note"><ShieldIcon /> Nimm ein Passwort, das du sonst nirgends verwendest.</div>
-        )}
-      </div>
-    </section>
+      </Card>
+    </Page>
   );
 }
 
-// Ringdiagramm: Anteil Siege (orange) und Niederlagen (grau), Siegquote in der Mitte
 function WinRateDonut({ wins, losses }) {
   const total = wins + losses;
   const gap = wins > 0 && losses > 0 ? 1.2 : 0;
@@ -1933,8 +1927,7 @@ function MiniRing({ wins, losses }) {
 function FriendCollection({ name, authToken, onClose }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [order, setOrder] = useState("tier");
+  const [cards, toolbar] = useCardFilter(data?.cards);
 
   useEffect(() => {
     let alive = true;
@@ -1945,58 +1938,38 @@ function FriendCollection({ name, authToken, onClose }) {
         else setError(result.message || "Die Sammlung konnte nicht geladen werden.");
       })
       .catch(() => alive && setError("Keine Verbindung zum Server."));
-    const onKey = (event) => event.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
     return () => {
       alive = false;
-      window.removeEventListener("keydown", onKey);
     };
-  }, [authToken, name, onClose]);
-
-  const cards = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase("de");
-    return sortCards((data?.cards || []).filter((card) => !needle || card.name.toLocaleLowerCase("de").includes(needle)), order);
-  }, [data, query, order]);
+  }, [authToken, name]);
 
   return (
-    <div className="player-modal-backdrop" onClick={onClose}>
-      <div className="player-modal friend-collection panel" role="dialog" aria-modal="true" aria-label={`Sammlung von ${name}`} onClick={(event) => event.stopPropagation()}>
-        <button type="button" className="player-modal-close" onClick={onClose} aria-label="Schließen">✕</button>
-        <p className="eyebrow">SAMMLUNG</p>
-        <h2>{name}</h2>
-        {error && <p className="form-error" role="alert">{error}</p>}
-        {!data && !error && <p className="muted">Lädt …</p>}
-        {data && (
-          <>
-            <p className="collection-count"><b>{data.collected}</b> / {data.total} Autos{data.cards.length > 0 && <span className="collection-rating"> · Ø Stärke <b>{deckRating(data.cards)}</b></span>}</p>
-            <div className="collection-tools">
-              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Auto suchen" aria-label="Auto suchen" />
-              <select value={order} onChange={(event) => setOrder(event.target.value)} aria-label="Sortierung">
-                <option value="tier">Nach Seltenheit</option>
-                <option value="score">Nach Stärke</option>
-                <option value="name">Nach Name</option>
-              </select>
-            </div>
-            {cards.length === 0 && <p className="collection-empty">Kein Auto gefunden.</p>}
-            <div className="collection-grid">
-              {cards.map((card) => (
-                <CollectionCard card={card} categories={data.categories} qty={card.qty} key={card.c_id} lazy />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+    <Modal eyebrow="Sammlung" title={name} onClose={onClose} size="lg">
+      {error && <Note tone="danger" role="alert">{error}</Note>}
+      {!data && !error && <Loading />}
+      {data && (
+        <div className="stack">
+          <CollectionSummary data={data} />
+          {toolbar}
+          {cards.length === 0 && <EmptyState>Kein Auto gefunden.</EmptyState>}
+          <div className="card-grid is-compact">
+            {cards.map((card) => (
+              <CollectionCard card={card} categories={data.categories} qty={card.qty} key={card.c_id} lazy />
+            ))}
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 
 function FriendsPanel({ authToken }) {
+  const notify = useToast();
   const [openName, setOpenName] = useState(null);
   const [viewName, setViewName] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [data, setData] = useState(null);
   const [name, setName] = useState("");
-  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -2014,11 +1987,11 @@ function FriendsPanel({ authToken }) {
   const act = (action, friendName) =>
     socket.request(action, { authToken, name: friendName })
       .then((result) => {
-        setMessage(result.message || "");
+        if (result.message) notify(result.message, { type: result.ok ? "success" : "error" });
         load();
         return result;
       })
-      .catch(() => setMessage("Keine Verbindung zum Server."));
+      .catch(() => notify("Keine Verbindung zum Server.", { type: "error" }));
 
   const add = (event) => {
     event.preventDefault();
@@ -2034,58 +2007,77 @@ function FriendsPanel({ authToken }) {
     setOpenName(friend.name);
   };
   const closeFriend = useCallback(() => setOpenName(null), []);
+  const closeCollection = useCallback(() => setViewName(null), []);
 
   return (
-    <div className="friends">
-      <h3>Freunde{data ? ` (${data.friends.length})` : ""}</h3>
-      <form className="friend-add" onSubmit={add}>
+    <Card title="Freunde" meta={data ? String(data.friends.length) : null}>
+      <form className="inline-form" onSubmit={add}>
         <input
+          className="input"
           value={name}
           onChange={(event) => setName(event.target.value.slice(0, 20))}
-          placeholder="Spielername hinzufügen"
+          placeholder="Spielername"
           aria-label="Spielername des Freundes"
           autoComplete="off"
         />
-        <button className="friend-add-button" disabled={busy || !name.trim()}>Hinzufügen</button>
+        <Button type="submit" variant="primary" disabled={busy || !name.trim()} iconStart={<PlusIcon />}>Hinzufügen</Button>
       </form>
-      {message && <p className="friend-message" role="status">{message}</p>}
 
       {data?.incoming.length > 0 && (
-        <div className="friend-group">
-          <h4>Anfragen an dich</h4>
-          {data.incoming.map((entry) => (
-            <div className="friend-row" key={entry.name}>
-              <div className="friend-copy"><strong>{entry.name}</strong> <LevelBadge level={entry.level} /></div>
-              <button type="button" className="friend-accept" onClick={() => act("friendAccept", entry.name)}>Annehmen</button>
-              <button type="button" className="friend-ghost" onClick={() => act("friendRemove", entry.name)} aria-label={`Anfrage von ${entry.name} ablehnen`}>✕</button>
-            </div>
-          ))}
+        <div className="list-group">
+          <h3 className="list-heading">Anfragen an dich</h3>
+          <ul className="list">
+            {data.incoming.map((entry) => (
+              <li className="list-row" key={entry.name}>
+                <span className="avatar">{initials(entry.name)}</span>
+                <span className="list-row-main">
+                  <span className="list-row-title">{entry.name} <LevelBadge level={entry.level} /></span>
+                </span>
+                <span className="list-row-actions">
+                  <Button variant="primary" size="sm" onClick={() => act("friendAccept", entry.name)}>Annehmen</Button>
+                  <IconButton label={`Anfrage von ${entry.name} ablehnen`} variant="secondary" size="sm" onClick={() => act("friendRemove", entry.name)}><CloseIcon /></IconButton>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
-      <div className="friend-group">
-        {data && data.friends.length === 0 && <p className="muted">Noch keine Freunde. Gib oben den Spielernamen eines Freundes ein.</p>}
-        {data?.friends.map((friend) => (
-          <button type="button" className="friend-row is-friend" key={friend.name} onClick={() => openFriend(friend)}>
-            <MiniRing wins={friend.wins} losses={friend.losses} />
-            <div className="friend-copy">
-              <strong>{friend.name}</strong>
-              <PresenceDot online={friend.online} />
-            </div>
-            <LevelBadge level={friend.level} />
-          </button>
-        ))}
+      <div className="list-group">
+        {data && data.friends.length === 0 && <EmptyState>Noch keine Freunde. Gib oben den Spielernamen eines Freundes ein.</EmptyState>}
+        {data?.friends.length > 0 && (
+          <ul className="list">
+            {data.friends.map((friend) => (
+              <li key={friend.name}>
+                <button type="button" className="list-row" onClick={() => openFriend(friend)}>
+                  <MiniRing wins={friend.wins} losses={friend.losses} />
+                  <span className="list-row-main">
+                    <span className="list-row-title">{friend.name} <LevelBadge level={friend.level} /></span>
+                    <PresenceDot online={friend.online} />
+                  </span>
+                  <ChevronIcon />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {data?.outgoing.length > 0 && (
-        <div className="friend-group">
-          <h4>Gesendete Anfragen</h4>
-          {data.outgoing.map((entry) => (
-            <div className="friend-row" key={entry.name}>
-              <div className="friend-copy"><strong>{entry.name}</strong> <small>wartet auf Antwort</small></div>
-              <button type="button" className="friend-ghost" onClick={() => act("friendRemove", entry.name)} aria-label={`Anfrage an ${entry.name} zurückziehen`}>✕</button>
-            </div>
-          ))}
+        <div className="list-group">
+          <h3 className="list-heading">Gesendete Anfragen</h3>
+          <ul className="list">
+            {data.outgoing.map((entry) => (
+              <li className="list-row" key={entry.name}>
+                <span className="avatar is-empty">{initials(entry.name)}</span>
+                <span className="list-row-main">
+                  <span className="list-row-title">{entry.name}</span>
+                  <span className="list-row-sub">wartet auf Antwort</span>
+                </span>
+                <IconButton label={`Anfrage an ${entry.name} zurückziehen`} variant="secondary" size="sm" onClick={() => act("friendRemove", entry.name)}><CloseIcon /></IconButton>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       {openName && (
@@ -2094,50 +2086,47 @@ function FriendsPanel({ authToken }) {
           online={data?.friends.find((friend) => friend.name === openName)?.online}
           onClose={closeFriend}
           footer={confirmRemove ? (
-            <div className="friend-confirm">
-              <span>{openName} wirklich entfernen?</span>
-              <button type="button" className="friend-accept" onClick={() => act("friendRemove", openName).then(closeFriend)}>Ja, entfernen</button>
-              <button type="button" className="text-button" onClick={() => setConfirmRemove(false)}>Abbrechen</button>
-            </div>
-          ) : (
             <>
-              <button type="button" className="friend-accept friend-view-collection" onClick={() => { setViewName(openName); setOpenName(null); }}>Sammlung ansehen</button>
-              <button type="button" className="text-button" onClick={() => setConfirmRemove(true)}>Freund entfernen</button>
+              <p className="confirm-text">{openName} wirklich als Freund entfernen?</p>
+              <div className="button-row is-split">
+                <Button onClick={() => setConfirmRemove(false)}>Abbrechen</Button>
+                <Button variant="danger" onClick={() => act("friendRemove", openName).then(closeFriend)}>Entfernen</Button>
+              </div>
             </>
+          ) : (
+            <div className="button-row is-split">
+              <Button variant="danger" onClick={() => setConfirmRemove(true)}>Entfernen</Button>
+              <Button variant="primary" onClick={() => { setViewName(openName); setOpenName(null); }}>Sammlung ansehen</Button>
+            </div>
           )}
         />
       )}
-      {viewName && <FriendCollection name={viewName} authToken={authToken} onClose={() => setViewName(null)} />}
-    </div>
+      {viewName && <FriendCollection name={viewName} authToken={authToken} onClose={closeCollection} />}
+    </Card>
   );
 }
 
 // Statistikblock eines Spielers: Level, XP, Siegquote-Ring, Spiele, Siegesserie (Profil und Spielerfenster)
 function ProfileStats({ account }) {
   return (
-    <>
+    <div className="profile-stats">
       <div className="profile-level">
         <span className="profile-level-number">Level {account.level}</span>
-        {account.rank ? (
-          <span className="profile-rank">Platz <b>{account.rank}</b>{account.players ? ` von ${account.players}` : ""}</span>
-        ) : (
-          <span className="muted">{account.xp} XP gesamt</span>
-        )}
+        {account.rank ? <span className="profile-rank">Platz <b>{account.rank}</b>{account.players ? ` von ${account.players}` : ""}</span> : null}
       </div>
-      <XpBar level={account.level} xpInLevel={account.xpInLevel} xpForLevel={account.xpForLevel} />
+      <XpBar level={account.level} xpInLevel={account.xpInLevel} xpForLevel={account.xpForLevel} total={account.xp} />
       <WinRateDonut wins={account.wins} losses={account.losses} />
-      <dl className="profile-stats">
+      <dl className="stat-grid">
         <div><dt>Spiele</dt><dd>{account.gamesPlayed}</dd></div>
         <div><dt><i className="swatch is-win" />Siege</dt><dd>{account.wins}</dd></div>
         <div><dt><i className="swatch is-loss" />Niederlagen</dt><dd>{account.losses}</dd></div>
       </dl>
-      <dl className="profile-stats profile-streaks">
+      <dl className="stat-grid is-two">
         <div><dt>Siegesserie</dt><dd>{account.currentStreak ?? 0}</dd><small>aktuell</small></div>
         <div className="is-record"><dt>Rekord</dt><dd>{account.bestStreak ?? 0}</dd><small>Siege am Stück</small></div>
       </dl>
-      <p className="profile-xp-total">{account.xp} XP gesamt</p>
-      {account.totalCards ? <p className="profile-collection">Sammlung: <b>{account.collected}</b> / {account.totalCards} Autos</p> : null}
-    </>
+      {account.totalCards ? <p className="summary-line"><span>Sammlung: <b>{account.collected}</b> / {account.totalCards} Autos</span></p> : null}
+    </div>
   );
 }
 
@@ -2155,45 +2144,33 @@ function PlayerModal({ name, online, onClose, footer = null }) {
         else setError(result.message || "Das Profil konnte nicht geladen werden.");
       })
       .catch(() => alive && setError("Keine Verbindung zum Server."));
-    const onKey = (event) => event.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
     return () => {
       alive = false;
-      window.removeEventListener("keydown", onKey);
     };
-  }, [name, onClose]);
+  }, [name]);
 
   return (
-    <div className="player-modal-backdrop" onClick={onClose}>
-      <div className="player-modal panel" role="dialog" aria-modal="true" aria-label={`Profil von ${name}`} onClick={(event) => event.stopPropagation()}>
-        <button type="button" className="player-modal-close" onClick={onClose} aria-label="Schließen">✕</button>
-        <p className="eyebrow">SPIELERPROFIL</p>
-        <h2>{name} {account && <LevelBadge level={account.level} />}</h2>
-        {online !== undefined && <PresenceDot online={online} />}
-        {error && <p className="form-error" role="alert">{error}</p>}
-        {!account && !error && <p className="muted">Lädt …</p>}
-        {account && <ProfileStats account={account} />}
-        {account && footer}
-      </div>
-    </div>
+    <Modal eyebrow="Spielerprofil" title={name} onClose={onClose} footer={account ? footer : null}>
+      {online !== undefined && <PresenceDot online={online} />}
+      {error && <Note tone="danger" role="alert">{error}</Note>}
+      {!account && !error && <Loading />}
+      {account && <ProfileStats account={account} />}
+    </Modal>
   );
 }
 
 function Profile({ account, authToken, invites = [], onAcceptInvite, onDeclineInvite, onBack, onSignOut }) {
   return (
-    <section className="welcome page-width">
-      <div className="join-card panel profile-card">
-        <div className="card-head-row">
-          <p className="eyebrow">SPIELERKONTO</p>
-          <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
-        </div>
-        <h2>{account.name}</h2>
+    <Page eyebrow="Spielerkonto" title={account.name} onBack={onBack}>
+      <Card title="Statistik">
         <ProfileStats account={account} />
-        <Inbox invites={invites} authToken={authToken} onAccept={onAcceptInvite} onDecline={onDeclineInvite} />
-        <FriendsPanel authToken={authToken} />
-        <button type="button" className="text-button" onClick={onSignOut}>Abmelden</button>
+      </Card>
+      <Inbox invites={invites} authToken={authToken} onAccept={onAcceptInvite} onDecline={onDeclineInvite} />
+      <FriendsPanel authToken={authToken} />
+      <div className="page-actions">
+        <Button variant="danger" onClick={onSignOut}>Abmelden</Button>
       </div>
-    </section>
+    </Page>
   );
 }
 
@@ -2220,37 +2197,40 @@ function Leaderboard({ onBack, selfName }) {
   const self = selfName?.toLocaleLowerCase("de");
 
   return (
-    <section className="welcome page-width">
-      <div className="join-card panel leaderboard-card">
-        <div className="card-head-row">
-          <p className="eyebrow">RANGLISTE</p>
-          <button type="button" className="text-button join-back" onClick={onBack}>← Zurück</button>
-        </div>
-        <h2>Top 10</h2>
-        <p className="muted">Die Spieler mit den meisten XP.</p>
-        {error && <p className="form-error" role="alert">{error}</p>}
-        {!players && !error && <p className="muted">Lädt …</p>}
-        {players && players.length === 0 && <p className="muted">Noch niemand hat XP gesammelt. Melde dich an und spiel eine Partie!</p>}
+    <Page eyebrow="Rangliste" title="Top 10" lead="Die Spieler mit den meisten XP." onBack={onBack}>
+      <Card>
+        {error && <Note tone="danger" role="alert">{error}</Note>}
+        {!players && !error && <Loading />}
+        {players && players.length === 0 && <EmptyState>Noch niemand hat XP gesammelt. Melde dich an und spiel eine Partie!</EmptyState>}
         {players && players.length > 0 && (
-          <ol className="leaderboard">
+          <ol className="list">
             {players.map((player, index) => (
-              <li key={player.name} className={`${index < 3 ? `is-top is-top-${index + 1}` : ""} ${player.name.toLocaleLowerCase("de") === self ? "is-self" : ""}`}>
-                <button type="button" className="leaderboard-row" onClick={() => setOpenName(player.name)} aria-label={`Profil von ${player.name} öffnen`}>
-                <span className="leaderboard-rank">{index + 1}</span>
-                <div className="leaderboard-copy">
-                  <strong>{player.name} <LevelBadge level={player.level} /></strong>
-                  <small>{player.wins} {player.wins === 1 ? "Sieg" : "Siege"} · {player.gamesPlayed} {player.gamesPlayed === 1 ? "Spiel" : "Spiele"}{player.gamesPlayed ? ` · ${player.winRate} %` : ""}</small>
-                </div>
-                <span className="leaderboard-xp">{player.xp}<small>XP</small></span>
+              <li key={player.name}>
+                <button
+                  type="button"
+                  className={`list-row ${player.name.toLocaleLowerCase("de") === self ? "is-highlight" : ""}`}
+                  onClick={() => setOpenName(player.name)}
+                  aria-label={`Platz ${index + 1}: Profil von ${player.name} öffnen`}
+                >
+                  <span className={`rank ${index < 3 ? `is-top-${index + 1}` : ""}`}>{index + 1}</span>
+                  <span className="list-row-main">
+                    <span className="list-row-title">{player.name} <LevelBadge level={player.level} /></span>
+                    <span className="list-row-sub">{player.wins} {player.wins === 1 ? "Sieg" : "Siege"} · {player.gamesPlayed} {player.gamesPlayed === 1 ? "Spiel" : "Spiele"}{player.gamesPlayed ? ` · ${player.winRate} %` : ""}</span>
+                  </span>
+                  <span className="list-row-value">{player.xp}<small>XP</small></span>
                 </button>
               </li>
             ))}
           </ol>
         )}
-      </div>
+      </Card>
       {openName && <PlayerModal name={openName} onClose={closePlayer} />}
-    </section>
+    </Page>
   );
+}
+
+function ChevronIcon() {
+  return <svg className="icon list-row-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>;
 }
 
 function TrophyIcon() {
@@ -2260,15 +2240,6 @@ function TrophyIcon() {
       <path d="M14 11H7c0 6 3 9.500 7.500 10M34 11h7c0 6-3 9.500-7.500 10" fill="none" stroke="currentColor" strokeWidth="2.500" strokeLinecap="round" />
       <path d="M21 28h6v6h-6z" fill="currentColor" opacity="0.8" />
       <rect x="15" y="34" width="18" height="6" rx="2" fill="currentColor" />
-    </svg>
-  );
-}
-
-function UserIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="user-icon">
-      <circle cx="12" cy="8" r="4" fill="currentColor" />
-      <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" fill="currentColor" />
     </svg>
   );
 }
@@ -2301,58 +2272,65 @@ function FinishPanel({ state, onLeave }) {
   const voted = votes.includes(selfId);
   const award = game.xpAwards?.[selfId];
 
+  const xpNote = state.solo ? AI_XP_NOTES[state.aiLevel] : null;
+  const title = game.teamMode && winnerTeam !== null && winnerTeam !== undefined ? `${TEAM_INFO[winnerTeam].name} gewinnt!` : `${winner?.name || "Unbekannt"} gewinnt!`;
+
   return (
     <div className="finish-overlay">
-      <div className="finish-panel panel">
-        <div className="trophy">🏁</div>
-        <p className="eyebrow">PARTIE BEENDET</p>
-        <h2>{game.teamMode && winnerTeam !== null && winnerTeam !== undefined ? `${TEAM_INFO[winnerTeam].name} gewinnt!` : `${winner?.name || "Unbekannt"} gewinnt!`}</h2>
-        {game.teamMode && winnerIds.length > 0 && <p className="muted">{players.filter((player) => winnerIds.includes(player.id)).map((player) => player.name).join(" + ")}</p>}
-        {game.result?.reason === "abandoned" && (
-          <p className="muted">Die Partie wurde beendet, weil zu viele Mitspieler gegangen sind.</p>
-        )}
+      <section className="card finish-panel" aria-labelledby="finish-title">
+        <div className="finish-head">
+          <div className="trophy" aria-hidden="true">🏁</div>
+          <p className="eyebrow">Partie beendet</p>
+          <h2 className="modal-title" id="finish-title">{title}</h2>
+          {game.teamMode && winnerIds.length > 0 && <p className="muted">{players.filter((player) => winnerIds.includes(player.id)).map((player) => player.name).join(" + ")}</p>}
+          {game.result?.reason === "abandoned" && <p className="muted">Die Partie wurde beendet, weil zu viele Mitspieler gegangen sind.</p>}
+        </div>
         {award && award.xp > 0 && (
           <div className="finish-xp">
             <strong>+{award.xp} XP</strong>
             {award.level > award.levelBefore && <span className="finish-levelup">Level {award.level} erreicht!</span>}
             <XpBar level={award.level} xpInLevel={award.xpInLevel} xpForLevel={award.xpForLevel} />
-            {state.solo && state.aiLevel === "easy" && <small className="finish-xp-note">Gegen „Leicht“ gibt es nur 20 % der XP.</small>}
-            {state.solo && state.aiLevel === "medium" && <small className="finish-xp-note">Gegen „Mittel“ gibt es nur 50 % der XP.</small>}
+            {xpNote && state.aiLevel !== "hard" && <small className="field-hint">{xpNote}</small>}
           </div>
         )}
         {game.cardAwards?.length > 0 && <PackReveal awards={game.cardAwards} categories={state.categories} />}
         {state.risk && <RiskPanel state={state} />}
-        <ol className="finish-ranking">
+        <ol className="list">
           {ranked.map((player, index) => {
             const entry = statOf(player);
+            const level = game.xpAwards?.[player.id]?.level || player.level;
             return (
-              <li key={player.id} className={player.id === selfId ? "is-self" : ""}>
-                <span className="finish-rank">{index + 1}.</span>
-                <b>{player.name} <TeamTag team={player.team} /> {(game.xpAwards?.[player.id]?.level || player.level) && <LevelBadge level={game.xpAwards?.[player.id]?.level || player.level} />}</b>
-                <small>
-                  {entry.tricks} {entry.tricks === 1 ? "Stich" : "Stiche"}
-                  {entry.outRound ? ` · raus in Runde ${entry.outRound}` : ` · ${player.cardCount} Karten`}
-                  {game.deckRatings?.[player.id] !== undefined && ` · Deckwertung ${game.deckRatings[player.id]}`}
-                </small>
+              <li key={player.id} className={`list-row ${index === 0 ? "is-winner" : ""} ${player.id === selfId ? "is-highlight" : ""}`}>
+                <span className={`rank ${index < 3 ? `is-top-${index + 1}` : ""}`}>{index + 1}</span>
+                <span className="list-row-main">
+                  <span className="list-row-title">{player.name} <TeamTag team={player.team} /> {level && <LevelBadge level={level} />}</span>
+                  <span className="list-row-sub">
+                    {entry.tricks} {entry.tricks === 1 ? "Stich" : "Stiche"}
+                    {entry.outRound ? ` · raus in Runde ${entry.outRound}` : ` · ${player.cardCount} Karten`}
+                    {game.deckRatings?.[player.id] !== undefined && ` · Deckwertung ${game.deckRatings[player.id]}`}
+                  </span>
+                </span>
               </li>
             );
           })}
         </ol>
-        <div className="finish-facts">
-          {streakLeader && statOf(streakLeader).best > 1 && (
-            <div><span>Längste Siegesserie</span><b>{streakLeader.name} · {statOf(streakLeader).best} Stiche am Stück</b></div>
-          )}
-          {state.topCard && (
-            <div><span>Stärkste Karte</span><b>{state.topCard.name} · {state.topCard.wins} {state.topCard.wins === 1 ? "Stich" : "Stiche"}</b></div>
-          )}
+        {((streakLeader && statOf(streakLeader).best > 1) || state.topCard) && (
+          <dl className="fact-list">
+            {streakLeader && statOf(streakLeader).best > 1 && (
+              <div><dt>Längste Siegesserie</dt><dd>{streakLeader.name} · {statOf(streakLeader).best} Stiche am Stück</dd></div>
+            )}
+            {state.topCard && (
+              <div><dt>Stärkste Karte</dt><dd>{state.topCard.name} · {state.topCard.wins} {state.topCard.wins === 1 ? "Stich" : "Stiche"}</dd></div>
+            )}
+          </dl>
+        )}
+        <div className="button-row is-split">
+          <Button size="lg" onClick={onLeave}>Startseite</Button>
+          <Button variant="primary" size="lg" disabled={voted || (state.risk && !state.risk.done)} onClick={() => socket.emit("playAgain")} icon={voted ? null : <FlagIcon />}>
+            {voted ? `Warte (${votes.length}/${voters.length})` : "Revanche"}
+          </Button>
         </div>
-        <div className="finish-actions">
-          <button type="button" className="team-shuffle finish-home" onClick={onLeave}>← Startseite</button>
-          <button className="primary-button" disabled={voted || (state.risk && !state.risk.done)} onClick={() => socket.emit("playAgain")}>
-            <span>{voted ? `Warte auf die anderen (${votes.length}/${voters.length})` : "Revanche"}</span><FlagIcon />
-          </button>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }
@@ -2361,7 +2339,7 @@ function FinishPanel({ state, onLeave }) {
 function PackReveal({ awards, categories }) {
   return (
     <div className="pack-reveal">
-      <p className="eyebrow">{awards.length > 1 ? `PACK MIT ${awards.length} AUTOS` : "NEUES AUTO"}</p>
+      <p className="eyebrow">{awards.length > 1 ? `Pack mit ${awards.length} Autos` : "Neues Auto"}</p>
       <div className="pack-cards">
         {awards.map((award, index) => (
           <CollectionCard card={award.card} categories={categories} isNew={award.isNew} key={`${award.card.c_id}-${index}`} />
@@ -2621,8 +2599,8 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
           <p className="eyebrow">SIEG</p>
           <h2 className="win-title">Gewonnen!</h2>
           <p className="win-sub">Als Belohnung wartet ein Pack mit {total} {total === 1 ? "Karte" : "Karten"} auf dich.</p>
-          <button type="button" className="primary-button" onClick={() => { unlockAudio(); setPhase("idle"); }}><span>Pack abholen</span><ArrowIcon /></button>
-          <button type="button" className="text-button" onClick={revealAll}>Überspringen</button>
+          <Button variant="primary" size="lg" onClick={() => { unlockAudio(); setPhase("idle"); }} icon={<ArrowIcon />}>Pack abholen</Button>
+          <Button variant="ghost" onClick={revealAll}>Überspringen</Button>
         </div>
       ) : (
       <div className="pack-shaker">
@@ -2696,7 +2674,7 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
 
         <div className="pack-actions">
           {allSettled ? (
-            <button type="button" className="primary-button" onClick={onDone}><span>Weiter</span><ArrowIcon /></button>
+            <Button variant="primary" size="lg" onClick={onDone} icon={<ArrowIcon />}>Weiter</Button>
           ) : (
             <>
               {phase === "pick" && (
@@ -2709,8 +2687,8 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
                   </div>
                 </>
               )}
-              {phase === "idle" && <button type="button" className="primary-button" onClick={startOpening}><span>Pack öffnen</span><ArrowIcon /></button>}
-              <button type="button" className="text-button" onClick={revealAll}>{phase === "pick" ? "Alle aufdecken" : "Überspringen"}</button>
+              {phase === "idle" && <Button variant="primary" size="lg" onClick={startOpening} icon={<ArrowIcon />}>Pack öffnen</Button>}
+              <Button variant="ghost" onClick={revealAll}>{phase === "pick" ? "Alle aufdecken" : "Überspringen"}</Button>
             </>
           )}
         </div>
@@ -2887,7 +2865,7 @@ function RiskPanel({ state }) {
       <div className="risk-panel">
         <p className="eyebrow">RISIKO{risk.done ? "" : <> · NOCH <Seconds target={risk.deadline} /> S</>}</p>
         {mySlot === null || mySlot === undefined ? (
-          <p className="risk-line"><SpinnerIcon /> {winner?.name} zieht eine Karte aus deinem Deck …</p>
+          <p className="risk-line"><Spinner /> {winner?.name} zieht eine Karte aus deinem Deck …</p>
         ) : (
           <p className="risk-line">{winner?.name} hat gezogen.</p>
         )}
@@ -2948,10 +2926,6 @@ function initials(name) {
   return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
 
-function LogoMark() {
-  return <svg className="logo-mark" viewBox="0 0 42 42" aria-hidden="true"><path d="M5 8h21l11 9-11 17H5l11-13L5 8Z" /><path d="M17 15h10l4 4-7 9H13l6-7-2-6Z" /></svg>;
-}
-
 function FlagPattern() {
   const cells = [];
   for (let row = 0; row < 3; row += 1) {
@@ -3003,26 +2977,6 @@ function CollectionIcon() {
       <rect x="27" y="10" width="17" height="30" rx="4" transform="rotate(8 35 25)" fill="none" stroke="currentColor" strokeWidth="2.500" opacity="0.6" />
     </svg>
   );
-}
-
-function ArrowIcon() {
-  return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M14 6l6 6-6 6" /></svg>;
-}
-
-function FlagIcon() {
-  return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4m0 1c5-3 8 3 14 0v9c-6 3-9-3-14 0" /></svg>;
-}
-
-function ShieldIcon() {
-  return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6l-7-3Z" /><path d="m9 12 2 2 4-5" /></svg>;
-}
-
-function LockIcon() {
-  return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>;
-}
-
-function SpinnerIcon() {
-  return <span className="spinner" aria-hidden="true" />;
 }
 
 function CarSilhouette() {
