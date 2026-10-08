@@ -477,7 +477,7 @@ function CollectionCard({ card, categories, qty = 0, isNew = false, onClick, dim
       <TierBadge tier={tier} />
       {qty > 1 && <b className="card-qty">×{qty}</b>}
       {card.score !== undefined && <span className="card-score" title="Kartenstärke (0–100)">{Math.round(card.score)}</span>}
-      {isNew && <b className="card-new">NEU</b>}
+      {isNew && <b className="card-new">NEU!</b>}
     </Tag>
   );
 }

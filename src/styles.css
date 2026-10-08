@@ -5990,7 +5990,7 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 .reveal-fx {
   position: absolute;
   inset: 0;
-  z-index: 4;
+  z-index: -1; /* Erscheinungs-Effekte liegen unter der Karte, nicht darauf */
   pointer-events: none;
 }
 
@@ -6054,7 +6054,7 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 .tier-flash {
   position: absolute;
   inset: 0;
-  z-index: 8;
+  z-index: 1; /* unter den Karten (pack-shaker liegt auf 2) */
   background: radial-gradient(circle at 50% 50%, var(--tier-color) 0%, transparent 72%);
   mix-blend-mode: screen;
   opacity: 0;
@@ -6074,7 +6074,21 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 
 /* Schilder an den kleinen Karten der Show: nichts überdeckt sich */
 .pack-hand .tier-badge { top: -9px; left: 6px; padding: 2px 7px; font-size: 9px; }
-.pack-hand .card-new { top: auto; bottom: -9px; right: auto; left: 6px; padding: 2px 8px; font-size: 10px; }
+.pack-hand .card-new {
+  top: -12px;
+  right: 6px;
+  z-index: 5;
+  padding: 4px 11px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  box-shadow: 0 0 16px rgba(255, 226, 74, 0.85);
+  animation: new-pop 600ms cubic-bezier(0.2, 1.6, 0.4, 1) 900ms backwards;
+}
+
+@keyframes new-pop {
+  0% { opacity: 0; transform: scale(0.3) rotate(-12deg); }
+  100% { opacity: 1; transform: none; }
+}
 .pack-hand .card-score { right: 6px; padding: 2px 6px; font-size: 10px; }
 
 /* Karten antippen: sichtbarer Hinweis, ruhiges Umdrehen, Aufschlag */
