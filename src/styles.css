@@ -6590,3 +6590,8 @@ button.tier-frame:hover { transform: translateY(-3px); transition: transform 0.1
 }
 
 
+
+/* Sammlung eines Freundes ansehen */
+.player-modal.friend-collection { width: min(100%, 760px); }
+.player-modal.friend-collection .collection-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 125px), 1fr)); gap: 12px; margin-top: 14px; padding-bottom: 6px; }
+.friend-view-collection { width: 100%; min-height: 46px; margin-bottom: 8px; }

@@ -637,7 +637,7 @@ function trumpf_account_action(string $action, array $input): void
             }
             respond(['ok' => true, 'players' => $players]);
         }
-        if (in_array($action, ['friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile'], true)) {
+        if (in_array($action, ['friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile', 'friendCollection'], true)) {
             trumpf_friend_action($db, $action, $input);
         }
 
@@ -1079,6 +1079,21 @@ function trumpf_friend_action(PDO $db, string $action, array $input): void
             respond(['ok' => false, 'message' => 'Das Profil siehst du nur bei Freunden.']);
         }
         respond(['ok' => true, 'account' => trumpf_account_public($other)]);
+    }
+
+    if ($action === 'friendCollection') {
+        $mine = $relation($myId, $otherId);
+        $theirs = $relation($otherId, $myId);
+        if (!(($mine && $mine['status'] === 'accepted') || ($theirs && $theirs['status'] === 'accepted'))) {
+            respond(['ok' => false, 'message' => 'Die Sammlung siehst du nur bei Freunden.']);
+        }
+        $deck = trumpf_load_deck();
+        $scores = trumpf_card_scores();
+        $cards = [];
+        foreach (trumpf_owned_cards($db, $otherId) as $cardId => $qty) {
+            $cards[] = $deck[$cardId] + ['qty' => $qty, 'score' => $scores[$cardId] ?? 0];
+        }
+        respond(['ok' => true, 'name' => $other['name'], 'categories' => TRUMPF_CATEGORIES, 'cards' => $cards, 'collected' => count($cards), 'total' => count($deck)]);
     }
 
     // friends: Liste mit Profilen, erhaltene und gesendete Anfragen

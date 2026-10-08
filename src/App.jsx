@@ -1931,8 +1931,70 @@ function MiniRing({ wins, losses }) {
   );
 }
 
+// Sammlung eines Freundes: nur ansehen, kein Tauschen
+function FriendCollection({ name, authToken, onClose }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [order, setOrder] = useState("tier");
+
+  useEffect(() => {
+    let alive = true;
+    socket.request("friendCollection", { authToken, name })
+      .then((result) => {
+        if (!alive) return;
+        if (result.ok) setData(result);
+        else setError(result.message || "Die Sammlung konnte nicht geladen werden.");
+      })
+      .catch(() => alive && setError("Keine Verbindung zum Server."));
+    const onKey = (event) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      alive = false;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [authToken, name, onClose]);
+
+  const cards = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("de");
+    return sortCards((data?.cards || []).filter((card) => !needle || card.name.toLocaleLowerCase("de").includes(needle)), order);
+  }, [data, query, order]);
+
+  return (
+    <div className="player-modal-backdrop" onClick={onClose}>
+      <div className="player-modal friend-collection panel" role="dialog" aria-modal="true" aria-label={`Sammlung von ${name}`} onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="player-modal-close" onClick={onClose} aria-label="Schließen">✕</button>
+        <p className="eyebrow">SAMMLUNG</p>
+        <h2>{name}</h2>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        {!data && !error && <p className="muted">Lädt …</p>}
+        {data && (
+          <>
+            <p className="collection-count"><b>{data.collected}</b> / {data.total} Autos{data.cards.length > 0 && <span className="collection-rating"> · Ø Stärke <b>{deckRating(data.cards)}</b></span>}</p>
+            <div className="collection-tools">
+              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Auto suchen" aria-label="Auto suchen" />
+              <select value={order} onChange={(event) => setOrder(event.target.value)} aria-label="Sortierung">
+                <option value="tier">Nach Seltenheit</option>
+                <option value="score">Nach Stärke</option>
+                <option value="name">Nach Name</option>
+              </select>
+            </div>
+            {cards.length === 0 && <p className="collection-empty">Kein Auto gefunden.</p>}
+            <div className="collection-grid">
+              {cards.map((card) => (
+                <CollectionCard card={card} categories={data.categories} qty={card.qty} key={card.c_id} lazy />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FriendsPanel({ authToken }) {
   const [openName, setOpenName] = useState(null);
+  const [viewName, setViewName] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [data, setData] = useState(null);
   const [name, setName] = useState("");
@@ -2040,10 +2102,14 @@ function FriendsPanel({ authToken }) {
               <button type="button" className="text-button" onClick={() => setConfirmRemove(false)}>Abbrechen</button>
             </div>
           ) : (
-            <button type="button" className="text-button" onClick={() => setConfirmRemove(true)}>Freund entfernen</button>
+            <>
+              <button type="button" className="friend-accept friend-view-collection" onClick={() => { setViewName(openName); setOpenName(null); }}>Sammlung ansehen</button>
+              <button type="button" className="text-button" onClick={() => setConfirmRemove(true)}>Freund entfernen</button>
+            </>
           )}
         />
       )}
+      {viewName && <FriendCollection name={viewName} authToken={authToken} onClose={() => setViewName(null)} />}
     </div>
   );
 }
