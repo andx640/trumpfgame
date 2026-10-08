@@ -1335,6 +1335,10 @@ const CARD_FIELDS = [
   { key: "performance", label: "Performance", icon: "flag", rating: "flag" }
 ];
 
+// Felder, deren Beschriftung und Symbol schon im Rahmenbild (src/card-frame.webp) stehen. Nur der Wert kommt aus dem HTML.
+// Sobald Rarität und Performance ebenfalls im Bild stehen, hier „raritaet“ und „performance“ ergänzen.
+const BAKED_FIELDS = new Set(["leistung", "hubraum", "drehmoment", "drehzahl", "beschleunigung", "hoechstgeschwindigkeit", "gewicht", "preis"]);
+
 function cardValue(card, key) {
   const value = Number(card[key]);
   if (card[key] == null || !Number.isFinite(value) || value <= 0) return null;
@@ -1375,8 +1379,14 @@ const VehicleCard = memo(function VehicleCard({ card, categories, selectable = f
               key={field.key}
               title={canPick ? `${rule.label} wählen` : undefined}
             >
-              <span className="stat-label">{field.label}</span>
-              <GtIcon type={field.icon} />
+              {BAKED_FIELDS.has(field.key) ? (
+                <span className="sr-only">{field.label}</span>
+              ) : (
+                <>
+                  <span className="stat-label">{field.label}</span>
+                  <GtIcon type={field.icon} />
+                </>
+              )}
               {field.rating ? (
                 <RatingSymbols kind={field.rating} value={Number(card[field.key]) || 0} />
               ) : (
