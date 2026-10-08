@@ -928,10 +928,13 @@ function trumpf_setup_risk(TrumpfRoom $room): void
     }
     $options = [];
     $picks = [];
+    $slots = [];
     foreach ($game['decks'] as $playerId => $cardIds) {
         if ($playerId !== $game['winnerId'] && $cardIds) {
-            $options[$playerId] = array_values($cardIds);
+            // feste, gemischte Reihenfolge: der Gewinner wählt nur einen Platz im Fächer und sieht die Karten nicht
+            $options[$playerId] = trumpf_shuffle(array_values(array_unique($cardIds)));
             $picks[$playerId] = null;
+            $slots[$playerId] = null;
         }
     }
     if (!$options) {
@@ -942,12 +945,14 @@ function trumpf_setup_risk(TrumpfRoom $room): void
         'deadline' => $room->now + RISK_PICK_MS,
         'options' => $options,
         'picks' => $picks,
+        'slots' => $slots,
         'done' => false,
     ];
     $room->touch();
 }
 
-function trumpf_risk_pick(TrumpfRoom $room, string $playerId, string $loserId, string $cardId): ?string
+/** Der Gewinner zieht einen Platz (slot) aus dem verdeckten Fächer eines Verlierers. */
+function trumpf_risk_pick(TrumpfRoom $room, string $playerId, string $loserId, int $slot): ?string
 {
     $risk = $room->data['risk'] ?? null;
     if ($risk === null || !empty($risk['done'])) {
@@ -956,10 +961,14 @@ function trumpf_risk_pick(TrumpfRoom $room, string $playerId, string $loserId, s
     if ($playerId !== $risk['winnerId']) {
         return 'Nur der Gewinner sucht sich eine Karte aus.';
     }
-    if (!isset($risk['options'][$loserId]) || !in_array($cardId, $risk['options'][$loserId], true)) {
+    if (!isset($risk['options'][$loserId]) || !isset($risk['options'][$loserId][$slot])) {
         return 'Diese Karte steht nicht zur Wahl.';
     }
-    $room->data['risk']['picks'][$loserId] = $cardId;
+    if ($risk['picks'][$loserId] !== null) {
+        return 'Aus diesem Fächer hast du schon gezogen.';
+    }
+    $room->data['risk']['picks'][$loserId] = $risk['options'][$loserId][$slot];
+    $room->data['risk']['slots'][$loserId] = $slot;
     $room->touch();
     trumpf_settle_risk($room);
     return null;
@@ -1003,6 +1012,7 @@ function trumpf_settle_risk(TrumpfRoom $room): void
                 }
             }
             $risk['picks'][$loserId] = $taken;
+            $risk['slots'][$loserId] = $taken === null ? null : array_search($taken, $risk['options'][$loserId], true);
         }
     } catch (PDOException $error) {
         return; // nächster Versuch bei der nächsten Anfrage

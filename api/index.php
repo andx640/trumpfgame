@@ -710,21 +710,25 @@ class TrumpfRoom
         foreach ($risk['picks'] as $loserId => $cardId) {
             $picks[$loserId] = $cardId === null ? null : $this->expand($cardId);
         }
-        $options = null;
-        if ($playerId === $risk['winnerId'] && empty($risk['done'])) {
-            $options = [];
-            foreach ($risk['options'] as $loserId => $cardIds) {
-                $options[$loserId] = array_map(function ($cardId) {
-                    return $this->expand($cardId) + ['score' => trumpf_card_scores()[$cardId] ?? 0];
-                }, array_values(array_unique($cardIds)));
-            }
+        // Der Gewinner sieht nur, wie viele Karten im Fächer liegen (verdeckt). Jeder Verlierer sieht sein eigenes Fächer offen.
+        $counts = [];
+        foreach ($risk['options'] as $loserId => $cardIds) {
+            $counts[$loserId] = count($cardIds);
+        }
+        $fan = null;
+        if (isset($risk['options'][$playerId])) {
+            $fan = array_map(function ($cardId) {
+                return $this->expand($cardId);
+            }, $risk['options'][$playerId]);
         }
         return [
             'winnerId' => $risk['winnerId'],
             'deadline' => $risk['deadline'],
             'done' => !empty($risk['done']),
             'picks' => $picks ?: new stdClass(),
-            'options' => $options,
+            'slots' => $risk['slots'] ?? new stdClass(),
+            'counts' => $counts,
+            'fan' => $fan,
         ];
     }
 
@@ -1096,7 +1100,7 @@ try {
             if ($selfIndex === null) {
                 $reply = $fail('Du bist in keiner Partie.');
             } else {
-                $problem = trumpf_risk_pick($room, $room->data['players'][$selfIndex]['id'], (string) ($input['loserId'] ?? ''), (string) ($input['cardId'] ?? ''));
+                $problem = trumpf_risk_pick($room, $room->data['players'][$selfIndex]['id'], (string) ($input['loserId'] ?? ''), (int) ($input['slot'] ?? -1));
                 if ($problem !== null) {
                     $reply = $fail($problem);
                 }

@@ -2721,58 +2721,196 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
 }
 
 // Risiko-Modus nach Spielende: der Gewinner wählt, alle sehen das Ergebnis
+// Zeichnet das Fächer auf 500 px Breite und passt es per zoom an die verfügbare Breite an
+function useFitZoom(designWidth) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const update = () => {
+      const width = element.parentElement?.clientWidth || designWidth;
+      element.style.zoom = String(Math.min(1, width / designWidth));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    if (element.parentElement) observer.observe(element.parentElement);
+    return () => observer.disconnect();
+  }, [designWidth]);
+  return ref;
+}
+
+const FAN_SWEEP = 36; // so weit schwenkt die Hand nach links und rechts (Grad)
+
+// Die Hand mit dem Zeigefinger: schwenkt über dem Fächer hin und her und bleibt bei der gezogenen Karte stehen.
+// Der Winkel wird direkt am Element gesetzt (kein React-Rendering pro Bild), die Bewegung läuft nur über transform.
+function FanHand({ stopAngle }) {
+  const ref = useRef(null);
+  const stopRef = useRef(stopAngle);
+  const angleRef = useRef(0);
+  stopRef.current = stopAngle;
+  useEffect(() => {
+    let frame;
+    let last = performance.now();
+    let phase = 0;
+    let settleFrom = null;
+    let settleStart = 0;
+    const tick = (now) => {
+      const dt = Math.min(64, now - last);
+      last = now;
+      const target = stopRef.current;
+      if (target == null) {
+        phase += dt / 1000;
+        // ruhig hin und her mit leichtem Zittern, wie jemand, der sich noch entscheidet
+        angleRef.current = Math.sin(phase * 1.9) * FAN_SWEEP * (0.92 + 0.08 * Math.sin(phase * 7.3));
+        settleFrom = null;
+      } else {
+        if (settleFrom === null) {
+          settleFrom = angleRef.current;
+          settleStart = now;
+        }
+        const t = Math.min(1, (now - settleStart) / 650);
+        const eased = 1 - (1 - t) ** 3;
+        angleRef.current = settleFrom + (target - settleFrom) * eased;
+      }
+      if (ref.current) ref.current.style.transform = `rotate(${angleRef.current.toFixed(2)}deg)`;
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  return (
+    <div className="fan-hand" ref={ref} aria-hidden="true">
+      <svg viewBox="0 0 64 96" width="64" height="96">
+        <defs>
+          <linearGradient id="hand-skin" x1="0" x2="1">
+            <stop offset="0" stopColor="#f4c9a4" />
+            <stop offset="1" stopColor="#d9a07a" />
+          </linearGradient>
+        </defs>
+        <rect x="14" y="0" width="36" height="14" rx="3" fill="#e9edf3" stroke="#9aa6b6" strokeWidth="1.5" />
+        <path d="M14 12h36v26q0 10-8 12H22q-8-2-8-12z" fill="url(#hand-skin)" stroke="#8a5a3c" strokeWidth="1.6" />
+        <rect x="26" y="34" width="12" height="58" rx="6" fill="url(#hand-skin)" stroke="#8a5a3c" strokeWidth="1.6" />
+        <path d="M14 30q-8 2-8 10t8 8" fill="url(#hand-skin)" stroke="#8a5a3c" strokeWidth="1.6" />
+        <path d="M42 36h6q6 0 6 7t-6 7h-6M42 44h5" fill="#e9b790" stroke="#8a5a3c" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M28 70v-24M36 70v-24" stroke="#8a5a3c" strokeOpacity="0.25" strokeWidth="1.2" />
+      </svg>
+    </div>
+  );
+}
+
+// Kartenfächer. mode "back": Rückseiten zum Anklicken (Gewinner). mode "front": die eigenen Karten offen mit Hand (Verlierer).
+function RiskFan({ count, cards, mode, pickedSlot = null, onPick, busy = false, label }) {
+  const zoomRef = useFitZoom(500);
+  const step = count > 1 ? Math.min(7, 70 / (count - 1)) : 0;
+  const angleOf = (slot) => (slot - (count - 1) / 2) * step;
+  const pulled = pickedSlot !== null && pickedSlot !== undefined;
+  return (
+    <div className="risk-fan-wrap">
+      <div className={`risk-fan is-${mode} ${pulled ? "has-pulled" : ""}`} ref={zoomRef}>
+        <svg className="fan-arc" viewBox="0 0 500 300" aria-hidden="true"><path d="M70 208A395 395 0 0 1 430 208" fill="none" /></svg>
+        {mode === "front" && <FanHand stopAngle={pulled ? angleOf(pickedSlot) : null} />}
+        {Array.from({ length: count }, (_, slot) => {
+          const isPulled = pickedSlot === slot;
+          const card = cards?.[slot];
+          const tier = Number(card?.raritaet) || 1;
+          const common = {
+            className: `fan-card ${isPulled ? "is-pulled" : ""} ${mode === "front" ? `tier-${tier}` : ""}`,
+            style: { "--a": `${angleOf(slot)}deg`, "--z": slot }
+          };
+          if (mode === "back") {
+            return (
+              <button type="button" {...common} key={slot} disabled={busy || pulled} onClick={() => onPick(slot)} aria-label={`${label}: Karte ${slot + 1} ziehen`}>
+                <ScaledCard><CardBack /></ScaledCard>
+              </button>
+            );
+          }
+          return (
+            <div {...common} key={slot}>
+              <div className="fan-face">
+                {card?.image ? <img src={card.image} alt="" loading="lazy" decoding="async" /> : <span className="fan-face-fallback" />}
+                <b>{card?.name}</b>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Gezogene Karte erscheint nach dem Herausziehen groß; beim Verlierer mit „VERLOREN“-Stempel
+function LostCard({ card, categories, lost }) {
+  return (
+    <div className={`risk-reveal ${lost ? "is-lost" : "is-won"}`}>
+      <p className="eyebrow">{lost ? "DIESE KARTE HAST DU VERLOREN" : "DU BEKOMMST"}</p>
+      <div className="risk-reveal-card">
+        <CollectionCard card={card} categories={categories} />
+        {lost && <div className="lost-stamp" aria-hidden="true">VERLOREN</div>}
+      </div>
+    </div>
+  );
+}
+
+function useDelayedFlag(on, ms) {
+  const [flag, setFlag] = useState(false);
+  useEffect(() => {
+    if (!on) {
+      setFlag(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setFlag(true), ms);
+    return () => clearTimeout(timer);
+  }, [on, ms]);
+  return flag;
+}
+
+// Risiko-Modus nach Spielende: der Gewinner zieht aus verdeckten Fächern, die Verlierer sehen ihr Fächer offen
 function RiskPanel({ state }) {
   const { risk, players, selfId, categories } = state;
   const winner = players.find((player) => player.id === risk.winnerId);
   const isWinner = selfId === risk.winnerId;
   const [busy, setBusy] = useState(false);
   const nameOf = (id) => players.find((player) => player.id === id)?.name || "Spieler";
-  const pick = (loserId, cardId) => {
+  const pick = (loserId, slot) => {
     setBusy(true);
-    socket.request("riskPick", { loserId, cardId }).then((result) => {
+    socket.request("riskPick", { loserId, slot }).then((result) => {
       setBusy(false);
       if (result.ok) socket.applyResult(result);
     }).catch(() => setBusy(false));
   };
+  const mySlot = risk.slots?.[selfId];
+  const myPick = risk.picks?.[selfId];
+  const showMine = useDelayedFlag(!isWinner && mySlot !== null && mySlot !== undefined && Boolean(myPick), 1100);
 
-  if (risk.done) {
-    return (
-      <div className="risk-panel is-done">
-        <p className="eyebrow">RISIKO</p>
-        {Object.entries(risk.picks).map(([loserId, card]) => card && (
-          <p key={loserId}>
-            {isWinner ? <>Du bekommst <b>{card.name}</b> von {nameOf(loserId)}.</> : loserId === selfId ? <>Du hast <b>{card.name}</b> an {winner?.name} verloren.</> : <>{winner?.name} bekommt <b>{card.name}</b> von {nameOf(loserId)}.</>}
-          </p>
-        ))}
-      </div>
-    );
-  }
   if (!isWinner) {
     return (
       <div className="risk-panel">
-        <p className="eyebrow">RISIKO</p>
-        <p><SpinnerIcon /> {winner?.name} sucht sich {risk.picks[selfId] !== undefined ? "eine Karte aus deinem Deck" : "seine Karten"} aus … noch <Seconds target={risk.deadline} /> s</p>
+        <p className="eyebrow">RISIKO{risk.done ? "" : <> · NOCH <Seconds target={risk.deadline} /> S</>}</p>
+        {mySlot === null || mySlot === undefined ? (
+          <p className="risk-line"><SpinnerIcon /> {winner?.name} zieht eine Karte aus deinem Deck …</p>
+        ) : (
+          <p className="risk-line">{winner?.name} hat gezogen.</p>
+        )}
+        {risk.fan && <RiskFan count={risk.fan.length} cards={risk.fan} mode="front" pickedSlot={mySlot ?? null} />}
+        {showMine && myPick && <LostCard card={myPick} categories={categories} lost />}
       </div>
     );
   }
   return (
     <div className="risk-panel">
-      <p className="eyebrow">RISIKO · NOCH <Seconds target={risk.deadline} /> S</p>
-      {Object.entries(risk.options || {}).map(([loserId, cards]) => (
-        <div className="risk-choice" key={loserId}>
-          <h3>Such dir eine Karte von {nameOf(loserId)} aus</h3>
-          {risk.picks[loserId] ? (
-            <p>Gewählt: <b>{risk.picks[loserId].name}</b></p>
-          ) : (
-            <div className="risk-cards">
-              {sortCards(cards, "tier").map((card) => (
-                <CollectionCard card={card} categories={categories} onClick={busy ? undefined : () => pick(loserId, card.c_id)} key={card.c_id} />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-      <small className="muted">Ohne Wahl wird nach Ablauf der Zeit zufällig gewählt.</small>
+      <p className="eyebrow">{risk.done ? "RISIKO" : <>RISIKO · NOCH <Seconds target={risk.deadline} /> S</>}</p>
+      {Object.entries(risk.counts || {}).map(([loserId, count]) => {
+        const slot = risk.slots?.[loserId];
+        const taken = risk.picks?.[loserId];
+        return (
+          <div className="risk-choice" key={loserId}>
+            <h3>{taken ? `Du hast eine Karte von ${nameOf(loserId)} gezogen` : `Zieh eine Karte von ${nameOf(loserId)}`}</h3>
+            <RiskFan count={count} mode="back" pickedSlot={slot ?? null} onPick={(index) => pick(loserId, index)} busy={busy} label={nameOf(loserId)} />
+            {taken && <LostCard card={taken} categories={categories} lost={false} />}
+          </div>
+        );
+      })}
+      {!risk.done && <small className="muted">Ohne Wahl wird nach Ablauf der Zeit zufällig gezogen.</small>}
     </div>
   );
 }

@@ -819,16 +819,20 @@ try {
     $rolfDeck = json_decode((string) file_get_contents($roomFile($currentRoom)), true)['game']['decks'][$rolfId];
     $forceWin($currentRoom, 0);
     $over = call($port, ['action' => 'choose', 'token' => $rh['token'], 'category' => 'leistung']);
-    check($over['state']['status'] === 'finished' && $over['state']['risk']['winnerId'] === $over['state']['selfId'] && count($over['state']['risk']['options'][$rolfId]) >= 1, 'Risiko: Gewinner sieht das Deck des Verlierers');
+    check($over['state']['status'] === 'finished' && $over['state']['risk']['winnerId'] === $over['state']['selfId'] && ($over['state']['risk']['counts'][$rolfId] ?? 0) >= 1 && !isset($over['state']['risk']['options']) && $over['state']['risk']['fan'] === null, 'Risiko: Gewinner sieht nur einen verdeckten Fächer');
     check(call($port, ['action' => 'again', 'token' => $rh['token']])['ok'] === false, 'Risiko: Revanche erst nach der Kartenwahl');
-    check(call($port, ['action' => 'riskPick', 'token' => $rj['token'], 'loserId' => $rolfId, 'cardId' => $rolfDeck[0]])['ok'] === false, 'Risiko: Verlierer darf nicht wählen');
-    $prey = $rolfDeck[0];
+    check(call($port, ['action' => 'riskPick', 'token' => $rj['token'], 'loserId' => $rolfId, 'slot' => 0])['ok'] === false, 'Risiko: Verlierer darf nicht wählen');
+    $loserView = call($port, ['action' => 'state', 'token' => $rj['token']])['state']['risk'];
+    check(is_array($loserView['fan']) && count($loserView['fan']) === $over['state']['risk']['counts'][$rolfId] && isset($loserView['fan'][0]['name']), 'Risiko: Verlierer sieht sein Fächer offen');
+    check(call($port, ['action' => 'riskPick', 'token' => $rh['token'], 'loserId' => $rolfId, 'slot' => 99])['ok'] === false, 'Risiko: ungültiger Platz');
+    $riskOptions = json_decode((string) file_get_contents($roomFile($currentRoom)), true)['risk']['options'][$rolfId];
+    $prey = $riskOptions[0];
     $rolfBefore = array_column(call($port, ['action' => 'collection', 'authToken' => $rolf['authToken']])['cards'], 'qty', 'c_id');
     $risaBefore = array_column(call($port, ['action' => 'collection', 'authToken' => $risa['authToken']])['cards'], 'qty', 'c_id');
-    $pick = call($port, ['action' => 'riskPick', 'token' => $rh['token'], 'loserId' => $rolfId, 'cardId' => $prey]);
+    $pick = call($port, ['action' => 'riskPick', 'token' => $rh['token'], 'loserId' => $rolfId, 'slot' => 0]);
     $rolfAfter = array_column(call($port, ['action' => 'collection', 'authToken' => $rolf['authToken']])['cards'], 'qty', 'c_id');
     $risaAfter = array_column(call($port, ['action' => 'collection', 'authToken' => $risa['authToken']])['cards'], 'qty', 'c_id');
-    check($pick['ok'] && $pick['state']['risk']['done'] && $pick['state']['risk']['picks'][$rolfId]['c_id'] === $prey, 'Risiko: Karte gewählt');
+    check($pick['ok'] && $pick['state']['risk']['done'] && $pick['state']['risk']['picks'][$rolfId]['c_id'] === $prey && $pick['state']['risk']['slots'][$rolfId] === 0, 'Risiko: Karte gewählt');
     check(($rolfAfter[$prey] ?? 0) === $rolfBefore[$prey] - 1 && ($risaAfter[$prey] ?? 0) === ($risaBefore[$prey] ?? 0) + 1 && array_sum($rolfAfter) === 15 && array_sum($risaAfter) === 17, 'Risiko: Karte wechselt dauerhaft den Besitzer');
 
     // Belohnung gegen KI: Leicht 1–3, Mittel 1–3, Schwer 3–5, Schwer mit 32 Karten genau 3
