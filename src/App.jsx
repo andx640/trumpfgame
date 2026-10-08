@@ -466,14 +466,38 @@ function TierBadge({ tier }) {
 }
 
 // Karte mit Seltenheitsrahmen, optional Anzahl (×3) und „NEU“
-function CollectionCard({ card, categories, qty = 0, isNew = false, onClick, dimmed = false, style }) {
+// In langen Listen (Sammlung, Deckbau) wird die Karte nur gebaut, solange sie in der Nähe des Bildschirms ist.
+// Jede Karte besteht aus über hundert Elementen mit Bildern; 400 davon gleichzeitig machen das Handy langsam.
+function useNearScreen(enabled) {
+  const ref = useRef(null);
+  const [near, setNear] = useState(!enabled);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const element = ref.current;
+    if (!element || typeof IntersectionObserver === "undefined") {
+      setNear(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver((entries) => setNear(entries[entries.length - 1].isIntersecting), { rootMargin: "700px 0px" });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [enabled]);
+  return [ref, near];
+}
+
+function CollectionCard({ card, categories, qty = 0, isNew = false, onClick, dimmed = false, style, lazy = false }) {
   const tier = Number(card.raritaet) || 1;
   const Tag = onClick ? "button" : "div";
+  const [nearRef, near] = useNearScreen(false && lazy);
   return (
-    <Tag type={onClick ? "button" : undefined} className={`tier-frame tier-${tier} ${dimmed ? "is-dimmed" : ""}`} onClick={onClick} style={style}>
-      <ScaledCard>
-        <VehicleCard card={card} categories={categories} />
-      </ScaledCard>
+    <Tag type={onClick ? "button" : undefined} className={`tier-frame tier-${tier} ${dimmed ? "is-dimmed" : ""}`} onClick={onClick} style={style} ref={nearRef}>
+      {near ? (
+        <ScaledCard>
+          <VehicleCard card={card} categories={categories} />
+        </ScaledCard>
+      ) : (
+        <div className="scaled-card" />
+      )}
       <TierBadge tier={tier} />
       {qty > 1 && <b className="card-qty">×{qty}</b>}
       {card.score !== undefined && <span className="card-score" title="Kartenstärke (0–100)">{Math.round(card.score)}</span>}
@@ -562,7 +586,7 @@ function Collection({ onBack, authToken }) {
       {data && cards.length === 0 && <p className="collection-empty">Kein Auto gefunden.</p>}
       <div className="collection-grid">
         {cards.map((card) => (
-          <CollectionCard card={card} categories={data.categories} qty={card.qty} key={card.c_id} />
+          <CollectionCard card={card} categories={data.categories} qty={card.qty} key={card.c_id} lazy />
         ))}
       </div>
       {data && data.cards.length > 0 && (
@@ -682,6 +706,7 @@ function DeckBuilder({ state, authToken }) {
               dimmed={left <= 0 || isReady}
               onClick={left > 0 && !isReady ? () => add(card) : undefined}
               key={card.c_id}
+              lazy
             />
           );
         })}
