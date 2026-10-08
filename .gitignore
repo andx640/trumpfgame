@@ -4,3 +4,5 @@ dist/
 *.log
 api/data/
 api/config.php
+
+.claude/settings.local.json

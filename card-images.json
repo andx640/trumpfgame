@@ -1142,6 +1142,15 @@
     "license": "",
     "licenseUrl": ""
   },
+  "0131": {
+    "image": "",
+    "localImage": "/cardimages/cars/0131-w.jpg",
+    "pageUrl": "https://media.mercedes-benz.com/article/1b89ba2d-0e17-4c79-b2d5-1c52a5c1f0ff",
+    "source": "Mercedes-Benz Media",
+    "author": "Mercedes-Benz Media",
+    "license": "",
+    "licenseUrl": ""
+  },
   "0132": {
     "image": "https://www.wsupercars.com/wallpapers-regular/Rolls-Royce/2021-Rolls-Royce-Boat-Tail-001-1600.jpg",
     "localImage": "/cardimages/cars/0132-w.jpg",
@@ -1832,6 +1841,15 @@
     "pageUrl": "https://www.wsupercars.com/wallpapers/porsche/2006-porsche-911-gt3/",
     "source": "WSupercars",
     "author": "WSupercars",
+    "license": "",
+    "licenseUrl": ""
+  },
+  "0211": {
+    "image": "",
+    "localImage": "/cardimages/cars/0211-w.jpg",
+    "pageUrl": "https://newsroom.porsche.com/en/media-search.html?keyword=930%20turbo",
+    "source": "Porsche Newsroom",
+    "author": "Porsche Newsroom",
     "license": "",
     "licenseUrl": ""
   },
