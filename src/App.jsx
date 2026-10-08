@@ -294,7 +294,7 @@ function AppContent() {
   };
 
   const goHome = () => setView("home");
-  const isPlaying = state && state.status !== "lobby";
+  const isPlaying = state && state.status !== "lobby" && state.status !== "deckbuild"; // Deck-Zusammenstellung hat eine Leiste und muss scrollbar bleiben
   const hasChat = Boolean(state && !state.solo);
 
   // Seitenwechsel: das neue Fenster schiebt sich von rechts herein, beim Zurück von links.
