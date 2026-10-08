@@ -709,7 +709,11 @@ try {
     $friendProfile = call($port, ['action' => 'friendProfile', 'authToken' => $cem['authToken'], 'name' => 'Ana']);
     check($friendProfile['ok'] && $friendProfile['account']['gamesPlayed'] === 1 && $friendProfile['account']['wins'] === 1, 'Freundesprofil zeigt Statistik');
     check(!isset($friendProfile['account']['password']), 'Passwort wird nie ausgeliefert');
+    $friendCards = call($port, ['action' => 'friendCollection', 'authToken' => $cem['authToken'], 'name' => 'Ana']);
+    check($friendCards['ok'] && $friendCards['name'] === 'Ana' && $friendCards['collected'] === count($friendCards['cards']) && $friendCards['collected'] >= 16 && isset($friendCards['cards'][0]['score']), 'Sammlung eines Freundes ansehen');
+    check(call($port, ['action' => 'friendCollection', 'authToken' => $cem['authToken'], 'name' => 'Cem'])['ok'] === false, 'Sammlung: nicht die eigene über Freunde');
     $dora = call($port, ['action' => 'register', 'name' => 'Dora', 'password' => 'pw']);
+    check(call($port, ['action' => 'friendCollection', 'authToken' => $dora['authToken'], 'name' => 'Cem'])['ok'] === false, 'Sammlung nur bei Freunden sichtbar');
     call($port, ['action' => 'friendAdd', 'authToken' => $dora['authToken'], 'name' => 'Ana']);
     check(call($port, ['action' => 'friendAdd', 'authToken' => $reg['authToken'], 'name' => 'Dora'])['ok'] === true && count(call($port, ['action' => 'friends', 'authToken' => $reg['authToken']])['friends']) === 2, 'gegenseitige Anfragen werden zur Freundschaft');
     call($port, ['action' => 'friendRemove', 'authToken' => $reg['authToken'], 'name' => 'Cem']);
