@@ -1384,7 +1384,7 @@ const VehicleCard = memo(function VehicleCard({ card, categories, selectable = f
         )}
         {selectable && <div className="choose-hint">WERT ANKLICKEN</div>}
       </div>
-      <div className="gt-type"><span>{TIER_NAMES[tier]}</span></div>
+      <div className="gt-type"><span data-text={TIER_NAMES[tier]}>{TIER_NAMES[tier]}</span></div>
       <div className="gt-plate"><h2 style={{ fontSize: `${nameSize}px` }}>{card.name}</h2></div>
       <div className="gt-stats">
         {CARD_FIELDS.map((field) => {
