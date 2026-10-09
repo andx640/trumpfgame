@@ -946,7 +946,7 @@ function Lobby({ state, onLeave, account }) {
                   <span className="list-row-sub">{player.isBot ? "Computergegner" : player.isHost ? "Host" : "Bereit"}</span>
                 </span>
                 <TeamTag team={player.team} />
-                <i className="ready-light" aria-hidden="true" />
+                <StatusDot online={player.connected !== false} />
               </li>
             ))}
             {openSeats.map((_, index) => (
@@ -1211,7 +1211,7 @@ const TableCards = memo(function TableCards({ state, timerTarget = null }) {
               {isBest && <span className="best-ribbon">{game.result.type === "tie" ? "GLEICHSTAND" : "STICH"}</span>}
             </div>
             <div className="player-under-card" aria-current={isActive ? "true" : undefined}>
-              <span className="player-dot" />
+              <span className={`player-dot ${player.connected === false ? "is-off" : "is-on"}`} title={player.connected === false ? "offline" : "online"} />
               <strong>{player.name}</strong>
               {player.id === selfId && <small>DU</small>}
               {isActive && timerTarget && <TurnTimer target={timerTarget} />}
@@ -1671,6 +1671,11 @@ function ChatWidget({ chat, selfId, sessionId }) {
       )}
     </>
   );
+}
+
+// Grüner Punkt = online, roter Punkt = offline (für alle Spieler, nicht nur Freunde)
+function StatusDot({ online }) {
+  return <i className={`status-dot ${online ? "is-on" : "is-off"}`} role="img" aria-label={online ? "online" : "offline"} title={online ? "online" : "offline"} />;
 }
 
 function PresenceDot({ online }) {
@@ -2151,7 +2156,7 @@ function PlayerModal({ name, online, onClose, footer = null }) {
 
   return (
     <Modal eyebrow="Spielerprofil" title={name} onClose={onClose} footer={account ? footer : null}>
-      {online !== undefined && <PresenceDot online={online} />}
+      {(online !== undefined || account) && <PresenceDot online={online ?? account.online} />}
       {error && <Note tone="danger" role="alert">{error}</Note>}
       {!account && !error && <Loading />}
       {account && <ProfileStats account={account} />}
@@ -2214,7 +2219,7 @@ function Leaderboard({ onBack, selfName }) {
                 >
                   <span className={`rank ${index < 3 ? `is-top-${index + 1}` : ""}`}>{index + 1}</span>
                   <span className="list-row-main">
-                    <span className="list-row-title">{player.name} <LevelBadge level={player.level} /></span>
+                    <span className="list-row-title"><StatusDot online={player.online} /> {player.name} <LevelBadge level={player.level} /></span>
                     <span className="list-row-sub">{player.wins} {player.wins === 1 ? "Sieg" : "Siege"} · {player.gamesPlayed} {player.gamesPlayed === 1 ? "Spiel" : "Spiele"}{player.gamesPlayed ? ` · ${player.winRate} %` : ""}</span>
                   </span>
                   <span className="list-row-value">{player.xp}<small>XP</small></span>

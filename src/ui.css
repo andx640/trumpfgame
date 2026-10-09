@@ -1016,8 +1016,25 @@ button.list-row:hover {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--text-subtle);
+  background: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
 }
+
+.presence:not(.is-on) { color: var(--danger); }
+
+/* Status-Punkt: grün = online, rot = offline */
+.status-dot {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-right: 4px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.status-dot.is-on { background: var(--success); box-shadow: 0 0 8px rgba(95, 212, 122, 0.7); }
+.status-dot.is-off { background: var(--danger); box-shadow: 0 0 8px rgba(255, 107, 87, 0.55); }
 
 .presence.is-on {
   color: var(--success);

@@ -587,6 +587,7 @@ try {
     }
     check(count(call($port, ['action' => 'leaderboard'])['players']) === 10, 'Rangliste zeigt höchstens 10 Spieler');
     $pp = call($port, ['action' => 'playerProfile', 'name' => 'ana']);
+    check(is_bool($pp['account']['online'] ?? null) && is_bool($board['players'][0]['online'] ?? null), 'Online-Status gibt es für jeden Spieler, nicht nur für Freunde');
     check($pp['ok'] && $pp['account']['name'] === 'Ana' && $pp['account']['rank'] === 2 && $pp['account']['players'] >= 16 && !isset($pp['account']['password']), 'Spielerprofil mit Rangplatz (Ana: Platz ' . ($pp['account']['rank'] ?? '?') . ')');
     $last = call($port, ['action' => 'playerProfile', 'name' => 'Rang11']);
     check($last['ok'] && $last['account']['rank'] === $last['account']['players'], 'Rangplatz: Spieler ohne XP, zuletzt angemeldet, ist Letzter');

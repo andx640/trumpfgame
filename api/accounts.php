@@ -401,6 +401,7 @@ function trumpf_account_public(array $row): array
         'xp' => (int) $row['xp'],
         'currentStreak' => (int) ($row['current_streak'] ?? 0),
         'bestStreak' => (int) ($row['best_streak'] ?? 0),
+        'online' => trumpf_is_online($row), // für alle Spieler sichtbar, nicht nur für Freunde
     ] + trumpf_level((int) $row['xp']);
 }
 
