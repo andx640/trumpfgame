@@ -182,6 +182,9 @@
   background: #576a90;
 }
 
+.arena-seat .player-dot.is-on { background: var(--success); box-shadow: 0 0 7px rgba(95, 212, 122, 0.8); }
+.arena-seat .player-dot.is-off { background: var(--danger); box-shadow: 0 0 7px rgba(255, 107, 87, 0.7); }
+
 .arena-seat.is-active .player-dot {
   background: var(--acid);
   box-shadow: 0 0 9px var(--acid);
@@ -902,6 +905,9 @@
   background: #fff;
   box-shadow: 0 0 9px rgba(255, 255, 255, 0.9);
 }
+
+.arena-seat.is-active .player-dot.is-on { background: var(--success); box-shadow: 0 0 9px rgba(95, 212, 122, 0.9); }
+.arena-seat.is-active .player-dot.is-off { background: var(--danger); box-shadow: 0 0 9px rgba(255, 107, 87, 0.9); }
 
 .arena-seat.is-active .player-under-card small {
   color: #fff;
