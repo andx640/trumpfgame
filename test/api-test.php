@@ -750,13 +750,12 @@ try {
     $danaProfile = call($port, ['action' => 'profile', 'authToken' => $dana['authToken']]);
     check($danaProfile['account']['dailyAvailable'] === true && $danaProfile['account']['dailyNextAt'] <= time() * 1000, 'Tagespack: für neues Konto sofort verfügbar');
     check(call($port, ['action' => 'dailyClaim'])['ok'] === false, 'Tagespack: ohne Anmeldung nicht möglich');
-    $beforeCol = call($port, ['action' => 'collection', 'authToken' => $dana['authToken']]);
-    $before = array_sum(array_column($beforeCol['cards'], 'qty'));
     check($danaProfile['account']['welcomeAvailable'] === true, 'Willkommensgeschenk: für neues Konto verfügbar');
     $welcome = call($port, ['action' => 'dailyClaim', 'authToken' => $dana['authToken']]);
     check($welcome['ok'] && ($welcome['welcome'] ?? false) === true && count($welcome['cards']) === 20, 'Willkommensgeschenk: 20 Karten');
     check(call($port, ['action' => 'profile', 'authToken' => $dana['authToken']])['account']['welcomeAvailable'] === false, 'Willkommensgeschenk: nur einmal, Flag gespeichert');
-    $before = array_sum(array_column(call($port, ['action' => 'collection', 'authToken' => $dana['authToken']])['cards'], 'qty'));
+    $beforeCol = call($port, ['action' => 'collection', 'authToken' => $dana['authToken']]);
+    $before = array_sum(array_column($beforeCol['cards'], 'qty'));
     $daily = call($port, ['action' => 'dailyClaim', 'authToken' => $dana['authToken']]);
     $got = count($daily['cards'] ?? []);
     check($daily['ok'] && $got >= 1 && $got <= 5 && isset($daily['cards'][0]['card']['name'], $daily['cards'][0]['card']['score'], $daily['cards'][0]['isNew']) && isset($daily['categories']['leistung']), "Tagespack: $got Karten (1–5) mit Werten, Stärke und „neu“-Markierung");
