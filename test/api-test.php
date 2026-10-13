@@ -750,6 +750,12 @@ try {
     $danaProfile = call($port, ['action' => 'profile', 'authToken' => $dana['authToken']]);
     check($danaProfile['account']['dailyAvailable'] === true && $danaProfile['account']['dailyNextAt'] <= time() * 1000, 'Tagespack: für neues Konto sofort verfügbar');
     check(call($port, ['action' => 'dailyClaim'])['ok'] === false, 'Tagespack: ohne Anmeldung nicht möglich');
+    $beforeCol = call($port, ['action' => 'collection', 'authToken' => $dana['authToken']]);
+    $before = array_sum(array_column($beforeCol['cards'], 'qty'));
+    check($danaProfile['account']['welcomeAvailable'] === true, 'Willkommensgeschenk: für neues Konto verfügbar');
+    $welcome = call($port, ['action' => 'dailyClaim', 'authToken' => $dana['authToken']]);
+    check($welcome['ok'] && ($welcome['welcome'] ?? false) === true && count($welcome['cards']) === 20, 'Willkommensgeschenk: 20 Karten');
+    check(call($port, ['action' => 'profile', 'authToken' => $dana['authToken']])['account']['welcomeAvailable'] === false, 'Willkommensgeschenk: nur einmal, Flag gespeichert');
     $before = array_sum(array_column(call($port, ['action' => 'collection', 'authToken' => $dana['authToken']])['cards'], 'qty'));
     $daily = call($port, ['action' => 'dailyClaim', 'authToken' => $dana['authToken']]);
     $got = count($daily['cards'] ?? []);
@@ -758,7 +764,7 @@ try {
     $after = call($port, ['action' => 'collection', 'authToken' => $dana['authToken']]);
     check(array_sum(array_column($after['cards'], 'qty')) === $before + $got, 'Tagespack: alle Karten sind in der Sammlung');
     $newCount = count(array_filter($daily['cards'], fn($c) => $c['isNew']));
-    check($after['collected'] === 16 + $newCount, "Tagespack: genau die als neu markierten Autos kommen zur Sammlung dazu ($newCount neu)");
+    check($after['collected'] === $beforeCol['collected'] + $newCount, "Tagespack: genau die als neu markierten Autos kommen zur Sammlung dazu ($newCount neu)");
     $again = call($port, ['action' => 'dailyClaim', 'authToken' => $dana['authToken']]);
     check($again['ok'] === false && strpos($again['message'], '24 Stunden') !== false && $again['nextAt'] > time() * 1000, 'Tagespack: nur alle 24 Stunden');
     $danaNow = call($port, ['action' => 'profile', 'authToken' => $dana['authToken']])['account'];
