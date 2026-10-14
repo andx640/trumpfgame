@@ -15,6 +15,7 @@ const INVITE_TTL_S = 1800;    // Einladungen verfallen nach 30 Minuten
 const DAILY_PACK_MIN = 1; // Tagespack: zufällig 1 bis 5 Karten, danach 24 Stunden Pause
 const DAILY_PACK_MAX = 5;
 const DAILY_COOLDOWN_S = 86400;
+const WELCOME_PACK_SIZE = 20; // Willkommensgeschenk: einmalig 20 Karten pro Konto
 const XP_AI_FACTOR = ['easy' => 0.2, 'medium' => 0.5, 'hard' => 1.0]; // gegen Leicht 20 %, gegen Mittel 50 % der XP
 
 function trumpf_db(): ?PDO
@@ -65,6 +66,7 @@ function trumpf_ensure_schema(PDO $db): void
             current_streak INTEGER NOT NULL DEFAULT 0,
             best_streak INTEGER NOT NULL DEFAULT 0,
             last_daily TEXT NULL,
+            welcome_claimed INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             last_login TEXT NULL
         )');
@@ -116,6 +118,7 @@ function trumpf_ensure_schema(PDO $db): void
         current_streak INT UNSIGNED NOT NULL DEFAULT 0,
         best_streak INT UNSIGNED NOT NULL DEFAULT 0,
         last_daily VARCHAR(10) NULL,
+        welcome_claimed TINYINT NOT NULL DEFAULT 0,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_login DATETIME NULL,
         PRIMARY KEY (id),
@@ -180,6 +183,11 @@ function trumpf_add_streak_columns(PDO $db): void
         $db->query('SELECT last_daily FROM accounts LIMIT 1');
     } catch (PDOException $missing) {
         $db->exec('ALTER TABLE accounts ADD COLUMN last_daily VARCHAR(10) NULL');
+    }
+    try {
+        $db->query('SELECT welcome_claimed FROM accounts LIMIT 1');
+    } catch (PDOException $missing) {
+        $db->exec('ALTER TABLE accounts ADD COLUMN welcome_claimed TINYINT NOT NULL DEFAULT 0'); // bestehende Konten bekommen das Geschenk damit auch
     }
 }
 
@@ -346,6 +354,26 @@ function trumpf_daily_next(array $row): int
 function trumpf_daily_available(array $row): bool
 {
     return time() >= trumpf_daily_next($row);
+}
+
+/** Willkommensgeschenk: einmalig 20 Karten. Das Flag wird zuerst gesetzt, damit es nicht doppelt abgeholt werden kann. */
+function trumpf_welcome_claim(PDO $db, array $row): array
+{
+    $claim = $db->prepare('UPDATE accounts SET welcome_claimed = 1 WHERE id = ? AND welcome_claimed = 0');
+    $claim->execute([(int) $row['id']]);
+    if ($claim->rowCount() === 0) {
+        return ['ok' => false, 'message' => 'Dein Willkommensgeschenk hast du schon abgeholt.'];
+    }
+    trumpf_owned_cards($db, (int) $row['id']); // Startkarten zuerst, damit „neu“ stimmt
+    $deck = trumpf_load_deck();
+    $scores = trumpf_card_scores();
+    $cards = [];
+    for ($i = 0; $i < WELCOME_PACK_SIZE; $i++) {
+        $cardId = trumpf_draw_card();
+        $isNew = trumpf_collection_add($db, (int) $row['id'], $cardId);
+        $cards[] = ['card' => $deck[$cardId] + ['score' => $scores[$cardId] ?? 0], 'isNew' => $isNew];
+    }
+    return ['ok' => true, 'welcome' => true, 'cards' => $cards, 'categories' => TRUMPF_CATEGORIES, 'nextAt' => trumpf_daily_next($row) * 1000];
 }
 
 /** Tagespack abholen. Die Zeit wird zuerst reserviert, erst dann gibt es Karten: zwei gleichzeitige Anfragen können es nicht doppelt abholen. */
@@ -547,6 +575,7 @@ function trumpf_account_with_rank(PDO $db, array $row): array
     return trumpf_account_public($row) + [
         'collected' => (int) $collected->fetchColumn(),
         'totalCards' => count(trumpf_load_deck()),
+        'welcomeAvailable' => empty($row['welcome_claimed']),
         'dailyAvailable' => trumpf_daily_available($row),
         'dailyNextAt' => trumpf_daily_next($row) * 1000,
         'rank' => trumpf_account_rank($db, $row),
@@ -575,7 +604,7 @@ function trumpf_account_action(string $action, array $input): void
             if (!$row) {
                 respond(['ok' => false, 'code' => 'logged_out', 'message' => 'Melde dich an, um dein Tagespack zu öffnen.']);
             }
-            respond(trumpf_daily_claim($db, $row));
+            respond(empty($row['welcome_claimed']) ? trumpf_welcome_claim($db, $row) : trumpf_daily_claim($db, $row));
         }
         if ($action === 'collection') {
             // Nur die eigenen Karten: welche Autos es sonst noch gibt, bleibt geheim.

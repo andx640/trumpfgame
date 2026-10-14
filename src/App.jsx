@@ -355,7 +355,7 @@ function AppContent() {
           <PackOpening
             awards={daily.cards}
             categories={daily.categories}
-            intro="daily"
+            intro={daily.welcome ? "welcome" : "daily"}
             onDone={() => {
               setDaily(null);
               loadProfile(authToken);
@@ -417,7 +417,8 @@ function Home({ onNew, onJoin, onCollection, onLeaderboard, onDaily, dailyBusy =
     const timer = window.setInterval(() => setTick((n) => n + 1), 30_000); // Countdown bis zum nächsten Tagespack
     return () => window.clearInterval(timer);
   }, []);
-  const dailyReady = Boolean(account) && (account.dailyAvailable || socket.now() >= account.dailyNextAt);
+  const welcome = Boolean(account?.welcomeAvailable);
+  const dailyReady = welcome || Boolean(account) && (account.dailyAvailable || socket.now() >= account.dailyNextAt);
   const dailyWait = account && !dailyReady ? formatWait(account.dailyNextAt - socket.now()) : "";
   return (
     <section className="home">
@@ -445,9 +446,9 @@ function Home({ onNew, onJoin, onCollection, onLeaderboard, onDaily, dailyBusy =
           <button type="button" className={`menu-tile home-daily ${dailyReady ? "is-ready" : ""} ${account && !dailyReady ? "is-done" : ""}`} onClick={onDaily} disabled={dailyBusy}>
             <img className="home-pack" src={packArt} alt="" draggable="false" />
             <span>
-              <strong>Tagespack</strong>
+              <strong>{welcome ? "Willkommensgeschenk" : "Tagespack"}</strong>
               <small>
-                {!account ? "Anmelden und alle 24 Std Karten holen" : dailyReady ? "Gratis: 1–5 Karten, alle 24 Std" : `Schon geöffnet · nächstes in ${dailyWait}`}
+                {!account ? "Anmelden und alle 24 Std Karten holen" : welcome ? "Einmalig gratis: 20 Karten für dich" : dailyReady ? "Gratis: 1–5 Karten, alle 24 Std" : `Schon geöffnet · nächstes in ${dailyWait}`}
               </small>
             </span>
             {dailyReady ? <b className="count-badge home-daily-badge">1×</b> : <HomeArrow />}
@@ -2572,8 +2573,8 @@ function PackOpening({ awards, categories, onDone, intro = "win" }) {
     slot.style.setProperty("--dx", `${Math.round(dx)}px`);
   }, [focus]);
 
-  let eyebrow = intro === "daily" ? "TAGESPACK" : "BELOHNUNG";
-  let headline = intro === "daily" ? <>Dein Tagespack wartet</> : <>Dein Pack wartet</>;
+  let eyebrow = intro === "welcome" ? "WILLKOMMENSGESCHENK" : intro === "daily" ? "TAGESPACK" : "BELOHNUNG";
+  let headline = intro === "welcome" ? <>Dein Willkommensgeschenk wartet</> : intro === "daily" ? <>Dein Tagespack wartet</> : <>Dein Pack wartet</>;
   if (phase === "charge") headline = <>Es lädt sich auf …</>;
   if (phase === "burst") headline = <>Jetzt!</>;
   if (phase === "pick") {
