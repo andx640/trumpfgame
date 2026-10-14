@@ -103,6 +103,15 @@ function trumpf_ensure_schema(PDO $db): void
         $db->exec('CREATE TABLE IF NOT EXISTS collection_starter (
             account_id INTEGER PRIMARY KEY
         )');
+        $db->exec('CREATE TABLE IF NOT EXISTS trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_id INTEGER NOT NULL,
+            to_id INTEGER NOT NULL,
+            give_card TEXT NOT NULL,
+            want_card TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE (from_id, to_id, give_card, want_card)
+        )');
         trumpf_add_streak_columns($db);
         return;
     }
@@ -165,6 +174,17 @@ function trumpf_ensure_schema(PDO $db): void
     $db->exec("CREATE TABLE IF NOT EXISTS collection_starter (
         account_id INT UNSIGNED NOT NULL,
         PRIMARY KEY (account_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS trades (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        from_id INT UNSIGNED NOT NULL,
+        to_id INT UNSIGNED NOT NULL,
+        give_card VARCHAR(8) NOT NULL,
+        want_card VARCHAR(8) NOT NULL,
+        created_at INT UNSIGNED NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_trade (from_id, to_id, give_card, want_card),
+        KEY idx_to (to_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     trumpf_add_streak_columns($db);
 }
@@ -667,6 +687,9 @@ function trumpf_account_action(string $action, array $input): void
             }
             respond(['ok' => true, 'players' => $players]);
         }
+        if (in_array($action, ['tradeOffer', 'tradeList', 'tradeAccept', 'tradeDecline'], true)) {
+            trumpf_trade_action($db, $action, $input);
+        }
         if (in_array($action, ['friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile', 'friendCollection'], true)) {
             trumpf_friend_action($db, $action, $input);
         }
@@ -1168,4 +1191,127 @@ function trumpf_friend_action(PDO $db, string $action, array $input): void
         return [(int) $b['online'], $b['level'], $b['xp']] <=> [(int) $a['online'], $a['level'], $a['xp']];
     });
     respond(['ok' => true, 'friends' => $friends, 'incoming' => $incoming, 'outgoing' => $outgoing]);
+}
+
+
+/** Kartentausch zwischen Freunden: Angebot (give gegen want), Liste, Annehmen, Ablehnen/Zurückziehen. */
+function trumpf_trade_action(PDO $db, string $action, array $input): void
+{
+    $me = trumpf_account_by_token(is_string($input['authToken'] ?? null) ? $input['authToken'] : '');
+    if ($me === null) {
+        respond(['ok' => false, 'code' => 'logged_out', 'message' => 'Bitte melde dich neu an.']);
+    }
+    $myId = (int) $me['id'];
+    $deck = trumpf_load_deck();
+    $scores = trumpf_card_scores();
+    $areFriends = static function (int $a, int $b) use ($db): bool {
+        $query = $db->prepare("SELECT COUNT(*) FROM friendships WHERE status = 'accepted' AND ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))");
+        $query->execute([$a, $b, $b, $a]);
+        return (int) $query->fetchColumn() > 0;
+    };
+    $card = static function ($cardId) use ($deck, $scores): ?array {
+        return isset($deck[$cardId]) ? $deck[$cardId] + ['score' => $scores[$cardId] ?? 0] : null;
+    };
+
+    if ($action === 'tradeOffer') {
+        $other = trumpf_account_by_name(cleanName($input['name'] ?? ''));
+        $give = is_string($input['give'] ?? null) ? $input['give'] : '';
+        $want = is_string($input['want'] ?? null) ? $input['want'] : '';
+        if ($other === null || (int) $other['id'] === $myId) {
+            respond(['ok' => false, 'message' => 'Diesen Spieler gibt es nicht.']);
+        }
+        $otherId = (int) $other['id'];
+        if (!$areFriends($myId, $otherId)) {
+            respond(['ok' => false, 'message' => 'Tauschen kannst du nur mit Freunden.']);
+        }
+        if (!isset($deck[$give]) || !isset($deck[$want])) {
+            respond(['ok' => false, 'message' => 'Diese Karte gibt es nicht.']);
+        }
+        if (!isset(trumpf_owned_cards($db, $myId)[$give])) {
+            respond(['ok' => false, 'message' => 'Diese Karte hast du nicht.']);
+        }
+        if (!isset(trumpf_owned_cards($db, $otherId)[$want])) {
+            respond(['ok' => false, 'message' => $other['name'] . ' hat diese Karte nicht mehr.']);
+        }
+        $existing = $db->prepare('SELECT COUNT(*) FROM trades WHERE from_id = ? AND to_id = ? AND give_card = ? AND want_card = ?');
+        $existing->execute([$myId, $otherId, $give, $want]);
+        if ((int) $existing->fetchColumn() > 0) {
+            respond(['ok' => false, 'message' => 'Diese Tauschanfrage läuft schon.']);
+        }
+        $db->prepare('INSERT INTO trades (from_id, to_id, give_card, want_card, created_at) VALUES (?, ?, ?, ?, ?)')->execute([$myId, $otherId, $give, $want, time()]);
+        trumpf_push_to_account($db, $otherId, [
+            'title' => 'Tauschanfrage von ' . $me['name'],
+            'body' => $me['name'] . ' möchte ' . $deck[$want]['name'] . ' gegen ' . $deck[$give]['name'] . ' tauschen.',
+            'url' => '/',
+            'tag' => 'trade-' . $myId,
+        ]);
+        respond(['ok' => true, 'message' => 'Tauschanfrage an ' . $other['name'] . ' gesendet.']);
+    }
+
+    if ($action === 'tradeAccept' || $action === 'tradeDecline') {
+        $query = $db->prepare('SELECT * FROM trades WHERE id = ? AND (to_id = ? OR from_id = ?)');
+        $query->execute([(int) ($input['id'] ?? 0), $myId, $myId]);
+        $trade = $query->fetch();
+        if (!$trade) {
+            respond(['ok' => false, 'message' => 'Diese Tauschanfrage gibt es nicht mehr.']);
+        }
+        $delete = $db->prepare('DELETE FROM trades WHERE id = ?');
+        if ($action === 'tradeDecline') {
+            $delete->execute([$trade['id']]);
+            respond(['ok' => true, 'message' => (int) $trade['to_id'] === $myId ? 'Tauschanfrage abgelehnt.' : 'Tauschanfrage zurückgezogen.']);
+        }
+        if ((int) $trade['to_id'] !== $myId) {
+            respond(['ok' => false, 'message' => 'Nur der Empfänger kann annehmen.']);
+        }
+        $fromId = (int) $trade['from_id'];
+        $delete->execute([$trade['id']]);
+        if (!$areFriends($myId, $fromId)) {
+            respond(['ok' => false, 'message' => 'Ihr seid keine Freunde mehr.']);
+        }
+        if (!trumpf_collection_remove($db, $fromId, (string) $trade['give_card'])) {
+            respond(['ok' => false, 'message' => 'Der Absender hat diese Karte nicht mehr.']);
+        }
+        if (!trumpf_collection_remove($db, $myId, (string) $trade['want_card'])) {
+            trumpf_collection_add($db, $fromId, (string) $trade['give_card']);
+            respond(['ok' => false, 'message' => 'Du hast diese Karte nicht mehr.']);
+        }
+        trumpf_collection_add($db, $myId, (string) $trade['give_card']);
+        trumpf_collection_add($db, $fromId, (string) $trade['want_card']);
+        // andere offene Angebote mit nicht mehr vorhandenen Karten bleiben stehen und scheitern beim Annehmen
+        respond(['ok' => true, 'message' => 'Getauscht: ' . $deck[$trade['give_card']]['name'] . ' gegen ' . $deck[$trade['want_card']]['name'] . '.']);
+    }
+
+    // tradeList
+    $names = static function (array $rows, string $key) use ($db): array {
+        $result = [];
+        foreach ($rows as $row) {
+            $query = $db->prepare('SELECT name FROM accounts WHERE id = ?');
+            $query->execute([(int) $row[$key]]);
+            $result[(int) $row['id']] = (string) $query->fetchColumn();
+        }
+        return $result;
+    };
+    $format = static function (array $rows, array $nameById) use ($card): array {
+        $list = [];
+        foreach ($rows as $row) {
+            $give = $card($row['give_card']);
+            $want = $card($row['want_card']);
+            if ($give && $want) {
+                $list[] = ['id' => (int) $row['id'], 'name' => $nameById[(int) $row['id']], 'give' => $give, 'want' => $want];
+            }
+        }
+        return $list;
+    };
+    $in = $db->prepare('SELECT * FROM trades WHERE to_id = ? ORDER BY id DESC');
+    $in->execute([$myId]);
+    $incomingRows = $in->fetchAll();
+    $out = $db->prepare('SELECT * FROM trades WHERE from_id = ? ORDER BY id DESC');
+    $out->execute([$myId]);
+    $outgoingRows = $out->fetchAll();
+    respond([
+        'ok' => true,
+        'categories' => TRUMPF_CATEGORIES,
+        'incoming' => $format($incomingRows, $names($incomingRows, 'from_id')),
+        'outgoing' => $format($outgoingRows, $names($outgoingRows, 'to_id')),
+    ]);
 }
