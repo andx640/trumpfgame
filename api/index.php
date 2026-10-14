@@ -850,7 +850,7 @@ if ($action === 'cards') {
     // Welche Autos es gibt, bleibt geheim: öffentlich nur die Kategorien und die Gesamtzahl.
     respond(['ok' => true, 'categories' => TRUMPF_CATEGORIES, 'total' => count(trumpf_load_deck())]);
 }
-if (in_array($action, ['register', 'login', 'profile', 'collection', 'dailyClaim', 'playerProfile', 'leaderboard', 'heartbeat', 'inviteDecline', 'pushKey', 'pushSubscribe', 'pushUnsubscribe', 'friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile', 'friendCollection'], true)) {
+if (in_array($action, ['register', 'login', 'profile', 'collection', 'dailyClaim', 'playerProfile', 'leaderboard', 'heartbeat', 'inviteDecline', 'pushKey', 'pushSubscribe', 'pushUnsubscribe', 'friends', 'friendAdd', 'friendAccept', 'friendRemove', 'friendProfile', 'friendCollection', 'tradeOffer', 'tradeList', 'tradeAccept', 'tradeDecline'], true)) {
     trumpf_account_action($action, $input);
 }
 $token = is_string($input['token'] ?? null) ? $input['token'] : '';

@@ -1929,11 +1929,17 @@ function MiniRing({ wins, losses }) {
   );
 }
 
-// Sammlung eines Freundes: nur ansehen, kein Tauschen
-function FriendCollection({ name, authToken, onClose }) {
+// Sammlung eines Freundes: Karte anklicken für die Großansicht, dort lässt sich ein Tausch anfragen
+function FriendCollection({ name, authToken, onClose, onTraded }) {
+  const notify = useToast();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [cards, toolbar] = useCardFilter(data?.cards);
+  const [selected, setSelected] = useState(null);
+  const [trading, setTrading] = useState(false);
+  const [own, ownFailed] = useOwnCollection(trading ? authToken : null);
+  const [ownCards, ownToolbar] = useCardFilter(own?.cards);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -1949,6 +1955,60 @@ function FriendCollection({ name, authToken, onClose }) {
     };
   }, [authToken, name]);
 
+  const offer = (give) => {
+    setBusy(true);
+    socket.request("tradeOffer", { authToken, name, give: give.c_id, want: selected.c_id })
+      .then((result) => {
+        notify(result.message || "Keine Antwort vom Server.", { type: result.ok ? "success" : "error" });
+        if (result.ok) {
+          setTrading(false);
+          setSelected(null);
+          onTraded?.();
+        }
+      })
+      .catch(() => notify("Keine Verbindung zum Server.", { type: "error" }))
+      .finally(() => setBusy(false));
+  };
+
+  if (selected && trading) {
+    return (
+      <Modal eyebrow={`Tausch mit ${name}`} title="Was bietest du an?" onClose={onClose} size="lg">
+        <div className="stack">
+          <p className="summary-line"><span>Du bekommst: <b>{selected.name}</b></span></p>
+          {ownFailed && <Note tone="danger" role="alert">{ownFailed}</Note>}
+          {!own && !ownFailed && <Loading />}
+          {own && ownToolbar}
+          <div className="card-grid is-compact">
+            {ownCards.map((card) => (
+              <CollectionCard card={card} categories={own.categories} qty={card.qty} key={card.c_id} onClick={() => !busy && offer(card)} />
+            ))}
+          </div>
+          <div className="button-row"><Button onClick={() => setTrading(false)}>Zurück</Button></div>
+        </div>
+      </Modal>
+    );
+  }
+
+  if (selected) {
+    return (
+      <Modal
+        eyebrow={`Sammlung von ${name}`}
+        title={selected.name}
+        onClose={onClose}
+        footer={(
+          <div className="button-row is-split">
+            <Button onClick={() => setSelected(null)}>Zurück</Button>
+            <Button variant="primary" onClick={() => setTrading(true)}>Tauschen</Button>
+          </div>
+        )}
+      >
+        <div className="risk-reveal-card">
+          <CollectionCard card={selected} categories={data.categories} qty={selected.qty} />
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal eyebrow="Sammlung" title={name} onClose={onClose} size="lg">
       {error && <Note tone="danger" role="alert">{error}</Note>}
@@ -1960,12 +2020,70 @@ function FriendCollection({ name, authToken, onClose }) {
           {cards.length === 0 && <EmptyState>Kein Auto gefunden.</EmptyState>}
           <div className="card-grid is-compact">
             {cards.map((card) => (
-              <CollectionCard card={card} categories={data.categories} qty={card.qty} key={card.c_id} lazy />
+              <CollectionCard card={card} categories={data.categories} qty={card.qty} key={card.c_id} lazy onClick={() => setSelected(card)} />
             ))}
           </div>
         </div>
       )}
     </Modal>
+  );
+}
+
+// Tauschanfragen: erhaltene (annehmen/ablehnen) und gesendete (zurückziehen)
+function TradeRequests({ authToken, trades, onChanged }) {
+  const notify = useToast();
+  const act = (action, id) =>
+    socket.request(action, { authToken, id })
+      .then((result) => {
+        if (result.message) notify(result.message, { type: result.ok ? "success" : "error" });
+        onChanged();
+      })
+      .catch(() => notify("Keine Verbindung zum Server.", { type: "error" }));
+  const pair = (entry, a, b) => (
+    <div className="trade-pair" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ width: 130 }}><p className="list-row-sub">{a}</p><CollectionCard card={entry.want} categories={trades.categories} /></div>
+      <div style={{ width: 130 }}><p className="list-row-sub">{b}</p><CollectionCard card={entry.give} categories={trades.categories} /></div>
+    </div>
+  );
+  if (!trades || (!trades.incoming.length && !trades.outgoing.length)) return null;
+  return (
+    <>
+      {trades.incoming.length > 0 && (
+        <div className="list-group">
+          <h3 className="list-heading">Tauschanfragen an dich</h3>
+          <ul className="list">
+            {trades.incoming.map((entry) => (
+              <li className="list-row" key={entry.id} style={{ flexWrap: "wrap" }}>
+                <span className="list-row-main">
+                  <span className="list-row-title">{entry.name} möchte tauschen</span>
+                  {pair(entry, "Du gibst", "Du bekommst")}
+                </span>
+                <span className="list-row-actions">
+                  <Button variant="primary" size="sm" onClick={() => act("tradeAccept", entry.id)}>Annehmen</Button>
+                  <Button variant="secondary" size="sm" onClick={() => act("tradeDecline", entry.id)}>Ablehnen</Button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {trades.outgoing.length > 0 && (
+        <div className="list-group">
+          <h3 className="list-heading">Gesendete Tauschanfragen</h3>
+          <ul className="list">
+            {trades.outgoing.map((entry) => (
+              <li className="list-row" key={entry.id} style={{ flexWrap: "wrap" }}>
+                <span className="list-row-main">
+                  <span className="list-row-title">An {entry.name}</span>
+                  {pair(entry, "Du bekommst", "Du gibst")}
+                </span>
+                <IconButton label={`Tauschanfrage an ${entry.name} zurückziehen`} variant="secondary" size="sm" onClick={() => act("tradeDecline", entry.id)}><CloseIcon /></IconButton>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1977,10 +2095,14 @@ function FriendsPanel({ authToken }) {
   const [data, setData] = useState(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [trades, setTrades] = useState(null);
 
   const load = useCallback(() => {
     socket.request("friends", { authToken }).then((result) => {
       if (result.ok) setData(result);
+    }).catch(() => {});
+    socket.request("tradeList", { authToken }).then((result) => {
+      if (result.ok) setTrades(result);
     }).catch(() => {});
   }, [authToken]);
 
@@ -2049,6 +2171,8 @@ function FriendsPanel({ authToken }) {
         </div>
       )}
 
+      <TradeRequests authToken={authToken} trades={trades} onChanged={load} />
+
       <div className="list-group">
         {data && data.friends.length === 0 && <EmptyState>Noch keine Freunde. Gib oben den Spielernamen eines Freundes ein.</EmptyState>}
         {data?.friends.length > 0 && (
@@ -2107,7 +2231,7 @@ function FriendsPanel({ authToken }) {
           )}
         />
       )}
-      {viewName && <FriendCollection name={viewName} authToken={authToken} onClose={closeCollection} />}
+      {viewName && <FriendCollection name={viewName} authToken={authToken} onClose={closeCollection} onTraded={load} />}
     </Card>
   );
 }
