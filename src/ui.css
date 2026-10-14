@@ -1322,9 +1322,12 @@ body:has(.app-shell.is-home) {
 
 .home-inner {
   display: grid;
+  grid-template-columns: minmax(0, 1fr); /* Spalte darf schmaler sein als der breiteste Inhalt (Logo), sonst ragt die Seite rechts über den Rand */
   gap: 32px;
   width: min(100%, 460px);
 }
+
+.home-logo { min-width: 0; overflow: hidden; }
 
 .home-logo {
   display: grid;
@@ -1368,8 +1371,9 @@ body:has(.app-shell.is-home) {
 
 /* Menükachel: großes Symbol, Titel mit Untertitel, Pfeil */
 .menu-tile {
+  box-sizing: border-box;
   display: grid;
-  grid-template-columns: 48px 1fr auto;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
   width: 100%;
