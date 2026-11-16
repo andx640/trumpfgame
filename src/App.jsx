@@ -3,12 +3,12 @@ import { GAMES, findGame } from "./games/registry";
 import { Loading } from "./ui";
 
 // Spielesammlung: Hauptmenü und Umschalter zwischen den Spielen.
-// Das gewählte Spiel steht in der Adresse (#trumpf, #madn), so funktionieren Zurück-Taste und Neuladen.
+// Das gewählte Spiel steht in der Adresse (#trumpf, #madn, #madn/CODE), so funktionieren Zurück-Taste, Neuladen und Einladungslinks.
 
 const DEFAULT_TITLE = "Andi Spiele";
 
 function readGameId() {
-  const id = window.location.hash.replace(/^#\/?/, "");
+  const id = window.location.hash.replace(/^#\/?/, "").split("/")[0]; // #madn/RAUMCODE: Spiel madn mit Zusatz
   if (findGame(id)) return id;
   // keine Auswahl in der Adresse: eine laufende Partie geht vor, sonst das Menü
   return GAMES.find((game) => game.resume?.())?.id ?? null;

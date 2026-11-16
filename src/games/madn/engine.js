@@ -1,6 +1,6 @@
 // Mensch ärgere dich nicht – reine Spiellogik ohne Oberfläche.
 // Jede Funktion bekommt einen Zustand und gibt einen neuen zurück; nichts wird verändert.
-// Damit kann dieselbe Logik später auch auf einem Server laufen (Online-Partien).
+// Für Online-Partien gibt es dieselben Regeln in api/madn-engine.php (Test prüft, dass beide gleich spielen).
 //
 // Figuren zählen ihre Schritte ab dem eigenen Startfeld:
 //   -1      im Haus (noch nicht im Spiel)
@@ -46,6 +46,7 @@ export function createGame(seats) {
     rollsLeft: 0,
     finished: [], // Sitzplätze in Zielreihenfolge
     lastMove: null,
+    lastRoll: null, // { seat, value, n } – n zählt alle Würfe, damit die Anzeige jeden neuen Wurf erkennt
     turn: 1
   };
   state.rollsLeft = rollsAllowed(state, players[0].seat);
@@ -131,7 +132,8 @@ export function legalMoves(state) {
 /** Würfeln. value: 1..6 (von außen, damit Zufall und Tests getrennt bleiben). */
 export function roll(state, value) {
   if (state.phase !== "roll") return state;
-  const next = { ...state, dice: value, phase: "move", rollsLeft: state.rollsLeft - 1, lastMove: null };
+  const lastRoll = { seat: currentSeat(state), value, n: (state.lastRoll?.n ?? 0) + 1 };
+  const next = { ...state, dice: value, phase: "move", rollsLeft: state.rollsLeft - 1, lastMove: null, lastRoll };
   if (legalMoves(next).length) return next;
   // kein Zug möglich
   if (value === 6 || next.rollsLeft > 0) return { ...next, phase: "roll", rollsLeft: Math.max(next.rollsLeft, 1) };
