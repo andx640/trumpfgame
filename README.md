@@ -3,7 +3,9 @@
 Eine Spielesammlung. Beim Start erscheint ein Hauptmenü, aus dem man ein Spiel auswählt:
 
 - **Andi Trumpf** – serverautoritär geführtes Mehrspieler-Autoquartett (Details unten)
-- **Mensch ärgere dich nicht** – 2–4 Spieler reihum an einem Gerät oder gegen die KI; die laufende Partie bleibt im Browser gespeichert
+- **Mensch ärgere dich nicht** – 2–4 Spieler, auf drei Arten:
+  - *Gegen die KI* und *An einem Gerät* (reihum): läuft komplett im Browser, die Partie bleibt gespeichert
+  - *Online*: Raum erstellen, Code oder Einladungslink (`#madn/CODE`) teilen; der Gastgeber kann freie Plätze mit KI füllen. Der Server würfelt und prüft jeden Zug, spielt KI-Plätze und übernimmt nach 30 Sekunden ohne Zug (bei Offline-Spielern schneller). Wer die Partie verlässt, wird durch eine KI ersetzt.
 
 ## Aufbau
 
@@ -12,7 +14,11 @@ src/App.jsx                 Hauptmenü und Umschalter (Adresse #trumpf, #madn)
 src/games/registry.jsx      Liste aller Spiele
 src/games/trumpf/           Andi Trumpf (Oberfläche; Spiel-API in api/)
 src/games/madn/engine.js    Regeln von Mensch ärgere dich nicht, ohne Oberfläche
-src/games/madn/MadnApp.jsx  Brett, Würfel, KI-Ablauf
+src/games/madn/MadnApp.jsx  Auswahl der Spielart
+src/games/madn/table.jsx    Brett, Würfel, Spielerleiste (für alle Spielarten)
+src/games/madn/LocalGame.jsx, OnlineGame.jsx, online.js
+api/madn.php                Online-API (Räume, Würfeln, KI auf dem Server)
+api/madn-engine.php         dieselben Regeln wie engine.js, für den Server
 src/ui.jsx, ui.css          gemeinsame Bausteine und Design
 ```
 

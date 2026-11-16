@@ -28,9 +28,17 @@ export const GAMES = [
   {
     id: "madn",
     title: "Mensch ärgere dich nicht",
-    subtitle: "Brettspiel · 2–4 Spieler, auch gegen KI",
+    subtitle: "Online, gegen KI oder an einem Gerät · 2–4 Spieler",
     icon: MadnIcon,
-    component: lazy(() => import("./madn/MadnApp.jsx"))
+    component: lazy(() => import("./madn/MadnApp.jsx")),
+    // laufende Online-Partie im selben Tab (gleicher Schlüssel wie in madn/online.js)
+    resume: () => {
+      try {
+        return Boolean(sessionStorage.getItem("andi-madn-online"));
+      } catch {
+        return false;
+      }
+    }
   }
 ];
 
