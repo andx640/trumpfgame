@@ -1,4 +1,24 @@
-# Pitlane Trumpf
+# Andi Spiele
+
+Eine Spielesammlung. Beim Start erscheint ein Hauptmenü, aus dem man ein Spiel auswählt:
+
+- **Andi Trumpf** – serverautoritär geführtes Mehrspieler-Autoquartett (Details unten)
+- **Mensch ärgere dich nicht** – 2–4 Spieler reihum an einem Gerät oder gegen die KI; die laufende Partie bleibt im Browser gespeichert
+
+## Aufbau
+
+```
+src/App.jsx                 Hauptmenü und Umschalter (Adresse #trumpf, #madn)
+src/games/registry.jsx      Liste aller Spiele
+src/games/trumpf/           Andi Trumpf (Oberfläche; Spiel-API in api/)
+src/games/madn/engine.js    Regeln von Mensch ärgere dich nicht, ohne Oberfläche
+src/games/madn/MadnApp.jsx  Brett, Würfel, KI-Ablauf
+src/ui.jsx, ui.css          gemeinsame Bausteine und Design
+```
+
+**Neues Spiel hinzufügen:** Ordner `src/games/<id>/` anlegen, eine Komponente exportieren, die `{ onExit }` bekommt (führt zurück ins Menü), und einen Eintrag in `src/games/registry.jsx` ergänzen. Das Spiel wird erst beim Öffnen geladen. Spiellogik am besten wie bei `madn/engine.js` als reine Funktionen schreiben, dann lässt sie sich testen und später auch auf dem Server ausführen.
+
+# Andi Trumpf
 
 Ein serverautoritär geführtes Mehrspieler-Autoquartett für zwei bis vier Spieler. Das Frontend ist mit React und Vite umgesetzt, die Live-Synchronisation übernimmt Socket.IO.
 

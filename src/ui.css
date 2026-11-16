@@ -2126,3 +2126,14 @@ body:has(.app-shell.is-home) {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ===== Spielesammlung: Rückweg ins Spiele-Menü und Ladeanzeige ===== */
+.home-exit {
+  margin-right: auto;
+}
+
+.hub-loading {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+}
