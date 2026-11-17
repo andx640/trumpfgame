@@ -94,3 +94,18 @@ test("KI-Partie läuft bis zum Ende durch", () => {
   assert.equal(s.phase, "over");
   assert.equal(s.ranking.length, 4);
 });
+
+test("Sechser-Brett: 60 Felder, Startfelder 10 auseinander, Vierer-Brett ohne Platz 5 und 6", async () => {
+  const { createGame, roll, move, trackField } = await import("../src/games/madn/engine.js");
+  const six = createGame([{ type: "ai" }, null, null, null, { name: "E", type: "human" }, null]);
+  assert.equal(six.pieces.length, 6);
+  assert.equal(trackField(4, 0, 6), 40);
+  assert.equal(trackField(5, 15, 6), 5);
+  const four = createGame([{ type: "ai" }, null, { type: "ai" }, null, null, null]);
+  assert.equal(four.pieces.length, 4);
+  // im Ziel des Sechser-Bretts: Fortschritt 60..63
+  let state = { ...six, pieces: six.pieces.map((p, i) => (i === 0 ? [58, -1, -1, -1] : p)) };
+  state = roll(state, 5);
+  state = move(state, 0);
+  assert.equal(state.pieces[0][0], 63);
+});

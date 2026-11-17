@@ -3,7 +3,7 @@
 Eine Spielesammlung. Beim Start erscheint ein Hauptmenü, aus dem man ein Spiel auswählt:
 
 - **Andi Trumpf** – serverautoritär geführtes Mehrspieler-Autoquartett (Details unten)
-- **Mensch ärgere dich nicht** – 2–4 Spieler, auf drei Arten:
+- **Mensch ärgere dich nicht** – 2–6 Spieler (bis 4 auf dem klassischen Kreuz-Brett, mit Schwarz oder Lila auf dem Sechser-Brett), auf drei Arten:
   - *Gegen die KI* und *An einem Gerät* (reihum): läuft komplett im Browser, die Partie bleibt gespeichert
   - *Online*: Raum erstellen, Code oder Einladungslink (`#madn/CODE`) teilen; der Gastgeber kann freie Plätze mit KI füllen. Der Server würfelt und prüft jeden Zug, spielt KI-Plätze und übernimmt nach 30 Sekunden ohne Zug (bei Offline-Spielern schneller). Wer die Partie verlässt, wird durch eine KI ersetzt.
 

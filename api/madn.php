@@ -5,7 +5,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/madn-engine.php';
 
-const MADN_SEAT_ORDER = [0, 2, 1, 3];   // zwei Spieler sitzen sich gegenüber
+const MADN_SEAT_ORDER = [0, 2, 1, 3, 4, 5]; // zwei Spieler sitzen sich gegenüber; Platz 5 und 6 machen das Sechser-Brett
 const MADN_AI_STEP_MS = 1900;           // so lange zwischen zwei KI-Aktionen (Würfeln, Ziehen); der 3D-Würfel rollt so lange
 const MADN_TURN_MS = 30000;             // so lange hat ein Mensch für einen Wurf oder Zug
 const MADN_OFFLINE_TURN_MS = 4000;      // wer offline ist, wird nach kurzer Zeit automatisch gespielt
@@ -41,11 +41,13 @@ class MadnRoom
     {
         $this->data = $data;
         $this->now = $now;
+        // ältere Räume hatten nur vier Plätze
+        $this->data['seats'] = array_pad(array_values($this->data['seats'] ?? []), MADN_MAX_SEATS, null);
     }
 
     public static function fresh(int $now): array
     {
-        return ['version' => 1, 'status' => 'lobby', 'hostId' => null, 'seats' => [null, null, null, null], 'game' => null, 'deadline' => null, 'createdAt' => $now];
+        return ['version' => 1, 'status' => 'lobby', 'hostId' => null, 'seats' => array_fill(0, MADN_MAX_SEATS, null), 'game' => null, 'deadline' => null, 'createdAt' => $now];
     }
 
     public function touch(): void
@@ -367,7 +369,7 @@ switch ($action) {
         $seat = $input['seat'] ?? null;
         if (!$room->isHost($self) || $status !== 'lobby') {
             $reply = $fail('Nur der Gastgeber kann Plätze in der Lobby ändern.');
-        } elseif (!is_int($seat) || $seat < 0 || $seat > 3) {
+        } elseif (!is_int($seat) || $seat < 0 || $seat >= MADN_MAX_SEATS) {
             $reply = $fail('Ungültiger Platz.');
         } elseif ($action === 'addAi' && $room->data['seats'][$seat] === null) {
             $room->data['seats'][$seat] = ['id' => bin2hex(random_bytes(8)), 'token' => '', 'name' => 'KI ' . MADN_COLOR_NAMES[$seat], 'type' => 'ai'];

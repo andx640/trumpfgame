@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BackIcon, Button } from "../../ui";
 import { playFlip, playImpact, playLose, playTurn, playWin } from "../../sound";
-import { COLORS, SEATS, TRACK, currentSeat, legalMoves } from "./engine";
-import { GOALS, HOUSES, PATH, cellOf } from "./layout";
+import { COLORS, SEGMENT, boardSize, currentSeat, legalMoves } from "./engine";
+import { cellOf, layoutFor } from "./layout";
 import Board3D from "./Board3D";
 
 // Gemeinsame Ansicht für Partien am Gerät und online: Kopfzeile, Brett, Würfel, Spielerleiste, Ergebnis.
@@ -205,37 +205,39 @@ export function Rules() {
   );
 }
 
+// Flaches Brett für Geräte ohne WebGL
 function BoardSvg({ game, movable, onPick }) {
+  const layout = layoutFor(boardSize(game));
   const seats = new Set(game.players.map((p) => p.seat));
-  const at = ([x, y]) => ({ cx: x * CELL + CELL / 2, cy: y * CELL + CELL / 2 });
+  const at = ([x, y]) => ({ cx: x * CELL, cy: y * CELL });
   const last = game.lastMove;
   const turnSeat = currentSeat(game);
+  const size = layout.extent * CELL;
 
   return (
-    <svg className="madn-board" viewBox={`0 0 ${11 * CELL} ${11 * CELL}`} role="img" aria-label="Spielbrett">
-      <rect className="madn-board-bg" x="0.5" y="0.5" width={11 * CELL - 1} height={11 * CELL - 1} rx="6" />
-      <polyline className="madn-path-line" points={[...PATH, PATH[0]].map(([x, y]) => `${x * CELL + CELL / 2},${y * CELL + CELL / 2}`).join(" ")} />
-      {PATH.map((cell, index) => {
-        const start = index % (TRACK / SEATS) === 0 ? index / (TRACK / SEATS) : null;
+    <svg className="madn-board" viewBox={`${-size} ${-size} ${size * 2} ${size * 2}`} role="img" aria-label="Spielbrett">
+      <rect className="madn-board-bg" x={-size + 0.5} y={-size + 0.5} width={size * 2 - 1} height={size * 2 - 1} rx="6" />
+      <polyline className="madn-path-line" points={[...layout.path, layout.path[0]].map(([x, y]) => `${x * CELL},${y * CELL}`).join(" ")} />
+      {layout.path.map((cell, index) => {
+        const start = index % SEGMENT === 0 ? index / SEGMENT : null;
         return <circle key={`p${index}`} {...at(cell)} r="3.9" className={`madn-field ${start !== null ? `is-start is-${COLORS[start].key}` : ""}`} />;
       })}
-      {GOALS.map((cells, s) => cells.map((cell, i) => (
-        <circle key={`g${s}${i}`} {...at(cell)} r="3.9" className={`madn-field is-goal is-${COLORS[s].key} ${seats.has(s) ? "" : "is-unused"}`} />
+      {layout.goals.map((cells, s) => cells.map((cell, i) => (
+        <circle key={`g${s}${i}`} {...at(cell)} r="3.2" className={`madn-field is-goal is-${COLORS[s].key} ${seats.has(s) ? "" : "is-unused"}`} />
       )))}
-      {HOUSES.map((cells, s) => cells.map((cell, i) => (
-        <circle key={`h${s}${i}`} {...at(cell)} r="3.9" className={`madn-field is-house is-${COLORS[s].key} ${seats.has(s) ? "" : "is-unused"}`} />
+      {layout.houses.map((cells, s) => cells.map((cell, i) => (
+        <circle key={`h${s}${i}`} {...at(cell)} r="3.6" className={`madn-field is-house is-${COLORS[s].key} ${seats.has(s) ? "" : "is-unused"}`} />
       )))}
-      <circle {...at([5, 5])} r="2.2" className="madn-center" />
 
       {game.players.map(({ seat }) => game.pieces[seat].map((progress, index) => {
-        const [x, y] = cellOf(seat, index, progress);
+        const [x, y] = cellOf(layout, seat, index, progress);
         const canMove = movable && seat === turnSeat && movable.has(index);
         const isLast = last && last.seat === seat && last.index === index;
         return (
           <g
             key={`${seat}-${index}`}
             className={`madn-piece is-${COLORS[seat].key} ${canMove ? "is-movable" : ""} ${isLast ? "is-last" : ""}`}
-            style={{ transform: `translate(${x * CELL + CELL / 2}px, ${y * CELL + CELL / 2}px)` }}
+            style={{ transform: `translate(${x * CELL}px, ${y * CELL}px)` }}
             onClick={canMove ? () => onPick(index) : undefined}
             role={canMove ? "button" : undefined}
             tabIndex={canMove ? 0 : undefined}

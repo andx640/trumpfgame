@@ -148,7 +148,7 @@ function Lobby({ online, onBack }) {
         </div>
         {state.isHost ? (
           <Button variant="primary" size="lg" block disabled={count < 2 || online.busy} onClick={() => { unlockAudio(); online.act("start"); }}>
-            {count < 2 ? "Warte auf Mitspieler oder füge eine KI hinzu" : `Spiel starten · ${count} Spieler`}
+            {count < 2 ? "Warte auf Mitspieler oder füge eine KI hinzu" : `Spiel starten · ${count} Spieler · ${state.seats.slice(4).some(Boolean) ? "Sechser" : "Vierer"}-Brett`}
           </Button>
         ) : (
           <p className="madn-lead madn-center-text">Warte, bis der Gastgeber das Spiel startet …</p>

@@ -13,8 +13,8 @@ const AI_ROLL_MS = 700;
 const AI_MOVE_MS = 650;
 
 export const PRESETS = {
-  ai: [{ type: "human", name: "" }, { type: "ai", name: "" }, { type: "ai", name: "" }, { type: "ai", name: "" }],
-  device: [{ type: "human", name: "" }, { type: "off", name: "" }, { type: "human", name: "" }, { type: "off", name: "" }]
+  ai: [{ type: "human", name: "" }, { type: "ai", name: "" }, { type: "ai", name: "" }, { type: "ai", name: "" }, { type: "off", name: "" }, { type: "off", name: "" }],
+  device: [{ type: "human", name: "" }, { type: "off", name: "" }, { type: "human", name: "" }, { type: "off", name: "" }, { type: "off", name: "" }, { type: "off", name: "" }]
 };
 
 function load(key) {
@@ -59,7 +59,9 @@ export default function LocalGame({ preset, onBack }) {
       return PRESETS[preset].map((seat, index) => ({ ...seat, name: Array.isArray(names) ? names[index]?.name ?? "" : "" }));
     }
     const saved = load(SETUP_KEY);
-    return Array.isArray(saved) && saved.length === SEATS ? saved : PRESETS.ai;
+    if (!Array.isArray(saved) || saved.length < SEATS) return PRESETS.ai;
+    // ältere Einstellungen hatten nur vier Farben
+    return PRESETS.ai.map((seat, index) => saved[index] ?? seat);
   });
 
   useEffect(() => {
@@ -91,12 +93,13 @@ const SEAT_OPTIONS = [
 
 function Setup({ setup, setSetup, onStart, onBack }) {
   const active = setup.filter((seat) => seat.type !== "off").length;
+  const sixBoard = setup.slice(SEATS).some((seat) => seat.type !== "off");
   const update = (index, patch) => setSetup((list) => list.map((seat, i) => (i === index ? { ...seat, ...patch } : seat)));
   return (
     <>
       <Header onBack={onBack} />
       <section className="madn-setup">
-        <p className="madn-lead">Wähle für jede Farbe, wer spielt. Menschen spielen reihum an diesem Gerät.</p>
+        <p className="madn-lead">Wähle für jede Farbe, wer spielt. Menschen spielen reihum an diesem Gerät. Mit Schwarz oder Lila (bis zu 6 Spieler) wird auf dem Sechser-Brett gespielt.</p>
         <div className="madn-seats">
           {setup.map((seat, index) => (
             <div className={`madn-seat ${seat.type === "off" ? "is-off" : ""}`} key={COLORS[index].key}>
@@ -121,7 +124,7 @@ function Setup({ setup, setSetup, onStart, onBack }) {
           ))}
         </div>
         <Button variant="primary" size="lg" block disabled={active < 2} onClick={onStart}>
-          {active < 2 ? "Mindestens zwei Spieler" : `Spiel starten · ${active} Spieler`}
+          {active < 2 ? "Mindestens zwei Spieler" : `Spiel starten · ${active} Spieler · ${sixBoard ? "Sechser" : "Vierer"}-Brett`}
         </Button>
         <Rules />
       </section>

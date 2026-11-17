@@ -2,19 +2,19 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { HOME, PIECES, SEATS, TRACK, currentSeat, legalMoves } from "./engine";
-import { GOALS, HOUSES, PATH, cellOf } from "./layout";
+import "@fontsource/pinyon-script/latin-400.css";
+import { HOME, MAX_SEATS, PIECES, SEGMENT, boardSize, currentSeat, legalMoves } from "./engine";
+import { cellOf, layoutFor } from "./layout";
 
 // 3D-Spielbrett mit three.js: Holzbrett, glänzende Figuren, die Feld für Feld hüpfen,
 // und ein Würfel, der übers Brett geworfen wird und auf der gewürfelten Zahl liegen bleibt.
 
-const SEAT_COLORS = [0xff3b30, 0x1e88ff, 0x22c55e, 0xffc81a];
-const SEAT_CSS = ["#ff3b30", "#1e88ff", "#22c55e", "#ffc81a"];
-// Von welcher Seite schaut ein Platz aufs Brett (Winkel um die Hochachse, 0 = von unten/+Z)
-const SEAT_VIEW = [-Math.PI / 2, Math.PI, Math.PI / 2, 0];
-
-const BOARD = 12; // Kantenlänge der Holzplatte
-const SURFACE = 11.4; // bedruckte Fläche
+// Farben wie auf dem klassischen Brett: Rot, Blau, Grün, Gelb, Schwarz, Lila
+const SEAT_CSS = ["#e3241b", "#1d6fd8", "#1c9a3c", "#f6d21a", "#1d1d1d", "#8b3fb3"];
+const SEAT_COLORS = SEAT_CSS.map((c) => new THREE.Color(c).getHex());
+const BOARD_YELLOW = "#f9e86a";
+const INK = "#111111";
+const SCRIPT_FONT = '"Pinyon Script", "Brush Script MT", cursive';
 const DIE = 0.8;
 const DIE_ROUND = 0.13;
 const HOP_S = 0.17;
@@ -31,7 +31,9 @@ const FACE_NORMALS = {
   5: new THREE.Vector3(0, 0, -1)
 };
 
-const world = ([gx, gy], y = 0) => new THREE.Vector3(gx - 5, y, gy - 5);
+const world = ([x, y], height = 0) => new THREE.Vector3(x, height, y);
+// Kamerawinkel (um die Hochachse), damit ein Platz von seiner Armseite aufs Brett schaut
+const viewAngle = (layout, seat) => Math.PI / 2 - (layout.armAngle[seat] ?? 0);
 const rand = (a, b) => a + Math.random() * (b - a);
 const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
@@ -49,134 +51,191 @@ function makeCanvas(size) {
   return [canvas, canvas.getContext("2d")];
 }
 
-/** Bedruckte Oberseite des Bretts */
-function drawSurface(activeSeats) {
+function hexPath(ctx, cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i += 1) {
+    const a = Math.PI / 6 + (i * Math.PI) / 3;
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    if (i) ctx.lineTo(x, y);
+    else ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+}
+
+/** Bedruckte Oberseite im Stil des klassischen Bretts: gelb, weiße Felder, A/B/a–d, Pfeile, Schriftzug */
+function drawSurface(layout, activeSeats) {
   const size = 2048;
   const [canvas, ctx] = makeCanvas(size);
-  const unit = size / SURFACE;
-  const px = (g) => (g - 5 + SURFACE / 2) * unit;
+  const extent = layout.extent;
+  const unit = size / (extent * 2);
+  const px = (v) => (v + extent) * unit;
+  const P = ([x, y]) => [px(x), px(y)];
+  const faded = (seat) => !activeSeats.has(seat);
+  const textOn = (seat) => (seat === 3 ? INK : "#ffffff");
+  const upright = (seat) => layout.armAngle[seat] - Math.PI / 2;
 
-  // Karton mit leichter Struktur
-  const base = ctx.createRadialGradient(size / 2, size / 2, size * 0.1, size / 2, size / 2, size * 0.75);
-  base.addColorStop(0, "#fbf0d6");
-  base.addColorStop(1, "#e7cf9f");
-  ctx.fillStyle = base;
+  ctx.fillStyle = BOARD_YELLOW;
   ctx.fillRect(0, 0, size, size);
-  for (let i = 0; i < 9000; i += 1) {
-    ctx.fillStyle = `rgba(${Math.random() < 0.5 ? "120,80,30" : "255,255,255"},${Math.random() * 0.05})`;
+  for (let i = 0; i < 7000; i += 1) {
+    ctx.fillStyle = `rgba(${Math.random() < 0.5 ? "150,120,20" : "255,255,255"},${Math.random() * 0.05})`;
     ctx.fillRect(Math.random() * size, Math.random() * size, rand(1, 4), rand(1, 4));
   }
 
-  // farbige Ecken hinter den Häusern
-  HOUSES.forEach((cells, seat) => {
-    const cx = (px(cells[0][0]) + px(cells[3][0])) / 2;
-    const cy = (px(cells[0][1]) + px(cells[3][1])) / 2;
-    ctx.save();
-    ctx.globalAlpha = activeSeats.has(seat) ? 0.28 : 0.1;
-    ctx.fillStyle = SEAT_CSS[seat];
-    roundRect(ctx, cx - unit * 1.15, cy - unit * 1.15, unit * 2.3, unit * 2.3, unit * 0.45);
-    ctx.fill();
-    ctx.restore();
-  });
+  // Rahmenlinie
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = unit * 0.06;
+  if (layout.shape === "hexagon") hexPath(ctx, size / 2, size / 2, (extent - 0.35) * unit);
+  else {
+    ctx.beginPath();
+    ctx.rect(unit * 0.3, unit * 0.3, size - unit * 0.6, size - unit * 0.6);
+  }
+  ctx.stroke();
 
-  // Laufweg
-  ctx.strokeStyle = "#5b3f23";
-  ctx.lineWidth = unit * 0.11;
+  // Laufweg als dicke schwarze Verbindungen
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = unit * 0.1;
   ctx.lineJoin = "round";
   ctx.beginPath();
-  PATH.forEach(([x, y], i) => (i ? ctx.lineTo(px(x), px(y)) : ctx.moveTo(px(x), px(y))));
+  layout.path.forEach((cell, i) => {
+    const [x, y] = P(cell);
+    if (i) ctx.lineTo(x, y);
+    else ctx.moveTo(x, y);
+  });
   ctx.closePath();
   ctx.stroke();
 
-  const field = ([x, y], fill, ring, alpha = 1) => {
-    const cx = px(x);
-    const cy = px(y);
-    const r = unit * 0.37;
+  const letter = (text, x, y, seat, radius, angle) => {
     ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = "rgba(60,35,10,0.35)";
-    ctx.beginPath();
-    ctx.arc(cx + r * 0.08, cy + r * 0.1, r * 1.04, 0, Math.PI * 2);
-    ctx.fill();
-    const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.35, r * 0.1, cx, cy, r);
-    g.addColorStop(0, shade(fill, 0.25));
-    g.addColorStop(1, shade(fill, -0.12));
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-    // Mulde: innen etwas dunkler
-    const hole = ctx.createRadialGradient(cx + r * 0.1, cy + r * 0.12, r * 0.15, cx, cy, r * 0.62);
-    hole.addColorStop(0, "rgba(0,0,0,0.0)");
-    hole.addColorStop(0.8, "rgba(0,0,0,0.05)");
-    hole.addColorStop(1, "rgba(0,0,0,0.18)");
-    ctx.fillStyle = hole;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r * 0.62, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.lineWidth = unit * 0.045;
-    ctx.strokeStyle = ring;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.fillStyle = textOn(seat);
+    ctx.font = `700 ${radius * 1.3}px Barlow, Arial, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, 0, radius * 0.08);
     ctx.restore();
   };
 
-  PATH.forEach((cell, i) => {
-    const start = i % (TRACK / SEATS) === 0 ? i / (TRACK / SEATS) : null;
-    if (start === null) field(cell, "#fffaf0", "#5b3f23");
-    else field(cell, SEAT_CSS[start], "#3b2614", activeSeats.has(start) ? 1 : 0.55);
-  });
-  GOALS.forEach((cells, seat) => cells.forEach((cell) => field(cell, mix(SEAT_CSS[seat], "#ffffff", 0.35), "#3b2614", activeSeats.has(seat) ? 1 : 0.4)));
-  HOUSES.forEach((cells, seat) => cells.forEach((cell) => field(cell, SEAT_CSS[seat], "#3b2614", activeSeats.has(seat) ? 1 : 0.4)));
-
-  // Pfeil zwischen Startfeld und nächstem Feld zeigt die Laufrichtung
-  for (let seat = 0; seat < SEATS; seat += 1) {
-    const [x, y] = PATH[seat * 10];
-    const [nx, ny] = PATH[seat * 10 + 1];
+  const field = (cell, fill, radius, alpha = 1) => {
+    const [x, y] = P(cell);
+    const r = radius * unit;
     ctx.save();
-    ctx.translate((px(x) + px(nx)) / 2, (px(y) + px(ny)) / 2);
-    ctx.rotate(Math.atan2(ny - y, nx - x));
-    ctx.fillStyle = SEAT_CSS[seat];
-    ctx.strokeStyle = "#3b2614";
-    ctx.lineWidth = unit * 0.025;
-    ctx.globalAlpha = activeSeats.has(seat) ? 1 : 0.4;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = fill;
     ctx.beginPath();
-    ctx.moveTo(unit * 0.13, 0);
-    ctx.lineTo(-unit * 0.08, -unit * 0.12);
-    ctx.lineTo(-unit * 0.08, unit * 0.12);
-    ctx.closePath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
+    // leichte Mulde
+    const hole = ctx.createRadialGradient(x - r * 0.25, y - r * 0.3, r * 0.2, x, y, r);
+    hole.addColorStop(0, "rgba(255,255,255,0.18)");
+    hole.addColorStop(0.7, "rgba(0,0,0,0)");
+    hole.addColorStop(1, "rgba(0,0,0,0.16)");
+    ctx.fillStyle = hole;
+    ctx.fill();
+    ctx.lineWidth = unit * 0.055;
+    ctx.strokeStyle = INK;
     ctx.stroke();
     ctx.restore();
-  }
+    return [x, y, r];
+  };
 
-  // Mitte: vier Farben als Rosette
-  const c = px(5);
-  for (let seat = 0; seat < SEATS; seat += 1) {
-    ctx.fillStyle = SEAT_CSS[seat];
+  layout.path.forEach((cell, i) => {
+    const seat = i % SEGMENT === 0 ? i / SEGMENT : null;
+    if (seat === null) {
+      field(cell, "#ffffff", 0.38);
+      return;
+    }
+    const alpha = faded(seat) ? 0.35 : 1;
+    const [x, y, r] = field(cell, SEAT_CSS[seat], 0.38, alpha);
+    ctx.globalAlpha = alpha;
+    letter("A", x, y, seat, r, upright(seat));
+    ctx.globalAlpha = 1;
+  });
+
+  layout.goals.forEach((cells, seat) => cells.forEach((cell, i) => {
+    const alpha = faded(seat) ? 0.3 : 1;
+    const [x, y, r] = field(cell, SEAT_CSS[seat], 0.3, alpha);
+    ctx.globalAlpha = alpha;
+    letter("abcd"[i], x, y, seat, r, upright(seat));
+    ctx.globalAlpha = 1;
+  }));
+
+  layout.houses.forEach((cells, seat) => {
+    const alpha = faded(seat) ? 0.3 : 1;
+    cells.forEach((cell) => field(cell, SEAT_CSS[seat], 0.34, alpha));
+    const cx = cells.reduce((sum, c) => sum + c[0], 0) / cells.length;
+    const cy = cells.reduce((sum, c) => sum + c[1], 0) / cells.length;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(px(cx), px(cy));
+    ctx.rotate(upright(seat));
+    ctx.fillStyle = INK;
+    ctx.font = `800 ${unit * 0.32}px Barlow, Arial, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("B", 0, 0);
+    ctx.restore();
+  });
+
+  // Pfeile mit Federn neben jedem Startfeld zeigen die Laufrichtung
+  layout.armAngle.forEach((angle, seat) => {
+    const start = layout.path[seat * SEGMENT];
+    const next = layout.path[seat * SEGMENT + 1];
+    const dx = next[0] - start[0];
+    const dy = next[1] - start[1];
+    const len = Math.hypot(dx, dy);
+    const ux = dx / len;
+    const uy = dy / len;
+    // seitlich nach außen, weg vom eigenen Ziel
+    const goal = layout.goals[seat][0];
+    let nx = -uy;
+    let ny = ux;
+    if ((goal[0] - start[0]) * nx + (goal[1] - start[1]) * ny > 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    const ax = start[0] + nx * 0.75;
+    const ay = start[1] + ny * 0.75;
+    const tail = [px(ax - ux * 0.35), px(ay - uy * 0.35)];
+    const hx = px(ax + ux * 1.25);
+    const hy = px(ay + uy * 1.25);
+    ctx.save();
+    ctx.globalAlpha = faded(seat) ? 0.35 : 1;
+    ctx.strokeStyle = INK;
+    ctx.fillStyle = INK;
+    ctx.lineWidth = unit * 0.035;
     ctx.beginPath();
-    ctx.moveTo(c, c);
-    const a = [Math.PI, -Math.PI / 2, 0, Math.PI / 2][seat];
-    ctx.arc(c, c, unit * 0.4, a - Math.PI / 4, a + Math.PI / 4);
+    ctx.moveTo(tail[0], tail[1]);
+    ctx.lineTo(hx, hy);
+    ctx.stroke();
+    const s = unit * 0.16;
+    ctx.beginPath();
+    ctx.moveTo(hx + ux * s * 0.6, hy + uy * s * 0.6);
+    ctx.lineTo(hx - ux * s + nx * s * 0.5, hy - uy * s + ny * s * 0.5);
+    ctx.lineTo(hx - ux * s - nx * s * 0.5, hy - uy * s - ny * s * 0.5);
     ctx.closePath();
     ctx.fill();
-  }
-  ctx.lineWidth = unit * 0.05;
-  ctx.strokeStyle = "#3b2614";
-  ctx.beginPath();
-  ctx.arc(c, c, unit * 0.4, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = "#fffaf0";
-  ctx.beginPath();
-  ctx.arc(c, c, unit * 0.12, 0, Math.PI * 2);
-  ctx.fill();
+    for (let f = 0; f < 3; f += 1) {
+      const fx = tail[0] + ux * unit * (0.05 + f * 0.1);
+      const fy = tail[1] + uy * unit * (0.05 + f * 0.1);
+      ctx.beginPath();
+      ctx.moveTo(fx + (nx - ux) * unit * 0.11, fy + (ny - uy) * unit * 0.11);
+      ctx.lineTo(fx, fy);
+      ctx.lineTo(fx + (-nx - ux) * unit * 0.11, fy + (-ny - uy) * unit * 0.11);
+      ctx.stroke();
+    }
+    ctx.restore();
+  });
 
-  // Rahmenlinie
-  ctx.strokeStyle = "rgba(91,63,35,0.6)";
-  ctx.lineWidth = unit * 0.05;
-  roundRect(ctx, unit * 0.12, unit * 0.12, size - unit * 0.24, size - unit * 0.24, unit * 0.3);
-  ctx.stroke();
+  // Schriftzug
+  ctx.fillStyle = INK;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  layout.words.forEach(({ text, at, size: scale = 1 }) => {
+    ctx.font = `${unit * 0.95 * scale}px ${SCRIPT_FONT}`;
+    ctx.fillText(text, px(at[0]), px(at[1]));
+  });
   return canvas;
 }
 
@@ -241,24 +300,6 @@ function drawGlow() {
   return canvas;
 }
 
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-function mix(a, b, t) {
-  return `#${new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString()}`;
-}
-
-function shade(color, amount) {
-  return amount > 0 ? mix(color, "#ffffff", amount) : mix(color, "#000000", -amount);
-}
-
 /** Klassische Spielfigur als Drehkörper */
 function pieceGeometry() {
   const profile = [
@@ -316,7 +357,9 @@ export class BoardScene {
     this.viewTheta = 0;
     this.viewTween = null;
 
+    this.layout = layoutFor(4);
     this.buildLights();
+    this.buildStatic();
     this.buildBoard();
     this.buildPieces();
     this.buildDie();
@@ -329,6 +372,10 @@ export class BoardScene {
     this.resizeObserver.observe(container);
     this.resize();
     this.setView(0, true);
+    // Schreibschrift nachladen und Brett dann neu zeichnen
+    document.fonts?.load(`100px ${SCRIPT_FONT}`).then(() => {
+      if (!this.disposed && this.activeSeats) this.setSurface(this.activeSeats, true);
+    }).catch(() => {});
 
     this.frame = this.frame.bind(this);
     this.raf = requestAnimationFrame(this.frame);
@@ -337,14 +384,14 @@ export class BoardScene {
   buildLights() {
     this.scene.add(new THREE.HemisphereLight(0xfff4e6, 0x3a2a1a, 0.7));
     const sun = new THREE.DirectionalLight(0xfff0dc, 2.4);
-    sun.position.set(6, 14, 8);
+    sun.position.set(7, 16, 9);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     const s = sun.shadow.camera;
-    s.left = -9;
-    s.right = 9;
-    s.top = 9;
-    s.bottom = -9;
+    s.left = -12;
+    s.right = 12;
+    s.top = 12;
+    s.bottom = -12;
     s.near = 1;
     s.far = 40;
     sun.shadow.bias = -0.0004;
@@ -356,43 +403,20 @@ export class BoardScene {
     this.scene.add(rim);
   }
 
-  buildBoard() {
-    const wood = canvasTexture(drawWood());
-    wood.wrapS = THREE.RepeatWrapping;
-    wood.wrapT = THREE.RepeatWrapping;
-    const slab = new THREE.Mesh(
-      new RoundedBoxGeometry(BOARD, 0.5, BOARD, 4, 0.22),
-      new THREE.MeshStandardMaterial({ map: wood, roughness: 0.5, metalness: 0.05 })
-    );
-    slab.position.y = -0.25;
-    slab.receiveShadow = true;
-    slab.castShadow = true;
-    this.scene.add(slab);
-
-    this.surfaceMaterial = new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0 });
-    const surface = new THREE.Mesh(new THREE.PlaneGeometry(SURFACE, SURFACE), this.surfaceMaterial);
-    surface.rotation.x = -Math.PI / 2;
-    surface.position.y = 0.002;
-    surface.receiveShadow = true;
-    this.scene.add(surface);
-    this.surface = surface;
-
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(30, 48), new THREE.ShadowMaterial({ opacity: 0.4 }));
+  /** Teile, die für beide Bretter gleich sind */
+  buildStatic() {
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(40, 48), new THREE.ShadowMaterial({ opacity: 0.4 }));
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.5;
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    // Leuchten unter dem Haus des Spielers am Zug
-    const glowTexture = canvasTexture(drawGlow());
-    this.houseGlows = HOUSES.map((cells, seat) => {
-      const material = new THREE.MeshBasicMaterial({ map: glowTexture, color: SEAT_COLORS[seat], transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
-      const glow = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 3.6), material);
-      glow.rotation.x = -Math.PI / 2;
-      glow.position.copy(world([(cells[0][0] + cells[3][0]) / 2, (cells[0][1] + cells[3][1]) / 2], 0.01));
-      this.scene.add(glow);
-      return glow;
-    });
+    const wood = canvasTexture(drawWood());
+    wood.wrapS = THREE.RepeatWrapping;
+    wood.wrapT = THREE.RepeatWrapping;
+    this.woodMaterial = new THREE.MeshStandardMaterial({ map: wood, roughness: 0.5, metalness: 0.05 });
+    this.surfaceMaterial = new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0 });
+    this.glowTexture = canvasTexture(drawGlow());
 
     // Zielmarke beim Zeigen auf eine Figur
     this.ringGeometry = new THREE.RingGeometry(0.4, 0.56, 48);
@@ -402,12 +426,58 @@ export class BoardScene {
     this.scene.add(this.targetRing);
   }
 
-  setSurface(activeSeats) {
-    const key = [...activeSeats].sort().join(",");
-    if (key === this.seatsKey) return;
+  /** Holzplatte, bedruckte Fläche und Hausleuchten für das aktuelle Layout */
+  buildBoard() {
+    if (this.boardGroup) {
+      this.scene.remove(this.boardGroup);
+      this.boardGroup.traverse((object) => {
+        object.geometry?.dispose();
+        if (object.material && object.material !== this.woodMaterial && object.material !== this.surfaceMaterial) object.material.dispose();
+      });
+    }
+    const layout = this.layout;
+    const group = new THREE.Group();
+    const extent = layout.extent;
+    let slab;
+    let surface;
+    if (layout.shape === "hexagon") {
+      slab = new THREE.Mesh(new THREE.CylinderGeometry(extent + 0.35, extent + 0.35, 0.5, 6), this.woodMaterial);
+      surface = new THREE.Mesh(new THREE.CircleGeometry(extent, 6, Math.PI / 6), this.surfaceMaterial);
+    } else {
+      slab = new THREE.Mesh(new RoundedBoxGeometry(extent * 2 + 0.6, 0.5, extent * 2 + 0.6, 4, 0.22), this.woodMaterial);
+      surface = new THREE.Mesh(new THREE.PlaneGeometry(extent * 2, extent * 2), this.surfaceMaterial);
+    }
+    slab.position.y = -0.25;
+    slab.receiveShadow = true;
+    slab.castShadow = true;
+    surface.rotation.x = -Math.PI / 2;
+    surface.position.y = 0.002;
+    surface.receiveShadow = true;
+    group.add(slab, surface);
+
+    // Leuchten unter dem Haus des Spielers am Zug
+    this.houseGlows = layout.houses.map((cells, seat) => {
+      const material = new THREE.MeshBasicMaterial({ map: this.glowTexture, color: seat === 4 ? 0xffffff : SEAT_COLORS[seat], transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 3.6), material);
+      glow.rotation.x = -Math.PI / 2;
+      const cx = cells.reduce((sum, c) => sum + c[0], 0) / cells.length;
+      const cy = cells.reduce((sum, c) => sum + c[1], 0) / cells.length;
+      glow.position.copy(world([cx, cy], 0.01));
+      group.add(glow);
+      return glow;
+    });
+    this.scene.add(group);
+    this.boardGroup = group;
+    this.seatsKey = "";
+  }
+
+  setSurface(activeSeats, force = false) {
+    this.activeSeats = activeSeats;
+    const key = `${this.layout.board}:${[...activeSeats].sort().join(",")}`;
+    if (key === this.seatsKey && !force) return;
     this.seatsKey = key;
     this.surfaceMaterial.map?.dispose();
-    this.surfaceMaterial.map = canvasTexture(drawSurface(activeSeats));
+    this.surfaceMaterial.map = canvasTexture(drawSurface(this.layout, activeSeats));
     this.surfaceMaterial.needsUpdate = true;
   }
 
@@ -424,7 +494,7 @@ export class BoardScene {
     this.ghost.visible = false;
     this.scene.add(this.ghost);
 
-    for (let seat = 0; seat < SEATS; seat += 1) {
+    for (let seat = 0; seat < MAX_SEATS; seat += 1) {
       this.pieces[seat] = [];
       for (let index = 0; index < PIECES; index += 1) {
         const material = new THREE.MeshPhysicalMaterial({
@@ -433,7 +503,7 @@ export class BoardScene {
           metalness: 0,
           clearcoat: 1,
           clearcoatRoughness: 0.08,
-          emissive: SEAT_COLORS[seat],
+          emissive: seat === 4 ? 0x9a9a9a : SEAT_COLORS[seat],
           emissiveIntensity: 0
         });
         const group = new THREE.Group();
@@ -555,7 +625,7 @@ export class BoardScene {
       this.targetRing.visible = false;
       return;
     }
-    const pos = world(cellOf(hit.seat, hit.index, move.to));
+    const pos = world(cellOf(this.layout, hit.seat, hit.index, move.to));
     this.ghost.position.copy(pos);
     this.ghostBody.material = this.ghostHead.material = this.ghostMaterials[hit.seat];
     this.ghost.visible = true;
@@ -572,7 +642,8 @@ export class BoardScene {
     // Abstand so wählen, dass das ganze Brett ins Bild passt
     const vfov = THREE.MathUtils.degToRad(this.camera.fov);
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
-    const distance = Math.max(6.2 / Math.tan(vfov / 2), 7.1 / Math.tan(hfov / 2));
+    const scale = (this.layout.extent / 5.7) * (this.layout.shape === "hexagon" ? 0.86 : 1);
+    const distance = Math.max((6.2 * scale) / Math.tan(vfov / 2), (7.1 * scale) / Math.tan(hfov / 2));
     this.fitDistance = distance;
     this.controls.minDistance = distance * 0.55;
     this.controls.maxDistance = distance * 1.5;
@@ -584,10 +655,10 @@ export class BoardScene {
 
   /** Kamera zur Seite eines Spielers drehen */
   setView(seat, instant = false) {
-    const theta = SEAT_VIEW[seat] ?? 0;
+    const theta = viewAngle(this.layout, seat);
     const spherical = new THREE.Spherical().setFromVector3(this.camera.position.clone().sub(this.controls.target));
     if (instant) {
-      spherical.set(this.fitDistance ?? 20, 0.66, theta);
+      spherical.set(this.fitDistance ?? 20, this.layout.shape === "hexagon" ? 0.58 : 0.66, theta);
       this.camera.position.setFromSpherical(spherical).add(this.controls.target);
       this.camera.lookAt(this.controls.target);
       return;
@@ -600,6 +671,18 @@ export class BoardScene {
 
   /** Spielstand übernehmen. Wird bei jedem Rendern aufgerufen und tut nur, was sich geändert hat. */
   sync({ game, movable, viewSeat, waiting, canRoll }) {
+    const board = boardSize(game);
+    if (board !== this.layout.board) {
+      // anderes Brett: neu aufbauen, Figuren neu setzen, Kamera neu ausrichten
+      this.layout = layoutFor(board);
+      this.buildBoard();
+      this.pieces.flat().forEach((piece) => {
+        piece.progress = undefined;
+        piece.anim = [];
+      });
+      this.resize();
+      if (this.viewSeat !== undefined) this.setView(this.viewSeat, true);
+    }
     const active = new Set(game.players.map((p) => p.seat));
     this.setSurface(active);
     const turnSeat = game.phase === "over" ? -1 : currentSeat(game);
@@ -634,7 +717,7 @@ export class BoardScene {
 
   syncPieces(game, active) {
     const changes = [];
-    for (let seat = 0; seat < SEATS; seat += 1) {
+    for (let seat = 0; seat < MAX_SEATS; seat += 1) {
       for (let index = 0; index < PIECES; index += 1) {
         const piece = this.pieces[seat][index];
         piece.group.visible = active.has(seat);
@@ -642,7 +725,7 @@ export class BoardScene {
         const progress = game.pieces[seat][index];
         if (piece.progress === undefined) {
           piece.progress = progress;
-          piece.base.copy(world(cellOf(seat, index, progress)));
+          piece.base.copy(world(cellOf(this.layout, seat, index, progress)));
           piece.group.position.copy(piece.base);
           continue;
         }
@@ -664,7 +747,7 @@ export class BoardScene {
     const start = this.time + delay;
     const current = piece.anim.length ? piece.anim[piece.anim.length - 1].to.clone() : piece.group.position.clone().setY(0);
     piece.anim = [];
-    const target = world(cellOf(seat, index, to));
+    const target = world(cellOf(this.layout, seat, index, to));
     let t = start;
     const push = (fromPos, toPos, height, duration, kind) => {
       piece.anim.push({ from: fromPos, to: toPos, height, start: t, duration, kind });
@@ -679,7 +762,7 @@ export class BoardScene {
     } else {
       let prev = current;
       for (let p = from + 1; p <= to; p += 1) {
-        const next = world(cellOf(seat, index, p));
+        const next = world(cellOf(this.layout, seat, index, p));
         push(prev, next, 0.42, HOP_S, p === to ? "land" : "hop");
         prev = next;
       }
@@ -689,11 +772,16 @@ export class BoardScene {
   }
 
   throwDie(value, seat, n) {
-    const theta = SEAT_VIEW[seat] ?? 0;
-    const rotate = (v) => v.applyAxisAngle(UP, theta);
-    // Werfer sitzt (lokal) auf der +Z-Seite, der Würfel rollt in eine freie Ecke gegenüber
-    const startPos = rotate(new THREE.Vector3(rand(-1.5, 1.5), 2.6, 7.4));
-    const endPos = rotate(new THREE.Vector3((Math.random() < 0.5 ? -1 : 1) * 2.5 + rand(-0.3, 0.3), 0, -2.5 + rand(-0.3, 0.3)));
+    const layout = this.layout;
+    const armAngle = layout.armAngle[seat] ?? 0;
+    const out = new THREE.Vector3(Math.cos(armAngle), 0, Math.sin(armAngle));
+    const side = new THREE.Vector3(-out.z, 0, out.x);
+    // Werfer sitzt außen vor seinem Arm, der Würfel rollt auf eine freie Stelle auf der anderen Seite
+    const startPos = out.clone().multiplyScalar(layout.extent + 1.7).addScaledVector(side, rand(-1.5, 1.5)).setY(2.6);
+    const far = layout.rest.filter(([x, y]) => x * out.x + y * out.z < -0.5);
+    const spots = far.length ? far : layout.rest;
+    const [rx, ry] = spots[Math.floor(Math.random() * spots.length)];
+    const endPos = new THREE.Vector3(rx + rand(-0.3, 0.3), 0, ry + rand(-0.3, 0.3));
     const dir = endPos.clone().sub(startPos).setY(0);
     const distance = dir.length();
     dir.normalize();
@@ -801,7 +889,8 @@ export class BoardScene {
 
     if (waiting && turnSeat >= 0) {
       // Würfel wird in der Hand geschüttelt, bis der Server die Zahl schickt
-      const hand = new THREE.Vector3(0, 1.8, 6.6).applyAxisAngle(UP, SEAT_VIEW[turnSeat]);
+      const a = this.layout.armAngle[turnSeat] ?? 0;
+      const hand = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)).multiplyScalar(this.layout.extent + 0.9).setY(1.8);
       die.position.lerp(hand.add(new THREE.Vector3(Math.sin(this.time * 23) * 0.12, Math.sin(this.time * 31) * 0.1, 0)), Math.min(1, dt * 10));
       die.rotateX(dt * 9);
       die.rotateZ(dt * 7);
@@ -815,7 +904,7 @@ export class BoardScene {
 
   updatePieces() {
     const { movable, turnSeat } = this.state;
-    for (let seat = 0; seat < SEATS; seat += 1) {
+    for (let seat = 0; seat < MAX_SEATS; seat += 1) {
       for (let index = 0; index < PIECES; index += 1) {
         const piece = this.pieces[seat][index];
         if (!piece.group.visible) continue;
@@ -886,6 +975,7 @@ export class BoardScene {
   }
 
   dispose() {
+    this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.resizeObserver.disconnect();
     const el = this.renderer.domElement;
