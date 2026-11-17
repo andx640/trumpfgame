@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { BackIcon, Button } from "../../ui";
 import { playFlip, playImpact, playLose, playTurn, playWin } from "../../sound";
-import { COLORS, HOME, SEATS, TRACK, currentSeat, legalMoves } from "./engine";
+import { COLORS, SEATS, TRACK, currentSeat, legalMoves } from "./engine";
+import { GOALS, HOUSES, PATH, cellOf } from "./layout";
+import Board3D from "./Board3D";
 
 // Gemeinsame Ansicht für Partien am Gerät und online: Kopfzeile, Brett, Würfel, Spielerleiste, Ergebnis.
 
@@ -15,32 +17,7 @@ export function Header({ onBack, backLabel = "Zurück", title = "Mensch ärgere 
   );
 }
 
-// Spielbrett: 11 × 11 Raster. Laufbahn im Uhrzeigersinn, Feld 0 ist das Startfeld von Rot.
-const PATH = [
-  [0, 4], [1, 4], [2, 4], [3, 4], [4, 4], [4, 3], [4, 2], [4, 1], [4, 0], [5, 0],
-  [6, 0], [6, 1], [6, 2], [6, 3], [6, 4], [7, 4], [8, 4], [9, 4], [10, 4], [10, 5],
-  [10, 6], [9, 6], [8, 6], [7, 6], [6, 6], [6, 7], [6, 8], [6, 9], [6, 10], [5, 10],
-  [4, 10], [4, 9], [4, 8], [4, 7], [4, 6], [3, 6], [2, 6], [1, 6], [0, 6], [0, 5]
-];
-const GOALS = [
-  [[1, 5], [2, 5], [3, 5], [4, 5]],
-  [[5, 1], [5, 2], [5, 3], [5, 4]],
-  [[9, 5], [8, 5], [7, 5], [6, 5]],
-  [[5, 9], [5, 8], [5, 7], [5, 6]]
-];
-const HOUSES = [
-  [[0, 0], [1, 0], [0, 1], [1, 1]],
-  [[9, 0], [10, 0], [9, 1], [10, 1]],
-  [[9, 9], [10, 9], [9, 10], [10, 10]],
-  [[0, 9], [1, 9], [0, 10], [1, 10]]
-];
 const CELL = 10;
-
-function cellOf(seat, index, progress) {
-  if (progress === HOME) return HOUSES[seat][index];
-  if (progress >= TRACK) return GOALS[seat][progress - TRACK];
-  return PATH[(seat * (TRACK / SEATS) + progress) % TRACK];
-}
 
 function nameOf(game, seat) {
   return game.players.find((p) => p.seat === seat)?.name ?? COLORS[seat].name;
@@ -77,34 +54,42 @@ export function useGameSounds(game, mine) {
  * rolling         – Würfel wird gerade geworfen
  * seatInfo(seat)  – optional { online, you } für die Spielerleiste
  * timeLeft        – optional Sekunden für den eigenen Zug (online)
+ * viewSeat        – von welcher Seite die Kamera aufs Brett schaut
+ * onDiceBusy(b)   – meldet, ob der Würfel gerade noch rollt
  */
-export function Table({ game, controls, rolling, onRoll, onMove, seatInfo, timeLeft = null, busy = false }) {
+export function Table({ game, controls, rolling, onRoll, onMove, seatInfo, timeLeft = null, busy = false, viewSeat, onDiceBusy }) {
   const seat = currentSeat(game);
   const player = game.players[game.current];
   const mineNow = controls(seat);
   const over = game.phase === "over";
-  const moves = legalMoves(game);
-  const movable = mineNow && !busy && game.phase === "move" ? new Set(moves.map((m) => m.index)) : null;
-  const canRoll = !over && mineNow && !rolling && !busy && game.phase === "roll";
 
-  // fremde Würfe kurz anwackeln lassen, damit man sie bemerkt
-  const [shake, setShake] = useState(false);
-  const rollN = game.lastRoll?.n;
+  // Solange der Würfel noch übers Brett rollt, ist die Zahl „geheim“ und es wird nicht gezogen.
+  const rollN = game.lastRoll?.n ?? 0;
+  const [settledN, setSettledN] = useState(rollN);
+  const diceBusy = rollN !== settledN;
   useEffect(() => {
-    if (!rollN) return undefined;
-    setShake(true);
-    const timer = window.setTimeout(() => setShake(false), 320);
-    return () => window.clearTimeout(timer);
-  }, [rollN]);
+    onDiceBusy?.(diceBusy);
+  }, [diceBusy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const moves = legalMoves(game);
+  const movable = mineNow && !busy && !diceBusy && game.phase === "move" ? new Set(moves.map((m) => m.index)) : null;
+  const canRoll = !over && mineNow && !rolling && !busy && !diceBusy && game.phase === "roll";
 
   const status = (() => {
     if (over) return null;
+    if (diceBusy && game.lastRoll) {
+      const rollerYou = seatInfo?.(game.lastRoll.seat)?.you;
+      return <><b className={`madn-name is-${COLORS[game.lastRoll.seat].key}`}>{rollerYou ? "Du" : nameOf(game, game.lastRoll.seat)}</b> {rollerYou ? "würfelst" : "würfelt"} …</>;
+    }
     const you = seatInfo?.(seat)?.you;
     const name = <b className={`madn-name is-${COLORS[seat].key}`}>{you ? "Du" : player.name}</b>;
     const clock = mineNow && timeLeft !== null && timeLeft <= 20 ? <span className="madn-clock"> · {timeLeft}s</span> : null;
+    const rolled = game.lastRoll ? <span className="madn-rolled">{game.lastRoll.value}</span> : null;
     if (rolling) return <>{name} {you ? "würfelst" : "würfelt"} …</>;
     if (game.phase === "move") {
-      return mineNow ? <>{name}: Figur wählen{clock}</> : <>{name} {you ? "ziehst" : "zieht"} …</>;
+      return mineNow
+        ? <>{rolled} {name}: {moves.length === 1 ? "Figur antippen" : "welche Figur?"}{clock}</>
+        : <>{rolled} {name} {you ? "ziehst" : "zieht"} …</>;
     }
     const last = game.lastRoll;
     const missed = last && last.seat !== seat && !game.lastMove
@@ -115,16 +100,39 @@ export function Table({ game, controls, rolling, onRoll, onMove, seatInfo, timeL
     return <>{missed}{name} {you ? "bist" : "ist"} dran: würfeln{tries}{clock}</>;
   })();
 
-  const dieSeat = rolling ? seat : game.lastRoll?.seat ?? seat;
-
   return (
     <section className="madn-game">
       <p className="madn-status" role="status">{status}</p>
       <div className="madn-board-wrap">
-        <BoardSvg game={game} movable={movable} onPick={onMove} />
+        <Board3D
+          game={game}
+          movable={movable}
+          viewSeat={viewSeat ?? seat}
+          waiting={rolling}
+          canRoll={canRoll}
+          onPick={onMove}
+          onRoll={onRoll}
+          onSettled={setSettledN}
+          fallback={<BoardSvg game={game} movable={movable} onPick={onMove} />}
+        />
+        {movable && (
+          <div className="madn-sr-only">
+            {[...movable].map((index) => (
+              <button type="button" key={index} onClick={() => onMove(index)}>{COLORS[seat].name} Figur {index + 1} ziehen</button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="madn-controls">
-        <Die value={game.lastRoll?.value ?? 6} seat={dieSeat} rolling={rolling} shake={shake && !rolling} ready={canRoll} onRoll={onRoll} />
+        <button
+          type="button"
+          className={`madn-roll is-${COLORS[seat].key} ${canRoll ? "is-ready" : ""}`}
+          onClick={canRoll ? onRoll : undefined}
+          disabled={!canRoll}
+        >
+          <DieFace value={diceBusy || !game.lastRoll ? 6 : game.lastRoll.value} />
+          <span>{canRoll ? "Würfeln" : diceBusy || rolling ? "rollt …" : game.lastRoll ? `Gewürfelt: ${game.lastRoll.value}` : "Würfel"}</span>
+        </button>
         <div className="madn-players">
           {game.players.map((p, index) => {
             const info = seatInfo?.(p.seat) ?? {};
@@ -141,29 +149,6 @@ export function Table({ game, controls, rolling, onRoll, onMove, seatInfo, timeL
         </div>
       </div>
     </section>
-  );
-}
-
-function Die({ value, seat, rolling, shake, ready, onRoll }) {
-  const [face, setFace] = useState(value);
-  useEffect(() => {
-    if (!rolling) {
-      setFace(value);
-      return undefined;
-    }
-    const timer = window.setInterval(() => setFace(1 + Math.floor(Math.random() * 6)), 80);
-    return () => window.clearInterval(timer);
-  }, [rolling, value]);
-  return (
-    <button
-      type="button"
-      className={`madn-die is-${COLORS[seat].key} ${rolling ? "is-rolling" : ""} ${shake ? "is-shake" : ""} ${ready ? "is-ready" : ""}`}
-      onClick={ready ? onRoll : undefined}
-      disabled={!ready}
-      aria-label={ready ? "Würfeln" : `Würfel zeigt ${face}`}
-    >
-      <DieFace value={face} />
-    </button>
   );
 }
 

@@ -193,3 +193,25 @@ export function playImpact(tier = 4) {
     boom(ctx, 0, { from: 120, to: 40, gain: 0.3, duration: 0.45 });
   }
 }
+
+/** Würfel schlägt auf dem Brett auf: kurzes, helles Klacken. strength 0..1 */
+export function playDice(strength = 1) {
+  const ctx = audio();
+  if (!ctx) return;
+  const s = Math.max(0.15, Math.min(1, strength));
+  const length = Math.floor(ctx.sampleRate * 0.06);
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < length; i += 1) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 4);
+  const source = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const volume = ctx.createGain();
+  source.buffer = buffer;
+  filter.type = "bandpass";
+  filter.frequency.value = 1800 + Math.random() * 900;
+  filter.Q.value = 1.4;
+  volume.gain.value = 0.5 * s;
+  source.connect(filter).connect(volume).connect(ctx.destination);
+  source.start();
+  tone(ctx, 260 + Math.random() * 60, 0, 0.07, { type: "triangle", gain: 0.08 * s });
+}

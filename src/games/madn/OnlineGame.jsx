@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react";
 import { Button, Loading } from "../../ui";
 import { unlockAudio } from "../../sound";
-import { COLORS, currentSeat, legalMoves } from "./engine";
+import { COLORS, currentSeat } from "./engine";
 import { readName, useOnlineRoom } from "./online";
 import { Confirm, Header, Result, Rules, Table, useGameSounds } from "./table";
 
 // Online-Partie: Raum erstellen oder per Code beitreten, Lobby mit KI-Plätzen, dann spielen.
 // Würfeln und Regeln prüft der Server; dieses Gerät spielt nur den eigenen Platz.
 
-const AUTO_MOVE_MS = 450;
-const MIN_ROLL_MS = 450;
+const MIN_ROLL_MS = 250;
 
 export default function OnlineGame({ onBack, inviteCode = "" }) {
   const online = useOnlineRoom();
@@ -195,16 +194,6 @@ function OnlineTable({ online, onBack }) {
   };
   const doMove = (piece) => online.act("move", { piece });
 
-  // nur ein Zug möglich: von selbst ziehen
-  const moves = myTurn && game.phase === "move" ? legalMoves(game) : [];
-  const single = moves.length === 1 ? moves[0].index : null;
-  const moveKey = `${game.lastRoll?.n}-${single}`;
-  useEffect(() => {
-    if (single === null) return undefined;
-    const timer = window.setTimeout(() => online.act("move", { piece: single }), AUTO_MOVE_MS);
-    return () => window.clearTimeout(timer);
-  }, [moveKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const seatInfo = (seat) => ({ you: seat === self, online: state.seats[seat]?.type === "human" ? state.seats[seat].online : undefined });
 
   return (
@@ -222,6 +211,7 @@ function OnlineTable({ online, onBack }) {
         onMove={doMove}
         seatInfo={seatInfo}
         timeLeft={timeLeft}
+        viewSeat={self}
       />
       <div className="madn-game-note"><ErrorNote online={online} /></div>
 

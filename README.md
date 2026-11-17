@@ -15,7 +15,9 @@ src/games/registry.jsx      Liste aller Spiele
 src/games/trumpf/           Andi Trumpf (Oberfläche; Spiel-API in api/)
 src/games/madn/engine.js    Regeln von Mensch ärgere dich nicht, ohne Oberfläche
 src/games/madn/MadnApp.jsx  Auswahl der Spielart
-src/games/madn/table.jsx    Brett, Würfel, Spielerleiste (für alle Spielarten)
+src/games/madn/table.jsx    Spieltisch: Status, Würfeln-Knopf, Spielerleiste (für alle Spielarten)
+src/games/madn/scene3d.js   3D-Brett mit three.js: Figuren hüpfen Feld für Feld, Würfel rollt übers Brett
+src/games/madn/Board3D.jsx  React-Hülle ums 3D-Brett (ohne WebGL: flaches SVG-Brett)
 src/games/madn/LocalGame.jsx, OnlineGame.jsx, online.js
 api/madn.php                Online-API (Räume, Würfeln, KI auf dem Server)
 api/madn-engine.php         dieselben Regeln wie engine.js, für den Server
