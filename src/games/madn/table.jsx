@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BackIcon, Button } from "../../ui";
 import { playFlip, playImpact, playLose, playTurn, playWin } from "../../sound";
 import { COLORS, SEGMENT, boardSize, currentSeat, legalMoves } from "./engine";
@@ -71,6 +71,26 @@ export function Table({ game, controls, rolling, onRoll, onMove, seatInfo, timeL
     onDiceBusy?.(diceBusy);
   }, [diceBusy]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Das 3D-Bild liegt unter Statuszeile und Bedienleiste; gemessen wird, wie viel davon verdeckt ist.
+  const wrapRef = useRef(null);
+  const topRef = useRef(null);
+  const bottomRef = useRef(null);
+  const [insets, setInsets] = useState({ top: 0, bottom: 0 });
+  useLayoutEffect(() => {
+    const measure = () => {
+      const wrap = wrapRef.current?.getBoundingClientRect();
+      const top = topRef.current?.getBoundingClientRect();
+      const bottom = bottomRef.current?.getBoundingClientRect();
+      if (!wrap || !top || !bottom) return;
+      const next = { top: Math.max(0, Math.round(top.bottom - wrap.top + 6)), bottom: Math.max(0, Math.round(wrap.bottom - bottom.top + 6)) };
+      setInsets((old) => (old.top === next.top && old.bottom === next.bottom ? old : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    [wrapRef, topRef, bottomRef].forEach((ref) => ref.current && observer.observe(ref.current));
+    return () => observer.disconnect();
+  }, []);
+
   const moves = legalMoves(game);
   const movable = mineNow && !busy && !diceBusy && game.phase === "move" ? new Set(moves.map((m) => m.index)) : null;
   const canRoll = !over && mineNow && !rolling && !busy && !diceBusy && game.phase === "roll";
@@ -102,8 +122,8 @@ export function Table({ game, controls, rolling, onRoll, onMove, seatInfo, timeL
 
   return (
     <section className="madn-game">
-      <p className="madn-status" role="status">{status}</p>
-      <div className="madn-board-wrap">
+      <p className="madn-status" role="status" ref={topRef}>{status}</p>
+      <div className="madn-board-wrap" ref={wrapRef} style={{ "--inset-top": `${insets.top}px`, "--inset-bottom": `${insets.bottom}px` }}>
         <Board3D
           game={game}
           movable={movable}
@@ -113,6 +133,7 @@ export function Table({ game, controls, rolling, onRoll, onMove, seatInfo, timeL
           onPick={onMove}
           onRoll={onRoll}
           onSettled={setSettledN}
+          insets={insets}
           fallback={<BoardSvg game={game} movable={movable} onPick={onMove} />}
         />
         {movable && (
@@ -123,7 +144,7 @@ export function Table({ game, controls, rolling, onRoll, onMove, seatInfo, timeL
           </div>
         )}
       </div>
-      <div className="madn-controls">
+      <div className="madn-controls" ref={bottomRef}>
         <button
           type="button"
           className={`madn-roll is-${COLORS[seat].key} ${canRoll ? "is-ready" : ""}`}

@@ -6,7 +6,7 @@ import { BoardScene, webglAvailable } from "./scene3d";
  * 3D-Brett. Würfelt jemand (game.lastRoll.n ändert sich), fliegt der Würfel übers Brett;
  * onSettled(n) meldet, wann er liegt. Ohne WebGL wird fallback angezeigt.
  */
-export default function Board3D({ game, movable, viewSeat, waiting, canRoll, onPick, onRoll, onSettled, fallback }) {
+export default function Board3D({ game, movable, viewSeat, waiting, canRoll, onPick, onRoll, onSettled, fallback, insets }) {
   const hostRef = useRef(null);
   const sceneRef = useRef(null);
   const handlers = useRef({});
@@ -39,6 +39,10 @@ export default function Board3D({ game, movable, viewSeat, waiting, canRoll, onP
   useEffect(() => {
     sceneRef.current?.sync({ game, movable, viewSeat, waiting, canRoll });
   });
+
+  useEffect(() => {
+    if (insets) sceneRef.current?.setInsets(insets.top, insets.bottom);
+  }, [insets?.top, insets?.bottom, failed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ohne 3D gibt es keine Würfel-Animation: Wurf sofort als gelandet melden
   const rollN = game.lastRoll?.n ?? 0;

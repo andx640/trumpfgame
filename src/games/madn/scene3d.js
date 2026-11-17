@@ -2,10 +2,12 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
+import letterFont from "./letters.typeface.json";
 import "@fontsource/pinyon-script/latin-400.css";
 import { HOME, MAX_SEATS, PIECES, SEGMENT, boardSize, currentSeat, legalMoves } from "./engine";
 import { cellOf, layoutFor } from "./layout";
-import { ANISOTROPY, SHADOW_MAP_SIZE, createRenderer, disposeRenderer } from "../../three-setup";
+import { ANISOTROPY, LOW_POWER, SHADOW_MAP_SIZE, createRenderer, disposeRenderer } from "../../three-setup";
 
 export { webglAvailable } from "../../three-setup";
 
@@ -16,6 +18,7 @@ export { webglAvailable } from "../../three-setup";
 const SEAT_CSS = ["#e3241b", "#1d6fd8", "#1c9a3c", "#f6d21a", "#1d1d1d", "#8b3fb3"];
 const SEAT_COLORS = SEAT_CSS.map((c) => new THREE.Color(c).getHex());
 const BOARD_YELLOW = "#f9e86a";
+const SURFACE_YELLOW = "#d9a300";
 const INK = "#111111";
 const SCRIPT_FONT = '"Pinyon Script", "Brush Script MT", cursive';
 const DIE = 0.8;
@@ -54,184 +57,13 @@ function makeCanvas(size) {
   return [canvas, canvas.getContext("2d")];
 }
 
-function hexPath(ctx, cx, cy, r) {
-  ctx.beginPath();
-  for (let i = 0; i < 6; i += 1) {
-    const a = Math.PI / 6 + (i * Math.PI) / 3;
-    const x = cx + Math.cos(a) * r;
-    const y = cy + Math.sin(a) * r;
-    if (i) ctx.lineTo(x, y);
-    else ctx.moveTo(x, y);
-  }
-  ctx.closePath();
-}
-
-/** Bedruckte Oberseite im Stil des klassischen Bretts: gelb, weiße Felder, A/B/a–d, Pfeile, Schriftzug */
-function drawSurface(layout, activeSeats) {
-  const size = 2048;
+/** Schriftzug „Mensch ärgere Dich nicht“ als durchsichtiger Aufdruck (nur die Schreibschrift) */
+function drawWords(layout) {
+  const size = LOW_POWER ? 1024 : 2048;
   const [canvas, ctx] = makeCanvas(size);
   const extent = layout.extent;
   const unit = size / (extent * 2);
   const px = (v) => (v + extent) * unit;
-  const P = ([x, y]) => [px(x), px(y)];
-  const faded = (seat) => !activeSeats.has(seat);
-  const textOn = (seat) => (seat === 3 ? INK : "#ffffff");
-  const upright = (seat) => layout.armAngle[seat] - Math.PI / 2;
-
-  ctx.fillStyle = BOARD_YELLOW;
-  ctx.fillRect(0, 0, size, size);
-  for (let i = 0; i < 7000; i += 1) {
-    ctx.fillStyle = `rgba(${Math.random() < 0.5 ? "150,120,20" : "255,255,255"},${Math.random() * 0.05})`;
-    ctx.fillRect(Math.random() * size, Math.random() * size, rand(1, 4), rand(1, 4));
-  }
-
-  // Rahmenlinie
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = unit * 0.06;
-  if (layout.shape === "hexagon") hexPath(ctx, size / 2, size / 2, (extent - 0.35) * unit);
-  else {
-    ctx.beginPath();
-    ctx.rect(unit * 0.3, unit * 0.3, size - unit * 0.6, size - unit * 0.6);
-  }
-  ctx.stroke();
-
-  // Laufweg als dicke schwarze Verbindungen
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = unit * 0.1;
-  ctx.lineJoin = "round";
-  ctx.beginPath();
-  layout.path.forEach((cell, i) => {
-    const [x, y] = P(cell);
-    if (i) ctx.lineTo(x, y);
-    else ctx.moveTo(x, y);
-  });
-  ctx.closePath();
-  ctx.stroke();
-
-  const letter = (text, x, y, seat, radius, angle) => {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    ctx.fillStyle = textOn(seat);
-    ctx.font = `700 ${radius * 1.3}px Barlow, Arial, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, 0, radius * 0.08);
-    ctx.restore();
-  };
-
-  const field = (cell, fill, radius, alpha = 1) => {
-    const [x, y] = P(cell);
-    const r = radius * unit;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
-    // leichte Mulde
-    const hole = ctx.createRadialGradient(x - r * 0.25, y - r * 0.3, r * 0.2, x, y, r);
-    hole.addColorStop(0, "rgba(255,255,255,0.18)");
-    hole.addColorStop(0.7, "rgba(0,0,0,0)");
-    hole.addColorStop(1, "rgba(0,0,0,0.16)");
-    ctx.fillStyle = hole;
-    ctx.fill();
-    ctx.lineWidth = unit * 0.055;
-    ctx.strokeStyle = INK;
-    ctx.stroke();
-    ctx.restore();
-    return [x, y, r];
-  };
-
-  layout.path.forEach((cell, i) => {
-    const seat = i % SEGMENT === 0 ? i / SEGMENT : null;
-    if (seat === null) {
-      field(cell, "#ffffff", 0.38);
-      return;
-    }
-    const alpha = faded(seat) ? 0.35 : 1;
-    const [x, y, r] = field(cell, SEAT_CSS[seat], 0.38, alpha);
-    ctx.globalAlpha = alpha;
-    letter("A", x, y, seat, r, upright(seat));
-    ctx.globalAlpha = 1;
-  });
-
-  layout.goals.forEach((cells, seat) => cells.forEach((cell, i) => {
-    const alpha = faded(seat) ? 0.3 : 1;
-    const [x, y, r] = field(cell, SEAT_CSS[seat], 0.3, alpha);
-    ctx.globalAlpha = alpha;
-    letter("abcd"[i], x, y, seat, r, upright(seat));
-    ctx.globalAlpha = 1;
-  }));
-
-  layout.houses.forEach((cells, seat) => {
-    const alpha = faded(seat) ? 0.3 : 1;
-    cells.forEach((cell) => field(cell, SEAT_CSS[seat], 0.34, alpha));
-    const cx = cells.reduce((sum, c) => sum + c[0], 0) / cells.length;
-    const cy = cells.reduce((sum, c) => sum + c[1], 0) / cells.length;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(px(cx), px(cy));
-    ctx.rotate(upright(seat));
-    ctx.fillStyle = INK;
-    ctx.font = `800 ${unit * 0.32}px Barlow, Arial, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("B", 0, 0);
-    ctx.restore();
-  });
-
-  // Pfeile mit Federn neben jedem Startfeld zeigen die Laufrichtung
-  layout.armAngle.forEach((angle, seat) => {
-    const start = layout.path[seat * SEGMENT];
-    const next = layout.path[seat * SEGMENT + 1];
-    const dx = next[0] - start[0];
-    const dy = next[1] - start[1];
-    const len = Math.hypot(dx, dy);
-    const ux = dx / len;
-    const uy = dy / len;
-    // seitlich nach außen, weg vom eigenen Ziel
-    const goal = layout.goals[seat][0];
-    let nx = -uy;
-    let ny = ux;
-    if ((goal[0] - start[0]) * nx + (goal[1] - start[1]) * ny > 0) {
-      nx = -nx;
-      ny = -ny;
-    }
-    const ax = start[0] + nx * 0.75;
-    const ay = start[1] + ny * 0.75;
-    const tail = [px(ax - ux * 0.35), px(ay - uy * 0.35)];
-    const hx = px(ax + ux * 1.25);
-    const hy = px(ay + uy * 1.25);
-    ctx.save();
-    ctx.globalAlpha = faded(seat) ? 0.35 : 1;
-    ctx.strokeStyle = INK;
-    ctx.fillStyle = INK;
-    ctx.lineWidth = unit * 0.035;
-    ctx.beginPath();
-    ctx.moveTo(tail[0], tail[1]);
-    ctx.lineTo(hx, hy);
-    ctx.stroke();
-    const s = unit * 0.16;
-    ctx.beginPath();
-    ctx.moveTo(hx + ux * s * 0.6, hy + uy * s * 0.6);
-    ctx.lineTo(hx - ux * s + nx * s * 0.5, hy - uy * s + ny * s * 0.5);
-    ctx.lineTo(hx - ux * s - nx * s * 0.5, hy - uy * s - ny * s * 0.5);
-    ctx.closePath();
-    ctx.fill();
-    for (let f = 0; f < 3; f += 1) {
-      const fx = tail[0] + ux * unit * (0.05 + f * 0.1);
-      const fy = tail[1] + uy * unit * (0.05 + f * 0.1);
-      ctx.beginPath();
-      ctx.moveTo(fx + (nx - ux) * unit * 0.11, fy + (ny - uy) * unit * 0.11);
-      ctx.lineTo(fx, fy);
-      ctx.lineTo(fx + (-nx - ux) * unit * 0.11, fy + (-ny - uy) * unit * 0.11);
-      ctx.stroke();
-    }
-    ctx.restore();
-  });
-
-  // Schriftzug
   ctx.fillStyle = INK;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -240,6 +72,147 @@ function drawSurface(layout, activeSeats) {
     ctx.fillText(text, px(at[0]), px(at[1]));
   });
   return canvas;
+}
+
+const LETTER_FONT = new FontLoader().parse(letterFont);
+const letterCache = new Map();
+function letterGeometry(char) {
+  if (!letterCache.has(char)) {
+    const geometry = new THREE.ShapeGeometry(LETTER_FONT.generateShapes(char, 1), 3);
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox;
+    // Mitte des Buchstabens in den Ursprung, flach aufs Brett legen
+    geometry.translate(-(box.max.x + box.min.x) / 2, -(box.max.y + box.min.y) / 2, 0);
+    geometry.rotateX(-Math.PI / 2);
+    letterCache.set(char, geometry);
+  }
+  return letterCache.get(char);
+}
+
+/**
+ * Bedruckung des Bretts aus einzelnen Teilen: Laufweg, Felder mit schwarzem Rand,
+ * Buchstaben A/B/a–d, Pfeile und Rahmenlinie. Farben nicht mitspielender Plätze sind blass.
+ */
+function buildPrint(layout, activeSeats) {
+  const group = new THREE.Group();
+  const yellow = new THREE.Color(SURFACE_YELLOW);
+  const ink = new THREE.MeshStandardMaterial({ color: INK, roughness: 0.55 });
+  const tint = (css, seat) => {
+    const color = new THREE.Color(css);
+    return seat === undefined || activeSeats.has(seat) ? color : color.lerp(yellow, 0.62);
+  };
+  const flat = (geometry, material, x, z, y, angle = 0) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    mesh.rotation.y = angle;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  };
+
+  // Laufweg: schwarze Balken zwischen den Feldern
+  const bar = new THREE.BoxGeometry(1, 0.012, 0.1);
+  const bars = new THREE.InstancedMesh(bar, ink, layout.path.length);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  layout.path.forEach((cell, i) => {
+    const next = layout.path[(i + 1) % layout.path.length];
+    const dx = next[0] - cell[0];
+    const dy = next[1] - cell[1];
+    q.setFromAxisAngle(UP, -Math.atan2(dy, dx));
+    m.compose(new THREE.Vector3((cell[0] + next[0]) / 2, 0.006, (cell[1] + next[1]) / 2), q, new THREE.Vector3(Math.hypot(dx, dy), 1, 1));
+    bars.setMatrixAt(i, m);
+  });
+  bars.receiveShadow = true;
+  group.add(bars);
+
+  // Felder: Scheibe in Feldfarbe, darum ein schwarzer Wulst
+  const fields = [];
+  const add = (cell, radius, color) => fields.push({ cell, radius, color });
+  layout.path.forEach((cell, i) => {
+    const seat = i % SEGMENT === 0 ? i / SEGMENT : undefined;
+    add(cell, 0.38, seat === undefined ? new THREE.Color("#ffffff") : tint(SEAT_CSS[seat], seat));
+  });
+  layout.goals.forEach((cells, seat) => cells.forEach((cell) => add(cell, 0.31, tint(SEAT_CSS[seat], seat))));
+  layout.houses.forEach((cells, seat) => cells.forEach((cell) => add(cell, 0.35, tint(SEAT_CSS[seat], seat))));
+
+  const disc = new THREE.CylinderGeometry(1, 1, 0.02, 40);
+  disc.translate(0, 0.01, 0);
+  const rim = new THREE.TorusGeometry(1, 0.075, 8, 48);
+  rim.rotateX(Math.PI / 2);
+  rim.translate(0, 0.02, 0);
+  const discs = new THREE.InstancedMesh(disc, new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0 }), fields.length);
+  const rims = new THREE.InstancedMesh(rim, ink, fields.length);
+  fields.forEach(({ cell, radius, color }, i) => {
+    m.makeScale(radius, 1, radius).setPosition(cell[0], 0, cell[1]);
+    discs.setMatrixAt(i, m);
+    discs.setColorAt(i, color);
+    // Wulst: Ring mit festem Querschnitt, nur der Radius wächst
+    m.makeScale(radius, radius > 0.34 ? 0.5 / radius * 0.38 : 0.5, radius).setPosition(cell[0], 0, cell[1]);
+    rims.setMatrixAt(i, m);
+  });
+  discs.receiveShadow = rims.receiveShadow = true;
+  group.add(discs, rims);
+
+  // Buchstaben
+  const letterMaterials = new Map();
+  const letterMaterial = (seat) => {
+    const color = seat === 3 ? INK : "#ffffff";
+    const key = `${color}-${activeSeats.has(seat)}`;
+    if (!letterMaterials.has(key)) {
+      letterMaterials.set(key, new THREE.MeshStandardMaterial({ color, roughness: 0.5, transparent: !activeSeats.has(seat), opacity: activeSeats.has(seat) ? 1 : 0.45 }));
+    }
+    return letterMaterials.get(key);
+  };
+  const upright = (seat) => -(layout.armAngle[seat] - Math.PI / 2);
+  const letter = (char, cell, scale, material, angle) => {
+    const mesh = flat(letterGeometry(char), material, cell[0], cell[1], 0.024, angle);
+    mesh.scale.set(scale, 1, scale);
+  };
+  layout.armAngle.forEach((_, seat) => {
+    letter("A", layout.path[seat * SEGMENT], 0.42, letterMaterial(seat), upright(seat));
+    layout.goals[seat].forEach((cell, i) => letter("abcd"[i], cell, 0.34, letterMaterial(seat), upright(seat)));
+    const cells = layout.houses[seat];
+    const center = [cells.reduce((s, c) => s + c[0], 0) / cells.length, cells.reduce((s, c) => s + c[1], 0) / cells.length];
+    letter("B", center, 0.32, activeSeats.has(seat) ? ink : letterMaterial(4), upright(seat));
+  });
+
+  // Pfeile neben jedem Startfeld zeigen die Laufrichtung
+  const arrowShape = new THREE.Shape();
+  [[-0.5, -0.03], [0.32, -0.03], [0.32, -0.13], [0.6, 0], [0.32, 0.13], [0.32, 0.03], [-0.5, 0.03]].forEach(([x, y], i) => (i ? arrowShape.lineTo(x, y) : arrowShape.moveTo(x, y)));
+  const arrow = new THREE.ShapeGeometry(arrowShape);
+  arrow.rotateX(-Math.PI / 2);
+  const fade = new THREE.MeshStandardMaterial({ color: INK, roughness: 0.55, transparent: true, opacity: 0.3 });
+  layout.armAngle.forEach((_, seat) => {
+    const start = layout.path[seat * SEGMENT];
+    const next = layout.path[seat * SEGMENT + 1];
+    const dx = next[0] - start[0];
+    const dy = next[1] - start[1];
+    const len = Math.hypot(dx, dy);
+    const ux = dx / len;
+    const uy = dy / len;
+    const goal = layout.goals[seat][0];
+    let nx = -uy;
+    let ny = ux;
+    if ((goal[0] - start[0]) * nx + (goal[1] - start[1]) * ny > 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    const mesh = flat(arrow, activeSeats.has(seat) ? ink : fade, start[0] + nx * 0.75 + ux * 0.45, start[1] + ny * 0.75 + uy * 0.45, 0.004, -Math.atan2(uy, ux));
+    mesh.scale.set(1.5, 1, 1.5);
+  });
+
+  // Rahmenlinie
+  const extent = layout.extent - 0.3;
+  const corners = layout.shape === "hexagon"
+    ? Array.from({ length: 6 }, (_, i) => [Math.cos(Math.PI / 6 + (i * Math.PI) / 3) * (extent - 0.05), Math.sin(Math.PI / 6 + (i * Math.PI) / 3) * (extent - 0.05)])
+    : [[-extent, -extent], [extent, -extent], [extent, extent], [-extent, extent]];
+  corners.forEach((a, i) => {
+    const b = corners[(i + 1) % corners.length];
+    const line = flat(bar, ink, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0.006, -Math.atan2(b[1] - a[1], b[0] - a[0]));
+    line.scale.set(Math.hypot(b[0] - a[0], b[1] - a[1]) + 0.06, 1, 0.6);
+  });
+  return group;
 }
 
 function drawWood() {
@@ -353,6 +326,15 @@ export class BoardScene {
     this.controls.minPolarAngle = 0.12;
     this.controls.maxPolarAngle = 1.2;
     this.controls.rotateSpeed = 0.7;
+    // eigene Kameraführung pausiert die Automatik
+    this.userUntil = 0;
+    this.holdUntil = 0;
+    this.controls.addEventListener("start", () => {
+      this.userUntil = Infinity;
+    });
+    this.controls.addEventListener("end", () => {
+      this.userUntil = this.time + 4;
+    });
     this.viewTheta = 0;
     this.viewTween = null;
 
@@ -414,7 +396,7 @@ export class BoardScene {
     wood.wrapS = THREE.RepeatWrapping;
     wood.wrapT = THREE.RepeatWrapping;
     this.woodMaterial = new THREE.MeshStandardMaterial({ map: wood, roughness: 0.5, metalness: 0.05 });
-    this.surfaceMaterial = new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0 });
+    this.surfaceMaterial = new THREE.MeshStandardMaterial({ color: SURFACE_YELLOW, roughness: 0.7, metalness: 0 });
     this.glowTexture = canvasTexture(drawGlow());
 
     // Zielmarke beim Zeigen auf eine Figur
@@ -428,6 +410,7 @@ export class BoardScene {
   /** Holzplatte, bedruckte Fläche und Hausleuchten für das aktuelle Layout */
   buildBoard() {
     if (this.boardGroup) {
+      this.clearPrint();
       this.scene.remove(this.boardGroup);
       this.boardGroup.traverse((object) => {
         object.geometry?.dispose();
@@ -470,14 +453,40 @@ export class BoardScene {
     this.seatsKey = "";
   }
 
+  clearPrint() {
+    if (!this.printGroup) return;
+    this.boardGroup.remove(this.printGroup);
+    const done = new Set(letterCache.values()); // Buchstaben werden wiederverwendet
+    this.printGroup.traverse((object) => {
+      [object.geometry, object.material].forEach((item) => {
+        if (!item || done.has(item)) return;
+        done.add(item);
+        item.map?.dispose();
+        item.dispose();
+      });
+    });
+    this.printGroup = null;
+  }
+
+  /** Bedruckung (Felder, Buchstaben, Pfeile, Schriftzug) für die mitspielenden Farben aufbauen */
   setSurface(activeSeats, force = false) {
     this.activeSeats = activeSeats;
     const key = `${this.layout.board}:${[...activeSeats].sort().join(",")}`;
     if (key === this.seatsKey && !force) return;
     this.seatsKey = key;
-    this.surfaceMaterial.map?.dispose();
-    this.surfaceMaterial.map = canvasTexture(drawSurface(this.layout, activeSeats));
-    this.surfaceMaterial.needsUpdate = true;
+    this.clearPrint();
+    const print = buildPrint(this.layout, activeSeats);
+    const extent = this.layout.extent;
+    const words = new THREE.Mesh(
+      new THREE.PlaneGeometry(extent * 2, extent * 2),
+      new THREE.MeshStandardMaterial({ map: canvasTexture(drawWords(this.layout)), transparent: true, roughness: 0.6, depthWrite: false })
+    );
+    words.rotation.x = -Math.PI / 2;
+    words.position.y = 0.003;
+    words.receiveShadow = true;
+    print.add(words);
+    this.boardGroup.add(print);
+    this.printGroup = print;
   }
 
   buildPieces() {
@@ -637,12 +646,16 @@ export class BoardScene {
     const width = this.container.clientWidth || 1;
     const height = this.container.clientHeight || 1;
     this.renderer.setSize(width, height, false);
+    // Bedienelemente liegen oben und unten über dem Bild: das Brett im freien Bereich dazwischen zentrieren
+    const { top, bottom } = this.insets ?? { top: 0, bottom: 0 };
+    const avail = Math.max(120, height - top - bottom);
     this.camera.aspect = width / height;
+    this.camera.setViewOffset(width, height, 0, (bottom - top) / 2, width, height);
     // Abstand so wählen, dass das ganze Brett ins Bild passt
-    const vfov = THREE.MathUtils.degToRad(this.camera.fov);
-    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
+    const vfov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) * (avail / height));
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * (width / avail));
     const scale = (this.layout.extent / 5.7) * (this.layout.shape === "hexagon" ? 0.86 : 1);
-    const distance = Math.max((6.2 * scale) / Math.tan(vfov / 2), (7.1 * scale) / Math.tan(hfov / 2));
+    const distance = Math.max((6.9 * scale) / Math.tan(vfov / 2), (6.7 * scale) / Math.tan(hfov / 2));
     this.fitDistance = distance;
     this.controls.minDistance = distance * 0.55;
     this.controls.maxDistance = distance * 1.5;
@@ -652,12 +665,21 @@ export class BoardScene {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Platz, den Kopf- und Fußleiste oben und unten verdecken (in CSS-Pixeln) */
+  setInsets(top, bottom) {
+    if (this.insets && this.insets.top === top && this.insets.bottom === bottom) return;
+    this.insets = { top, bottom };
+    this.resize();
+  }
+
   /** Kamera zur Seite eines Spielers drehen */
   setView(seat, instant = false) {
     const theta = viewAngle(this.layout, seat);
     const spherical = new THREE.Spherical().setFromVector3(this.camera.position.clone().sub(this.controls.target));
     if (instant) {
-      spherical.set(this.fitDistance ?? 20, this.layout.shape === "hexagon" ? 0.58 : 0.66, theta);
+      // Hochformat: steiler von oben, damit das Brett die Höhe nutzt
+      const portrait = this.camera.aspect < 0.85 || (this.insets && this.container.clientWidth / Math.max(1, this.container.clientHeight - this.insets.top - this.insets.bottom) < 0.85);
+      spherical.set(this.fitDistance ?? 20, (this.layout.shape === "hexagon" ? 0.58 : 0.66) * (portrait ? 0.62 : 1), theta);
       this.camera.position.setFromSpherical(spherical).add(this.controls.target);
       this.camera.lookAt(this.controls.target);
       return;
@@ -946,18 +968,58 @@ export class BoardScene {
     }
   }
 
+  /**
+   * Kameraführung: Würfelt jemand, schaut die Kamera dem Würfel nach; zieht eine Figur,
+   * fährt sie näher heran und folgt ihr; danach zurück zum ganzen Brett.
+   * Dreht oder zoomt jemand selbst, hält sich die Automatik ein paar Sekunden zurück.
+   */
+  direct(dt) {
+    const controls = this.controls;
+    const offset = this.camera.position.clone().sub(controls.target);
+    const spherical = new THREE.Spherical().setFromVector3(offset);
+
+    if (this.viewTween) {
+      const tw = this.viewTween;
+      const k = Math.min(1, (this.time - tw.start) / tw.duration);
+      spherical.theta = tw.from + tw.delta * easeInOut(k);
+      if (k >= 1) this.viewTween = null;
+    }
+
+    if (this.time >= this.userUntil) {
+      const focus = new THREE.Vector3();
+      let zoom = 1;
+      const movers = this.pieces.flat().filter((p) => p.group.visible && p.anim.length && this.time >= p.anim[0].start);
+      if (this.throwPlan) {
+        focus.copy(this.die.position).setY(0).multiplyScalar(0.5);
+        zoom = 0.9;
+      } else if (movers.length) {
+        movers.forEach((p) => focus.add(p.group.position));
+        focus.divideScalar(movers.length).setY(0);
+        zoom = 0.78;
+        this.holdUntil = this.time + 0.9;
+        this.holdFocus = focus.clone();
+      } else if (this.time < this.holdUntil && this.holdFocus) {
+        focus.copy(this.holdFocus);
+        zoom = 0.78;
+      }
+      // nicht zu weit aus der Mitte, damit das Brett im Bild bleibt
+      const limit = this.layout.extent * 0.35;
+      if (focus.length() > limit) focus.setLength(limit);
+      const k = 1 - Math.exp(-dt * (zoom < 1 ? 2.6 : 1.6));
+      controls.target.lerp(focus, k);
+      spherical.radius += ((this.fitDistance ?? spherical.radius) * zoom - spherical.radius) * k;
+    }
+
+    this.camera.position.setFromSpherical(spherical).add(controls.target);
+    this.camera.lookAt(controls.target);
+  }
+
   frame() {
     this.raf = requestAnimationFrame(this.frame);
     const dt = Math.min(0.1, this.clock.getDelta());
     this.time += dt;
 
-    if (this.viewTween) {
-      const tw = this.viewTween;
-      const k = Math.min(1, (this.time - tw.start) / tw.duration);
-      const spherical = new THREE.Spherical(tw.radius, tw.phi, tw.from + tw.delta * easeInOut(k));
-      this.camera.position.setFromSpherical(spherical).add(this.controls.target);
-      if (k >= 1) this.viewTween = null;
-    }
+    this.direct(dt);
     this.controls.enabled = !this.viewTween;
     this.controls.update();
 

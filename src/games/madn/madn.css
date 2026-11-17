@@ -686,3 +686,225 @@
   .madn-die.is-shake,
   .madn-roll.is-ready { animation: none; }
 }
+
+/* ----- Spieltisch: ganzer Bildschirm in Brettgelb, Brett in der Mitte ----- */
+.madn-shell:has(.madn-game) {
+  --madn-ink: #1a1405;
+  --madn-glass: rgba(26, 20, 5, 0.82);
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: calc(10px + var(--safe-bottom));
+  color: var(--madn-ink);
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 48%, rgba(255, 250, 200, 0.55), transparent 70%),
+    radial-gradient(ellipse at 50% 50%, #f6d63c 0%, #f0c21f 55%, #d99d0c 100%);
+}
+
+/* feine Papierstruktur über dem Gelb */
+.madn-shell:has(.madn-game)::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0.35;
+  background-image:
+    repeating-radial-gradient(circle at 20% 30%, rgba(120, 80, 0, 0.05) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.06) 0 2px, transparent 2px 5px);
+  mix-blend-mode: multiply;
+}
+
+.madn-shell:has(.madn-game) > * {
+  position: relative;
+  z-index: 1;
+}
+
+.madn-shell:has(.madn-game) .madn-title {
+  color: var(--madn-ink);
+  font-family: "Pinyon Script", "Brush Script MT", cursive;
+  font-size: clamp(24px, 6vw, 34px);
+  font-style: normal;
+  font-weight: 400;
+}
+
+.madn-shell:has(.madn-game) .madn-header .btn {
+  color: #fff;
+  background: var(--madn-glass);
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(90, 60, 0, 0.3);
+}
+
+.madn-shell:has(.madn-game) .madn-error {
+  color: #fff;
+  background: #b3261e;
+}
+
+.madn-game {
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+}
+
+.madn-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  color: #fff;
+  background: var(--madn-glass);
+  box-shadow: 0 6px 18px rgba(90, 60, 0, 0.28);
+  font-size: 15px;
+}
+
+.madn-status:empty {
+  visibility: hidden;
+}
+
+/* Das 3D-Bild füllt den ganzen Bildschirm; Kopfzeile, Status und Bedienleiste liegen darüber */
+.madn-shell:has(.madn-game) > .madn-game {
+  position: static;
+  z-index: auto;
+}
+
+.madn-shell:has(.madn-game) > .madn-header,
+.madn-status,
+.madn-controls,
+.madn-game .madn-error {
+  position: relative;
+  z-index: 2;
+}
+
+.madn-controls {
+  margin-top: auto;
+}
+
+.madn-board-wrap {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: auto;
+  min-width: 0;
+}
+
+.madn-board-wrap .madn-board3d {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+  background: none;
+}
+
+.madn-board-wrap > .madn-board {
+  position: absolute;
+  top: var(--inset-top, 0);
+  left: 50%;
+  width: auto;
+  max-width: calc(100% - 2 * var(--gutter));
+  height: calc(100% - var(--inset-top, 0px) - var(--inset-bottom, 0px));
+  transform: translateX(-50%);
+}
+
+/* Spielerfarben auf Gelb: Namen bleiben auf dunklem Grund */
+.madn-status .madn-name {
+  color: color-mix(in srgb, var(--c) 80%, #fff);
+}
+
+.madn-status .madn-name.is-black {
+  color: #d4d4d8;
+}
+
+.madn-controls {
+  gap: 10px 14px;
+}
+
+.madn-roll {
+  min-height: 60px;
+  padding: 8px 24px 8px 10px;
+  border: 0;
+  color: rgba(255, 255, 255, 0.7);
+  background: var(--madn-glass);
+  box-shadow: 0 8px 22px rgba(90, 60, 0, 0.3);
+}
+
+.madn-roll svg {
+  width: 42px;
+  height: 42px;
+}
+
+.madn-roll.is-ready {
+  color: #fff;
+  background: var(--c);
+  box-shadow: 0 8px 22px rgba(90, 60, 0, 0.35), inset 0 -3px 0 rgba(0, 0, 0, 0.2), inset 0 2px 0 rgba(255, 255, 255, 0.35);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.madn-roll.is-ready.is-yellow {
+  color: var(--madn-ink);
+  text-shadow: none;
+}
+
+.madn-chip {
+  border: 0;
+  color: #fff;
+  background: var(--madn-glass);
+  box-shadow: 0 3px 10px rgba(90, 60, 0, 0.22);
+}
+
+.madn-chip i {
+  width: 12px;
+  height: 12px;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.85);
+}
+
+.madn-chip.is-current {
+  background: var(--c);
+  box-shadow: 0 0 0 2px #fff, 0 4px 14px rgba(90, 60, 0, 0.35);
+}
+
+.madn-chip.is-current.is-yellow {
+  color: var(--madn-ink);
+}
+
+.madn-chip small {
+  color: inherit;
+  opacity: 0.75;
+}
+
+.madn-game-note {
+  position: relative;
+  z-index: 1;
+}
+
+/* 2D-Brett im klassischen Look: gelbe Fläche, weiße Felder, schwarze Ränder */
+.madn-board-wrap .madn-board-bg {
+  fill: #f6d63c;
+  stroke: #6e4220;
+  stroke-width: 1.4;
+  filter: drop-shadow(0 3px 4px rgba(90, 60, 0, 0.35));
+}
+
+.madn-board-wrap .madn-path-line {
+  stroke: var(--madn-ink);
+  stroke-width: 1;
+}
+
+.madn-board-wrap .madn-field {
+  fill: #fff;
+  stroke: var(--madn-ink);
+  stroke-width: 0.7;
+}
+
+.madn-board-wrap .madn-field.is-start,
+.madn-board-wrap .madn-field.is-goal,
+.madn-board-wrap .madn-field.is-house {
+  fill: var(--c);
+  stroke: var(--madn-ink);
+}
+
+.madn-board-wrap .madn-piece-body,
+.madn-board-wrap .madn-piece-head {
+  stroke: var(--madn-ink);
+}
