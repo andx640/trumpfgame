@@ -28,7 +28,7 @@ export const GAMES = [
   {
     id: "madn",
     title: "Mensch ärgere dich nicht",
-    subtitle: "Online, gegen KI oder an einem Gerät · 2–4 Spieler",
+    subtitle: "Online, gegen KI oder an einem Gerät · 2–6 Spieler",
     icon: MadnIcon,
     component: lazy(() => import("./madn/MadnApp.jsx")),
     // laufende Online-Partie im selben Tab (gleicher Schlüssel wie in madn/online.js)
@@ -39,6 +39,13 @@ export const GAMES = [
         return false;
       }
     }
+  },
+  {
+    id: "panzer",
+    title: "Panzerkiste",
+    subtitle: "Spielzeugpanzer-Action · Handy und PC",
+    icon: PanzerIcon,
+    component: lazy(() => import("./panzer/PanzerApp.jsx"))
   }
 ];
 
@@ -66,6 +73,17 @@ function MadnIcon() {
       <circle cx="30.5" cy="26.5" r="1.8" fill="#e8730a" />
       <circle cx="34.5" cy="30.5" r="1.8" fill="#e8730a" />
       <circle cx="38.5" cy="34.5" r="1.8" fill="#e8730a" />
+    </svg>
+  );
+}
+
+function PanzerIcon() {
+  return (
+    <svg className="home-icon" viewBox="0 0 48 48" aria-hidden="true">
+      <rect x="5" y="30" width="38" height="10" rx="5" fill="currentColor" opacity="0.6" />
+      <rect x="8" y="22" width="32" height="10" rx="3" fill="currentColor" />
+      <rect x="16" y="14" width="14" height="10" rx="4" fill="currentColor" />
+      <rect x="28" y="17" width="16" height="4" rx="2" fill="#e8730a" />
     </svg>
   );
 }

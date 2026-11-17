@@ -1,0 +1,367 @@
+/* Panzerkiste – nutzt Farben und Bausteine aus ui.css */
+
+.pz-shell {
+  position: relative;
+  min-height: 100dvh;
+}
+
+/* ----- Menü ----- */
+.pz-menu {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding: var(--safe-top) var(--gutter) calc(20px + var(--safe-bottom));
+}
+
+.pz-menu-top {
+  display: flex;
+  align-items: center;
+  min-height: var(--topbar-height);
+}
+
+.pz-menu-body {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  width: min(100%, 620px);
+  margin: 0 auto;
+  text-align: center;
+}
+
+.pz-logo {
+  width: 140px;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.45));
+}
+
+.pz-title {
+  font-family: var(--font-logo);
+  font-size: clamp(36px, 9vw, 56px);
+  font-style: italic;
+  line-height: 1;
+}
+
+.pz-lead {
+  max-width: 520px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.pz-help {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+}
+
+.pz-help > div {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--fill);
+}
+
+.pz-help h2 {
+  margin-bottom: 8px;
+  font-size: 15px;
+}
+
+.pz-help ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.pz-help b {
+  color: var(--text);
+}
+
+.pz-enemies {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pz-enemy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--fill);
+  font-size: 13px;
+}
+
+.pz-enemy-chip i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* ----- Spiel ----- */
+.pz-game {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(255, 190, 110, 0.12), transparent 70%),
+    #0a0c0f;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.pz-stage {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.pz-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pz-hud {
+  position: absolute;
+  top: calc(8px + var(--safe-top));
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: rgba(10, 12, 15, 0.7);
+  backdrop-filter: blur(6px);
+  font-size: 14px;
+  font-weight: 700;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.pz-hud-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text);
+  background: var(--fill);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pz-hud-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pz-hud-lives {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.pz-hud-lives i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.pz-hud-lives i.is-on {
+  background: #e8730a;
+  box-shadow: 0 0 8px rgba(232, 115, 10, 0.7);
+}
+
+.pz-hud-enemies {
+  color: var(--text-muted);
+}
+
+.pz-banner {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 18px 34px;
+  border-radius: var(--radius-lg);
+  background: rgba(10, 12, 15, 0.78);
+  box-shadow: var(--shadow-pop);
+  text-align: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: pz-pop 260ms cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+
+.pz-banner small {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pz-banner strong {
+  font-family: var(--font-logo);
+  font-size: clamp(26px, 6vw, 40px);
+  font-style: italic;
+}
+
+.pz-banner span {
+  color: var(--text-muted);
+}
+
+.pz-banner.is-good strong { color: #6fe38f; }
+.pz-banner.is-bad strong { color: #ff7a66; }
+
+@keyframes pz-pop {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.pz-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--gutter);
+  background: rgba(4, 6, 10, 0.6);
+  backdrop-filter: blur(3px);
+}
+
+.pz-card {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 340px);
+  padding: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-pop);
+  text-align: center;
+}
+
+.pz-card h2 {
+  font-size: 24px;
+}
+
+.pz-card p {
+  color: var(--text-muted);
+}
+
+.pz-card-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.pz-rotate {
+  position: absolute;
+  bottom: 45%;
+  left: 50%;
+  padding: 10px 16px;
+  border-radius: var(--radius-pill);
+  background: rgba(10, 12, 15, 0.8);
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ----- Touch-Steuerung ----- */
+.pz-stick-zone {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 42%;
+  height: 58%;
+  touch-action: none;
+}
+
+.pz-stick {
+  position: fixed;
+  width: 124px;
+  height: 124px;
+  margin: -62px 0 0 -62px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
+.pz-stick.is-idle {
+  position: absolute;
+  bottom: calc(26px + var(--safe-bottom));
+  left: calc(26px + var(--safe-left, 0px));
+  margin: 0;
+  opacity: 0.55;
+}
+
+.pz-stick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.pz-btn {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  touch-action: none;
+  transition: transform 80ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pz-btn.is-down {
+  transform: scale(0.9);
+}
+
+.pz-btn-fire {
+  right: calc(22px + var(--safe-right, 0px));
+  bottom: calc(22px + var(--safe-bottom));
+  width: 92px;
+  height: 92px;
+  background: rgba(232, 115, 10, 0.75);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.pz-btn-fire svg {
+  width: 40px;
+  height: 40px;
+  fill: currentColor;
+}
+
+.pz-btn-mine {
+  right: calc(128px + var(--safe-right, 0px));
+  bottom: calc(26px + var(--safe-bottom));
+  width: 62px;
+  height: 62px;
+  background: rgba(242, 194, 48, 0.7);
+  color: #1a1400;
+  font-size: 13px;
+}

@@ -3,6 +3,7 @@
 Eine Spielesammlung. Beim Start erscheint ein Hauptmenü, aus dem man ein Spiel auswählt:
 
 - **Andi Trumpf** – serverautoritär geführtes Mehrspieler-Autoquartett (Details unten)
+- **Panzerkiste** – Spielzeugpanzer-Action in der Holzkiste (eigene Level und Gegner), Steuerung per Tastatur/Maus oder Touch-Joystick.
 - **Mensch ärgere dich nicht** – 2–6 Spieler (bis 4 auf dem klassischen Kreuz-Brett, mit Schwarz oder Lila auf dem Sechser-Brett), auf drei Arten:
   - *Gegen die KI* und *An einem Gerät* (reihum): läuft komplett im Browser, die Partie bleibt gespeichert
   - *Online*: Raum erstellen, Code oder Einladungslink (`#madn/CODE`) teilen; der Gastgeber kann freie Plätze mit KI füllen. Der Server würfelt und prüft jeden Zug, spielt KI-Plätze und übernimmt nach 30 Sekunden ohne Zug (bei Offline-Spielern schneller). Wer die Partie verlässt, wird durch eine KI ersetzt.
@@ -14,6 +15,7 @@ src/App.jsx                 Hauptmenü und Umschalter (Adresse #trumpf, #madn)
 src/games/registry.jsx      Liste aller Spiele
 src/games/trumpf/           Andi Trumpf (Oberfläche; Spiel-API in api/)
 src/games/madn/engine.js    Regeln von Mensch ärgere dich nicht, ohne Oberfläche
+src/games/panzer/           Panzerkiste: engine.js (Spiellogik + KI), levels.js, scene.js (3D), PanzerApp.jsx
 src/games/madn/MadnApp.jsx  Auswahl der Spielart
 src/games/madn/table.jsx    Spieltisch: Status, Würfeln-Knopf, Spielerleiste (für alle Spielarten)
 src/games/madn/scene3d.js   3D-Brett mit three.js: Figuren hüpfen Feld für Feld, Würfel rollt übers Brett

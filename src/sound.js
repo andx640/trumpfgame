@@ -215,3 +215,34 @@ export function playDice(strength = 1) {
   source.start();
   tone(ctx, 260 + Math.random() * 60, 0, 0.07, { type: "triangle", gain: 0.08 * s });
 }
+
+/** Panzerkiste: Schuss */
+export function playShot() {
+  const ctx = audio();
+  if (!ctx) return;
+  tone(ctx, 420, 0, 0.09, { type: "square", gain: 0.045, slideTo: 140 });
+  boom(ctx, 0, { from: 160, to: 60, gain: 0.12, duration: 0.12 });
+}
+
+/** Panzerkiste: Kugel prallt ab */
+export function playBounce() {
+  const ctx = audio();
+  if (!ctx) return;
+  tone(ctx, 1100, 0, 0.05, { type: "triangle", gain: 0.05, slideTo: 1600 });
+}
+
+/** Panzerkiste: Explosion (Panzer oder Mine) */
+export function playBoom(big = false) {
+  const ctx = audio();
+  if (!ctx) return;
+  boom(ctx, 0, { from: big ? 120 : 150, to: 28, gain: big ? 0.5 : 0.38, duration: big ? 0.9 : 0.55 });
+  whoosh(ctx, 0, big ? 0.6 : 0.35);
+}
+
+/** Panzerkiste: Mine gelegt */
+export function playMineDrop() {
+  const ctx = audio();
+  if (!ctx) return;
+  tone(ctx, 520, 0, 0.06, { type: "square", gain: 0.035 });
+  tone(ctx, 780, 0.08, 0.06, { type: "square", gain: 0.035 });
+}
