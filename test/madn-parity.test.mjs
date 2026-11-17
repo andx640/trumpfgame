@@ -36,7 +36,10 @@ const setups = {
   "vier KI": [{ type: "ai" }, { type: "ai" }, { type: "ai" }, { type: "ai" }],
   "zwei Menschen gegenüber": [{ name: "A", type: "human" }, null, { name: "B", type: "human" }, null],
   "Mensch gegen drei KI": [{ name: "A", type: "human" }, { type: "ai" }, { type: "ai" }, { type: "ai" }],
-  "drei gemischt": [null, { name: "B", type: "human" }, { type: "ai" }, { name: "D", type: "human" }]
+  "drei gemischt": [null, { name: "B", type: "human" }, { type: "ai" }, { name: "D", type: "human" }],
+  "sechs KI": [{ type: "ai" }, { type: "ai" }, { type: "ai" }, { type: "ai" }, { type: "ai" }, { type: "ai" }],
+  "fünf gemischt (Sechser-Brett)": [{ name: "A", type: "human" }, { type: "ai" }, null, { type: "ai" }, { name: "E", type: "human" }, { type: "ai" }],
+  "vier von sechs, Plätze 5 und 6 frei": [{ type: "ai" }, { type: "ai" }, { type: "ai" }, { type: "ai" }, null, null]
 };
 
 for (const [label, seats] of Object.entries(setups)) {

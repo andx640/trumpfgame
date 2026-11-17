@@ -3,28 +3,55 @@
 // Gleiche Regeln und gleicher Zustand wie src/games/madn/engine.js (test/madn-parity.test.mjs vergleicht beide).
 //
 // Figuren zählen ihre Schritte ab dem eigenen Startfeld:
-//   -1 im Haus, 0..39 auf der Laufbahn, 40..43 im Ziel.
+//   -1 im Haus, 0..T-1 auf der Laufbahn, T..T+3 im Ziel.
+// T = 10 Felder je Platz: 40 auf dem Vierer-, 60 auf dem Sechser-Brett. Brettgröße = count($state['pieces']).
 declare(strict_types=1);
 
+const MADN_SEGMENT = 10;
 const MADN_TRACK = 40;
 const MADN_GOAL = 4;
 const MADN_PIECES = 4;
 const MADN_SEATS = 4;
+const MADN_MAX_SEATS = 6;
 const MADN_HOME = -1;
 const MADN_LAST = MADN_TRACK + MADN_GOAL - 1;
-const MADN_COLOR_NAMES = ['Rot', 'Blau', 'Grün', 'Gelb'];
+const MADN_COLOR_NAMES = ['Rot', 'Blau', 'Grün', 'Gelb', 'Schwarz', 'Lila'];
 
-function madn_track_field(int $seat, int $progress): ?int
+function madn_board(array $state): int
 {
-    if ($progress < 0 || $progress >= MADN_TRACK) {
-        return null;
-    }
-    return ($seat * intdiv(MADN_TRACK, MADN_SEATS) + $progress) % MADN_TRACK;
+    return count($state['pieces']);
 }
 
-/** seats: 4 Einträge, je null oder ['name' => ..., 'type' => 'human'|'ai'] */
+function madn_track_len(int $board): int
+{
+    return $board * MADN_SEGMENT;
+}
+
+function madn_track_field(int $seat, int $progress, int $board = MADN_SEATS): ?int
+{
+    $track = madn_track_len($board);
+    if ($progress < 0 || $progress >= $track) {
+        return null;
+    }
+    return ($seat * MADN_SEGMENT + $progress) % $track;
+}
+
+/** Vierer- oder Sechser-Brett: Sechser, sobald Platz 5 oder 6 besetzt ist */
+function madn_board_for(array $seats): int
+{
+    for ($i = MADN_SEATS; $i < count($seats); $i++) {
+        if (!empty($seats[$i])) {
+            return MADN_MAX_SEATS;
+        }
+    }
+    return MADN_SEATS;
+}
+
+/** seats: 4 oder 6 Einträge, je null oder ['name' => ..., 'type' => 'human'|'ai'] */
 function madn_create_game(array $seats): array
 {
+    $board = madn_board_for($seats);
+    $seats = array_slice(array_values($seats), 0, $board);
     $players = [];
     foreach ($seats as $index => $seat) {
         if ($seat) {
@@ -40,7 +67,7 @@ function madn_create_game(array $seats): array
     }
     $state = [
         'players' => $players,
-        'pieces' => array_fill(0, MADN_SEATS, array_fill(0, MADN_PIECES, MADN_HOME)),
+        'pieces' => array_fill(0, $board, array_fill(0, MADN_PIECES, MADN_HOME)),
         'current' => 0,
         'phase' => 'roll',
         'dice' => null,
@@ -59,30 +86,30 @@ function madn_current_seat(array $state): int
     return $state['players'][$state['current']]['seat'];
 }
 
-function madn_is_finished(array $pieces): bool
+function madn_is_finished(array $pieces, int $track): bool
 {
     foreach ($pieces as $p) {
-        if ($p <= MADN_TRACK - 1) {
+        if ($p <= $track - 1) {
             return false;
         }
     }
     return true;
 }
 
-function madn_stuck(array $pieces): bool
+function madn_stuck(array $pieces, int $track): bool
 {
     $inGoal = [];
     foreach ($pieces as $p) {
-        if ($p >= 0 && $p < MADN_TRACK) {
+        if ($p >= 0 && $p < $track) {
             return false;
         }
-        if ($p >= MADN_TRACK) {
+        if ($p >= $track) {
             $inGoal[] = $p;
         }
     }
     rsort($inGoal);
     foreach ($inGoal as $index => $p) {
-        if ($p !== MADN_LAST - $index) {
+        if ($p !== $track + MADN_GOAL - 1 - $index) {
             return false;
         }
     }
@@ -91,14 +118,15 @@ function madn_stuck(array $pieces): bool
 
 function madn_rolls_allowed(array $state, int $seat): int
 {
-    return madn_stuck($state['pieces'][$seat]) ? 3 : 1;
+    return madn_stuck($state['pieces'][$seat], madn_track_len(madn_board($state))) ? 3 : 1;
 }
 
 function madn_occupant(array $state, int $field): ?array
 {
-    for ($seat = 0; $seat < MADN_SEATS; $seat++) {
+    $board = madn_board($state);
+    for ($seat = 0; $seat < $board; $seat++) {
         foreach ($state['pieces'][$seat] as $index => $p) {
-            if (madn_track_field($seat, $p) === $field) {
+            if (madn_track_field($seat, $p, $board) === $field) {
                 return ['seat' => $seat, 'index' => $index];
             }
         }
@@ -116,8 +144,9 @@ function madn_target(array $state, int $seat, int $index, int $dice): ?int
         }
         return in_array(0, $own, true) ? null : 0;
     }
+    $track = madn_track_len(madn_board($state));
     $to = $from + $dice;
-    if ($to > MADN_LAST) {
+    if ($to > $track + MADN_GOAL - 1) {
         return null;
     }
     foreach ($own as $i => $p) {
@@ -125,8 +154,8 @@ function madn_target(array $state, int $seat, int $index, int $dice): ?int
             return null;
         }
     }
-    if ($to >= MADN_TRACK) {
-        for ($step = max($from + 1, MADN_TRACK); $step < $to; $step++) {
+    if ($to >= $track) {
+        for ($step = max($from + 1, $track); $step < $to; $step++) {
             if (in_array($step, $own, true)) {
                 return null;
             }
@@ -148,7 +177,7 @@ function madn_legal_moves(array $state): array
         if ($to === null) {
             continue;
         }
-        $field = madn_track_field($seat, $to);
+        $field = madn_track_field($seat, $to, madn_board($state));
         $hit = $field === null ? null : madn_occupant($state, $field);
         $moves[] = ['index' => $index, 'from' => $from, 'to' => $to, 'capture' => $hit && $hit['seat'] !== $seat ? $hit : null];
     }
@@ -204,7 +233,7 @@ function madn_move(array $state, int $index): array
     if ($option['capture']) {
         $next['pieces'][$option['capture']['seat']][$option['capture']['index']] = MADN_HOME;
     }
-    if (madn_is_finished($next['pieces'][$seat]) && !in_array($seat, $next['finished'], true)) {
+    if (madn_is_finished($next['pieces'][$seat], madn_track_len(madn_board($state))) && !in_array($seat, $next['finished'], true)) {
         $next['finished'][] = $seat;
     }
     $next['lastMove'] = ['seat' => $seat, 'index' => $index, 'from' => $option['from'], 'to' => $option['to'], 'capture' => $option['capture']];
@@ -290,22 +319,24 @@ function madn_choose_move(array $state): ?array
         return $moves[0] ?? null;
     }
     $seat = madn_current_seat($state);
-    $score = static function (array $m) use ($state, $seat): float {
+    $board = madn_board($state);
+    $track = madn_track_len($board);
+    $score = static function (array $m) use ($state, $seat, $board, $track): float {
         $value = 0.0;
         if ($m['capture']) {
             $value += 100;
         }
-        if ($m['to'] >= MADN_TRACK && $m['from'] < MADN_TRACK) {
+        if ($m['to'] >= $track && $m['from'] < $track) {
             $value += 60;
         }
         if ($m['from'] === MADN_HOME) {
             $value += 50;
         }
-        if ($m['to'] >= MADN_TRACK) {
-            $value += 10 + $m['to'];
+        if ($m['to'] >= $track) {
+            $value += 10 + ($m['to'] - $track + MADN_TRACK);
         }
-        $before = $m['from'] >= 0 && $m['from'] < MADN_TRACK ? madn_danger($state, $seat, madn_track_field($seat, $m['from'])) : 0;
-        $after = $m['to'] < MADN_TRACK ? madn_danger($state, $seat, madn_track_field($seat, $m['to'])) : 0;
+        $before = $m['from'] >= 0 && $m['from'] < $track ? madn_danger($state, $seat, madn_track_field($seat, $m['from'], $board)) : 0;
+        $after = $m['to'] < $track ? madn_danger($state, $seat, madn_track_field($seat, $m['to'], $board)) : 0;
         $value += ($before - $after) * 15;
         $value += $m['from'] / 10;
         return $value;
@@ -323,17 +354,19 @@ function madn_danger(array $state, int $seat, int $field): int
 {
     $count = 0;
     $seats = array_column($state['players'], 'seat');
-    for ($other = 0; $other < MADN_SEATS; $other++) {
+    $board = madn_board($state);
+    $track = madn_track_len($board);
+    for ($other = 0; $other < $board; $other++) {
         if ($other === $seat || !in_array($other, $seats, true)) {
             continue;
         }
         foreach ($state['pieces'][$other] as $p) {
-            $at = madn_track_field($other, $p);
+            $at = madn_track_field($other, $p, $board);
             if ($at === null) {
                 continue;
             }
-            $distance = ($field - $at + MADN_TRACK) % MADN_TRACK;
-            if ($distance >= 1 && $distance <= 6 && $p + $distance < MADN_TRACK) {
+            $distance = ($field - $at + $track) % $track;
+            if ($distance >= 1 && $distance <= 6 && $p + $distance < $track) {
                 $count++;
             }
         }

@@ -5,6 +5,8 @@
   --madn-blue: #3aa0ff;
   --madn-green: #3fcf6e;
   --madn-yellow: #ffd23a;
+  --madn-black: #2a2a2e;
+  --madn-purple: #a855f7;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -16,6 +18,12 @@
 .madn-shell .is-blue { --c: var(--madn-blue); }
 .madn-shell .is-green { --c: var(--madn-green); }
 .madn-shell .is-yellow { --c: var(--madn-yellow); }
+.madn-shell .is-black { --c: var(--madn-black); }
+.madn-shell .is-purple { --c: var(--madn-purple); }
+
+/* Schwarz ist auf dunklem Grund kaum zu sehen: Schrift hell, Rand betont */
+.madn-shell .madn-name.is-black { color: #d4d4d8; }
+.madn-shell .madn-chip.is-black i { box-shadow: 0 0 0 1.5px #d4d4d8; }
 
 .madn-header {
   display: grid;

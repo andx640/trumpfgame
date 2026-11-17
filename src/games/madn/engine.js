@@ -4,13 +4,17 @@
 //
 // Figuren zählen ihre Schritte ab dem eigenen Startfeld:
 //   -1      im Haus (noch nicht im Spiel)
-//   0..39   auf der Laufbahn (0 = eigenes Startfeld)
-//   40..43  im Ziel (43 = hinterstes Zielfeld)
+//   0..T-1  auf der Laufbahn (0 = eigenes Startfeld)
+//   T..T+3  im Ziel (T+3 = hinterstes Zielfeld)
+// T ist die Länge der Laufbahn: 10 Felder je Platz, also 40 auf dem Vierer- und 60 auf dem Sechser-Brett.
+// Die Brettgröße steckt in state.pieces.length (4 oder 6 Plätze).
 
-export const TRACK = 40;
+export const SEGMENT = 10;
+export const TRACK = 40; // Vierer-Brett
 export const GOAL = 4;
 export const PIECES = 4;
-export const SEATS = 4;
+export const SEATS = 4; // Plätze auf dem Vierer-Brett
+export const MAX_SEATS = 6;
 export const HOME = -1;
 export const LAST = TRACK + GOAL - 1;
 
@@ -18,25 +22,41 @@ export const COLORS = [
   { key: "red", name: "Rot" },
   { key: "blue", name: "Blau" },
   { key: "green", name: "Grün" },
-  { key: "yellow", name: "Gelb" }
+  { key: "yellow", name: "Gelb" },
+  { key: "black", name: "Schwarz" },
+  { key: "purple", name: "Lila" }
 ];
 
-/** Feld auf der Laufbahn (0..39) für eine Figur, oder null im Haus/Ziel */
-export function trackField(seat, progress) {
-  if (progress < 0 || progress >= TRACK) return null;
-  return (seat * (TRACK / SEATS) + progress) % TRACK;
+/** Anzahl Plätze des Bretts (4 oder 6) */
+export function boardSize(state) {
+  return state.pieces.length;
+}
+
+/** Länge der Laufbahn für eine Brettgröße */
+export function trackLength(board = SEATS) {
+  return board * SEGMENT;
+}
+
+/** Feld auf der Laufbahn (0..T-1) für eine Figur, oder null im Haus/Ziel */
+export function trackField(seat, progress, board = SEATS) {
+  const track = trackLength(board);
+  if (progress < 0 || progress >= track) return null;
+  return (seat * SEGMENT + progress) % track;
 }
 
 /**
  * Neue Partie.
- * seats: Array mit 4 Einträgen, je null (frei) oder { name, type: "human" | "ai" }
+ * seats: Array mit 4 oder 6 Einträgen, je null (frei) oder { name, type: "human" | "ai" }.
+ * Sind die Plätze 5 und 6 frei, wird auf dem Vierer-Brett gespielt, sonst auf dem Sechser-Brett.
  */
 export function createGame(seats) {
+  const board = seats.length > SEATS && seats.slice(SEATS).some(Boolean) ? MAX_SEATS : SEATS;
   const players = seats
+    .slice(0, board)
     .map((seat, index) => (seat ? { seat: index, name: seat.name || COLORS[index].name, type: seat.type === "ai" ? "ai" : "human" } : null))
     .filter(Boolean);
   if (players.length < 2) throw new Error("Mindestens zwei Spieler nötig.");
-  const pieces = Array.from({ length: SEATS }, () => Array(PIECES).fill(HOME));
+  const pieces = Array.from({ length: board }, () => Array(PIECES).fill(HOME));
   const state = {
     players,
     pieces,
@@ -57,25 +77,26 @@ export function currentSeat(state) {
   return state.players[state.current].seat;
 }
 
-function isFinished(pieces) {
-  return pieces.every((p) => p > TRACK - 1);
+function isFinished(pieces, track) {
+  return pieces.every((p) => p > track - 1);
 }
 
 /** Alle Figuren im Haus oder im Ziel fest „aufgerückt“: dann darf man dreimal würfeln. */
-function stuck(pieces) {
-  const inGoal = pieces.filter((p) => p >= TRACK).sort((a, b) => b - a);
-  if (pieces.some((p) => p >= 0 && p < TRACK)) return false;
-  return inGoal.every((p, index) => p === LAST - index);
+function stuck(pieces, track) {
+  const inGoal = pieces.filter((p) => p >= track).sort((a, b) => b - a);
+  if (pieces.some((p) => p >= 0 && p < track)) return false;
+  return inGoal.every((p, index) => p === track + GOAL - 1 - index);
 }
 
 function rollsAllowed(state, seat) {
-  return stuck(state.pieces[seat]) ? 3 : 1;
+  return stuck(state.pieces[seat], trackLength(boardSize(state))) ? 3 : 1;
 }
 
 /** Welche Figur (Sitz, Nummer) steht auf einem Laufbahnfeld? */
 function occupant(state, field) {
-  for (let seat = 0; seat < SEATS; seat += 1) {
-    const index = state.pieces[seat].findIndex((p) => trackField(seat, p) === field);
+  const board = boardSize(state);
+  for (let seat = 0; seat < board; seat += 1) {
+    const index = state.pieces[seat].findIndex((p) => trackField(seat, p, board) === field);
     if (index !== -1) return { seat, index };
   }
   return null;
@@ -89,12 +110,13 @@ function target(state, seat, index, dice) {
     if (dice !== 6) return null;
     return own.some((p) => p === 0) ? null : 0;
   }
+  const track = trackLength(boardSize(state));
   const to = from + dice;
-  if (to > LAST) return null;
+  if (to > track + GOAL - 1) return null;
   if (own.some((p, i) => i !== index && p === to)) return null; // eigene Figur steht dort
-  if (to >= TRACK) {
+  if (to >= track) {
     // im Ziel wird nicht übersprungen
-    for (let step = Math.max(from + 1, TRACK); step < to; step += 1) {
+    for (let step = Math.max(from + 1, track); step < to; step += 1) {
       if (own.includes(step)) return null;
     }
   }
@@ -114,7 +136,7 @@ export function legalMoves(state) {
   own.forEach((from, index) => {
     const to = target(state, seat, index, state.dice);
     if (to === null) return;
-    const field = trackField(seat, to);
+    const field = trackField(seat, to, boardSize(state));
     const hit = field === null ? null : occupant(state, field);
     moves.push({ index, from, to, capture: hit && hit.seat !== seat ? hit : null });
   });
@@ -150,7 +172,7 @@ export function move(state, index) {
   if (option.capture) pieces[option.capture.seat][option.capture.index] = HOME;
 
   let finished = state.finished;
-  if (isFinished(pieces[seat]) && !finished.includes(seat)) finished = [...finished, seat];
+  if (isFinished(pieces[seat], trackLength(boardSize(state))) && !finished.includes(seat)) finished = [...finished, seat];
 
   const next = {
     ...state,
@@ -202,14 +224,16 @@ export function chooseMove(state) {
   const moves = legalMoves(state);
   if (moves.length <= 1) return moves[0] ?? null;
   const seat = currentSeat(state);
+  const board = boardSize(state);
+  const track = trackLength(board);
   const score = (m) => {
     let value = 0;
     if (m.capture) value += 100;
-    if (m.to >= TRACK && m.from < TRACK) value += 60;
+    if (m.to >= track && m.from < track) value += 60;
     if (m.from === HOME) value += 50;
-    if (m.to >= TRACK) value += 10 + m.to;
-    const before = m.from >= 0 && m.from < TRACK ? danger(state, seat, trackField(seat, m.from)) : 0;
-    const after = m.to < TRACK ? danger(state, seat, trackField(seat, m.to)) : 0;
+    if (m.to >= track) value += 10 + (m.to - track + TRACK);
+    const before = m.from >= 0 && m.from < track ? danger(state, seat, trackField(seat, m.from, board)) : 0;
+    const after = m.to < track ? danger(state, seat, trackField(seat, m.to, board)) : 0;
     value += (before - after) * 15;
     value += m.from / 10;
     return value;
@@ -220,13 +244,15 @@ export function chooseMove(state) {
 /** Wie viele gegnerische Figuren stehen 1–6 Felder hinter einem Feld? */
 function danger(state, seat, field) {
   let count = 0;
-  for (let other = 0; other < SEATS; other += 1) {
+  const board = boardSize(state);
+  const track = trackLength(board);
+  for (let other = 0; other < board; other += 1) {
     if (other === seat || !state.players.some((p) => p.seat === other)) continue;
     state.pieces[other].forEach((p) => {
-      const at = trackField(other, p);
+      const at = trackField(other, p, board);
       if (at === null) return;
-      const distance = (field - at + TRACK) % TRACK;
-      if (distance >= 1 && distance <= 6 && p + distance < TRACK) count += 1;
+      const distance = (field - at + track) % track;
+      if (distance >= 1 && distance <= 6 && p + distance < track) count += 1;
     });
   }
   return count;
