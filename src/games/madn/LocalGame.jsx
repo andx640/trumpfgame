@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button, Segmented } from "../../ui";
 import { unlockAudio } from "../../sound";
 import { COLORS, SEATS, chooseMove, createGame, currentSeat, legalMoves, move, roll } from "./engine";
@@ -9,10 +9,8 @@ import { Confirm, Header, Result, Rules, Table, useGameSounds } from "./table";
 
 const SAVE_KEY = "andi-madn-game";
 const SETUP_KEY = "andi-madn-setup";
-const ROLL_MS = 520;
-const AI_ROLL_MS = 650;
-const AI_MOVE_MS = 550;
-const AUTO_MOVE_MS = 450;
+const AI_ROLL_MS = 700;
+const AI_MOVE_MS = 650;
 
 export const PRESETS = {
   ai: [{ type: "human", name: "" }, { type: "ai", name: "" }, { type: "ai", name: "" }, { type: "ai", name: "" }],
@@ -132,10 +130,8 @@ function Setup({ setup, setSetup, onStart, onBack }) {
 }
 
 function LocalTable({ game, setGame, onBack, onNew, onRematch }) {
-  const [rolling, setRolling] = useState(false);
+  const [diceBusy, setDiceBusy] = useState(false);
   const [confirmQuit, setConfirmQuit] = useState(false);
-  const gameRef = useRef(game);
-  gameRef.current = game;
 
   const isHuman = (seat) => game.players.find((p) => p.seat === seat)?.type === "human";
   useGameSounds(game, isHuman);
@@ -143,30 +139,32 @@ function LocalTable({ game, setGame, onBack, onNew, onRematch }) {
   const isAi = game.players[game.current].type === "ai";
   const over = game.phase === "over";
 
+  // Die Zahl steht sofort fest; das Brett zeigt den Wurf als 3D-Animation und meldet, wann der Würfel liegt.
   const doRoll = useCallback(() => {
-    const state = gameRef.current;
-    if (state.phase !== "roll") return;
-    setRolling(true);
-    window.setTimeout(() => {
-      setRolling(false);
-      setGame((current) => (current === state ? roll(state, rollDie()) : current));
-    }, ROLL_MS);
+    unlockAudio();
+    setGame((state) => (state.phase === "roll" ? roll(state, rollDie()) : state));
   }, [setGame]);
 
   const doMove = useCallback((index) => {
     setGame((state) => (legalMoves(state).some((m) => m.index === index) ? move(state, index) : state));
   }, [setGame]);
 
-  // KI-Züge und erzwungene Einzelzüge laufen von selbst
+  // KI-Züge laufen von selbst, sobald der Würfel liegt. Menschen tippen ihre Figur immer selbst an.
   useEffect(() => {
-    if (over || rolling) return undefined;
-    const moves = legalMoves(game);
+    if (over || diceBusy || !isAi) return undefined;
     let timer;
-    if (isAi && game.phase === "roll") timer = window.setTimeout(doRoll, AI_ROLL_MS);
-    else if (isAi && game.phase === "move") timer = window.setTimeout(() => doMove(chooseMove(game).index), AI_MOVE_MS);
-    else if (!isAi && game.phase === "move" && moves.length === 1) timer = window.setTimeout(() => doMove(moves[0].index), AUTO_MOVE_MS);
+    if (game.phase === "roll") timer = window.setTimeout(doRoll, AI_ROLL_MS);
+    else if (game.phase === "move") timer = window.setTimeout(() => doMove(chooseMove(game).index), AI_MOVE_MS);
     return () => window.clearTimeout(timer);
-  }, [game, isAi, over, rolling, doRoll, doMove]);
+  }, [game, isAi, over, diceBusy, doRoll, doMove]);
+
+  // Kamera: bei einem Menschen immer von seiner Seite, bei mehreren dreht sie zum Menschen am Zug
+  const humans = game.players.filter((p) => p.type === "human");
+  const [viewSeat, setViewSeat] = useState(() => (isHuman(currentSeat(game)) ? currentSeat(game) : humans[0]?.seat ?? currentSeat(game)));
+  const turnSeat = over ? null : currentSeat(game);
+  useEffect(() => {
+    if (turnSeat !== null && isHuman(turnSeat) && !diceBusy) setViewSeat(turnSeat);
+  }, [turnSeat, diceBusy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onlyOneHuman = game.players.filter((p) => p.type === "human").length === 1;
   const seatInfo = onlyOneHuman ? (seat) => ({ you: isHuman(seat) }) : undefined;
@@ -176,7 +174,16 @@ function LocalTable({ game, setGame, onBack, onNew, onRematch }) {
       <Header onBack={onBack}>
         <Button size="sm" variant="ghost" onClick={() => (over ? onNew() : setConfirmQuit(true))}>Neu</Button>
       </Header>
-      <Table game={game} controls={(seat) => isHuman(seat) && currentSeat(game) === seat} rolling={rolling} onRoll={doRoll} onMove={doMove} seatInfo={seatInfo} />
+      <Table
+        game={game}
+        controls={(seat) => isHuman(seat) && currentSeat(game) === seat}
+        rolling={false}
+        onRoll={doRoll}
+        onMove={doMove}
+        seatInfo={seatInfo}
+        viewSeat={viewSeat}
+        onDiceBusy={setDiceBusy}
+      />
 
       {over && (
         <Result game={game} seatInfo={seatInfo}>

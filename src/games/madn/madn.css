@@ -169,8 +169,112 @@
 }
 
 .madn-board-wrap {
-  width: min(100%, calc(100dvh - var(--topbar-height) - 190px - var(--safe-top) - var(--safe-bottom)), 640px);
+  position: relative;
+  width: min(100%, 900px, calc((100dvh - var(--topbar-height) - 170px - var(--safe-top) - var(--safe-bottom)) * 1.2));
   min-width: 260px;
+}
+
+/* 3D-Brett */
+.madn-board3d {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 6 / 5;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(255, 196, 120, 0.16), transparent 65%),
+    radial-gradient(ellipse at 50% 100%, rgba(0, 0, 0, 0.35), transparent 70%);
+}
+
+@media (max-width: 600px) {
+  .madn-board3d {
+    aspect-ratio: 1 / 1;
+  }
+}
+
+.madn-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.madn-canvas:active {
+  cursor: grabbing;
+}
+
+.madn-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.madn-sr-only button:focus {
+  position: fixed;
+  z-index: 5;
+  top: 8px;
+  left: 8px;
+  width: auto;
+  height: auto;
+  clip: auto;
+}
+
+.madn-rolled {
+  display: inline-grid;
+  place-items: center;
+  width: 1.6em;
+  height: 1.6em;
+  margin-right: 4px;
+  border-radius: 6px;
+  color: #141a24;
+  background: #f4f6fa;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.madn-roll {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 170px;
+  min-height: 52px;
+  padding: 8px 20px 8px 10px;
+  border: 2px solid color-mix(in srgb, var(--c) 60%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  background: var(--fill);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: default;
+  transition: transform 120ms ease, background 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.madn-roll svg {
+  width: 34px;
+  height: 34px;
+  padding: 4px;
+  border-radius: 8px;
+  fill: #141a24;
+  background: #f4f6fa;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.madn-roll.is-ready {
+  border-color: var(--c);
+  color: #fff;
+  background: color-mix(in srgb, var(--c) 32%, transparent);
+  cursor: pointer;
+  animation: madn-die-glow 1.4s ease-in-out infinite;
+}
+
+.madn-roll.is-ready:active {
+  transform: scale(0.96);
 }
 
 .madn-board {
@@ -571,5 +675,6 @@
   .madn-piece-halo,
   .madn-die.is-ready,
   .madn-die.is-rolling,
-  .madn-die.is-shake { animation: none; }
+  .madn-die.is-shake,
+  .madn-roll.is-ready { animation: none; }
 }

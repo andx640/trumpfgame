@@ -6,7 +6,7 @@ declare(strict_types=1);
 require __DIR__ . '/madn-engine.php';
 
 const MADN_SEAT_ORDER = [0, 2, 1, 3];   // zwei Spieler sitzen sich gegenüber
-const MADN_AI_STEP_MS = 900;            // so lange zwischen zwei KI-Aktionen (Würfeln, Ziehen)
+const MADN_AI_STEP_MS = 1900;           // so lange zwischen zwei KI-Aktionen (Würfeln, Ziehen); der 3D-Würfel rollt so lange
 const MADN_TURN_MS = 30000;             // so lange hat ein Mensch für einen Wurf oder Zug
 const MADN_OFFLINE_TURN_MS = 4000;      // wer offline ist, wird nach kurzer Zeit automatisch gespielt
 const MADN_ONLINE_MS = 12000;           // ohne Abfrage gilt ein Spieler danach als offline
