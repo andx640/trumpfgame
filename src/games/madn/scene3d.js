@@ -5,6 +5,9 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import "@fontsource/pinyon-script/latin-400.css";
 import { HOME, MAX_SEATS, PIECES, SEGMENT, boardSize, currentSeat, legalMoves } from "./engine";
 import { cellOf, layoutFor } from "./layout";
+import { ANISOTROPY, SHADOW_MAP_SIZE, createRenderer, disposeRenderer } from "../../three-setup";
+
+export { webglAvailable } from "../../three-setup";
 
 // 3D-Spielbrett mit three.js: Holzbrett, glänzende Figuren, die Feld für Feld hüpfen,
 // und ein Würfel, der übers Brett geworfen wird und auf der gewürfelten Zahl liegen bleibt.
@@ -40,7 +43,7 @@ const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
 function canvasTexture(canvas) {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
+  texture.anisotropy = ANISOTROPY;
   return texture;
 }
 
@@ -326,13 +329,9 @@ export class BoardScene {
     this.hovered = null;
     this.reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    const renderer = createRenderer({ onLost: () => callbacks.onLost?.() });
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.domElement.className = "madn-canvas";
     container.appendChild(renderer.domElement);
     this.renderer = renderer;
@@ -386,7 +385,7 @@ export class BoardScene {
     const sun = new THREE.DirectionalLight(0xfff0dc, 2.4);
     sun.position.set(7, 16, 9);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
     const s = sun.shadow.camera;
     s.left = -12;
     s.right = 12;
@@ -993,16 +992,6 @@ export class BoardScene {
       });
     });
     this.envMap.dispose();
-    this.renderer.dispose();
-    el.remove();
-  }
-}
-
-export function webglAvailable() {
-  try {
-    const canvas = document.createElement("canvas");
-    return Boolean(window.WebGLRenderingContext && (canvas.getContext("webgl2") || canvas.getContext("webgl")));
-  } catch {
-    return false;
+    disposeRenderer(this.renderer);
   }
 }

@@ -21,7 +21,9 @@ export default function Board3D({ game, movable, viewSeat, waiting, canRoll, onP
         onPick: (index) => handlers.current.onPick?.(index),
         onRoll: () => handlers.current.onRoll?.(),
         onSettled: (n) => handlers.current.onSettled?.(n),
-        onImpact: (strength) => playDice(strength)
+        onImpact: (strength) => playDice(strength),
+        // 3D-Kontext abgestürzt (z. B. GPU auf dem Handy überlastet): auf das 2D-Brett wechseln
+        onLost: () => setFailed(true)
       });
     } catch {
       setFailed(true);

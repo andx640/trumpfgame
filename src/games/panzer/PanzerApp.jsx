@@ -98,7 +98,7 @@ function Game({ onQuit }) {
   useEffect(() => {
     let scene;
     try {
-      scene = new PanzerScene(hostRef.current);
+      scene = new PanzerScene(hostRef.current, { onLost: () => setFailed(true) });
     } catch {
       setFailed(true);
       return undefined;
@@ -271,7 +271,11 @@ function Game({ onQuit }) {
   if (failed) {
     return (
       <div className="pz-menu">
-        <p className="pz-lead">Dein Gerät kann leider kein 3D (WebGL). Panzerkiste braucht WebGL.</p>
+        <p className="pz-lead">
+          Die 3D-Grafik (WebGL) ist gerade nicht verfügbar. Panzerkiste braucht WebGL. Ist sie vorher abgestürzt,
+          hilft meist: Tab schließen und die Seite neu öffnen.
+        </p>
+        <Button onClick={() => window.location.reload()}>Neu laden</Button>
         <Button onClick={onQuit}>Zurück</Button>
       </div>
     );

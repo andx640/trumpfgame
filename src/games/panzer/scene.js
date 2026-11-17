@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { ANISOTROPY, SHADOW_MAP_SIZE, createRenderer, disposeRenderer } from "../../three-setup";
 import { H, MINE_BLAST, MINE_FUSE, TILE, TYPES, W } from "./engine";
 
 // 3D-Darstellung von Panzerkiste: die Arena ist der Boden einer großen Holzkiste,
@@ -20,7 +21,7 @@ function makeCanvas(w, h = w) {
 function texture(canvas, repeat = 1) {
   const t = new THREE.CanvasTexture(canvas);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
+  t.anisotropy = ANISOTROPY;
   if (repeat !== 1) {
     t.wrapS = THREE.RepeatWrapping;
     t.wrapT = THREE.RepeatWrapping;
@@ -142,18 +143,14 @@ function scorchTexture() {
 }
 
 export class PanzerScene {
-  constructor(container) {
+  constructor(container, { onLost } = {}) {
     this.container = container;
     this.meshes = new Map(); // id → Objekt
     this.effects = [];
     this.time = 0;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    const renderer = createRenderer({ onLost });
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.domElement.className = "pz-canvas";
     container.appendChild(renderer.domElement);
     this.renderer = renderer;
@@ -206,7 +203,7 @@ export class PanzerScene {
     const sun = new THREE.DirectionalLight(0xfff0d8, 2.3);
     sun.position.set(-6, 18, 8);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
     Object.assign(sun.shadow.camera, { left: -15, right: 15, top: 12, bottom: -12, near: 1, far: 50 });
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.03;
@@ -545,7 +542,6 @@ export class PanzerScene {
     });
     Object.values(this.textures).forEach((t) => t.dispose());
     this.envMap.dispose();
-    this.renderer.dispose();
-    this.renderer.domElement.remove();
+    disposeRenderer(this.renderer);
   }
 }
